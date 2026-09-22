@@ -9,8 +9,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;900&display=swap" rel="stylesheet">
 <style>
   :root{
-    --rose:#7A2E3C;
-    --rose-dark:#5C2230;
+    --rose:#000000;
+    --rose-dark:#262626;
     --cream:#F7F3EE;
     --card:#FFFFFF;
     --ink:#2B2420;
@@ -108,6 +108,10 @@
     font-family:inherit;font-size:13px;font-weight:700;color:var(--ink-soft);cursor:pointer;
   }
   .segbtn.active{background:var(--rose);color:#fff;}
+  .source-label{
+    text-align:center;font-size:12.5px;font-weight:700;color:var(--rose-dark);
+    background:var(--amber-bg);border-radius:8px;padding:7px;margin-top:8px;
+  }
 
   button.primary{
     width:100%;
@@ -194,7 +198,7 @@
     font-family:inherit;font-size:11px;color:var(--ink-soft);
     padding:6px 2px;cursor:pointer;font-weight:700;
   }
-  .navbtn.active{color:var(--rose);}
+  .navbtn.active{color:var(--gold);}
   .navbtn .ic{font-size:19px;display:block;margin-bottom:2px;}
 
   .screen{display:none;}
@@ -253,9 +257,10 @@
       <!-- ---- HOME ---- -->
       <div id="tab-home" class="tab-panel">
         <div class="tiles">
-          <div class="tile"><div class="num" id="todayCount">0</div><div class="lbl">طلبات اليوم</div></div>
-          <div class="tile"><div class="num" id="todayAmount">0</div><div class="lbl">مستحق اليوم (ريال)</div></div>
+          <div class="tile"><div class="num" id="todayCount">0</div><div class="lbl">طلبات اليوم (معتمدة)</div></div>
+          <div class="tile"><div class="num" id="todayAmount">0</div><div class="lbl">مستحق اليوم معتمد (ريال)</div></div>
         </div>
+        <div id="pendingNotice" class="source-label" style="display:none;margin-bottom:14px;"></div>
 
         <div class="card">
           <h3>إدخال طلبات اليوم</h3>
@@ -268,9 +273,10 @@
           <input type="date" id="entryDate">
 
           <div class="seg" style="margin-top:14px;">
-            <button type="button" class="segbtn active" id="segSite" onclick="switchEntrySource('site')">طلبات الموقع</button>
-            <button type="button" class="segbtn" id="segWa" onclick="switchEntrySource('wa')">طلبات واتساب</button>
+            <button type="button" class="segbtn active" id="segSite" onclick="switchEntrySource('site')">🌐 طلبات الموقع</button>
+            <button type="button" class="segbtn" id="segWa" onclick="switchEntrySource('wa')">💬 طلبات واتساب</button>
           </div>
+          <div class="source-label" id="sourceLabel">📝 تعبّي الآن: طلبات الموقع</div>
 
           <div class="area-grid" id="areaInputGrid"><!-- filled by JS --></div>
           <div class="area-grid" id="waAreaInputGrid" style="display:none;"><!-- filled by JS --></div>
@@ -294,7 +300,8 @@
           <label>المنطقة المسجّلة بالطلب (بالموقع)</label>
           <select id="diffAreaRegistered"></select>
           <label>المنطقة الفعلية (اللي وصل لها فعلياً)</label>
-          <select id="diffArea"></select>
+          <input id="diffArea" type="text" placeholder="اكتب اسم المنطقة، حتى لو مو من ضمن مناطقنا المعتادة">
+          <p class="muted" style="margin:2px 0 0;">اكتبها بنفسك — قد تكون منطقة مو موجودة أصلاً بقائمة مناطقنا</p>
           <label>المبلغ (ريال)</label>
           <input id="diffAmount" type="number" placeholder="0">
           <label>صورة التحويل البنكي</label>
@@ -536,6 +543,9 @@ function switchEntrySource(which){
   document.getElementById('waAreaInputGrid').style.display = which==='wa' ? 'flex' : 'none';
   document.getElementById('segSite').classList.toggle('active', which==='site');
   document.getElementById('segWa').classList.toggle('active', which==='wa');
+  document.getElementById('sourceLabel').textContent = which==='site'
+    ? '📝 تعبّي الآن: طلبات الموقع'
+    : '📝 تعبّي الآن: طلبات واتساب';
 }
 
 function populateDiffAreaSelect(){
@@ -544,9 +554,9 @@ function populateDiffAreaSelect(){
     const rate = rateForRep(a, brand);
     return `<option value="${a.id}">${a.name} (${rate} ر.س)</option>`;
   }).join('');
-  // نضيف خيار فاضي إجباري بالأول حتى ما يتعبّى الحقل تلقائياً — لازم المندوب يختار بنفسه
+  // المنطقة المسجّلة دايماً من ضمن مناطقنا الرسمية، فتبقى قائمة منسدلة.
+  // المنطقة الفعلية (بفارق التوصيل) قد تكون منطقة مو من ضمن قائمتنا أصلاً — لذلك صارت حقل كتابة حر بالفورم.
   document.getElementById('diffAreaRegistered').innerHTML = '<option value="">اختر المنطقة المسجّلة...</option>' + optionsHtml;
-  document.getElementById('diffArea').innerHTML = '<option value="">اختر المنطقة الفعلية...</option>' + optionsHtml;
 }
 
 /* ---------------- SUBMIT DAILY ENTRY ---------------- */
@@ -584,9 +594,10 @@ async function submitDailyEntry(){
       entries,
       totalAmount,
       totalCount,
+      status: 'pending', // pending -> approved من لوحة الإدارة — لا يُحتسب بالرصيد إلا بعد الاعتماد
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     });
-    toast('تم حفظ طلبات اليوم ✅');
+    toast('تم الإرسال ✅ — بانتظار اعتماد الإدارة قبل ما يُحتسب برصيدك');
     AREAS.forEach(area=>{
       document.getElementById('site_'+area.id).value = '';
       document.getElementById('wa_'+area.id).value = '';
@@ -653,18 +664,16 @@ async function submitDiff(){
   const orderNo = document.getElementById('diffOrderNo').value.trim();
   const brand = document.getElementById('diffBrand').value;
   const registeredAreaId = document.getElementById('diffAreaRegistered').value;
-  const areaId = document.getElementById('diffArea').value;
+  const actualAreaText = document.getElementById('diffArea').value.trim();
   const amount = parseFloat(document.getElementById('diffAmount').value);
 
   if(!orderNo){ toast('أدخل رقم الطلب'); return; }
   if(!registeredAreaId){ toast('اختر المنطقة المسجّلة بالطلب'); return; }
-  if(!areaId){ toast('اختر المنطقة الفعلية'); return; }
-  if(registeredAreaId === areaId){ toast('المنطقتين متطابقتين — هذي حالة فارق، لازم تختلفان'); return; }
+  if(!actualAreaText){ toast('اكتب المنطقة الفعلية'); return; }
   if(!amount || amount <= 0){ toast('أدخل المبلغ'); return; }
   if(!diffPhotoBase64){ toast('إرفاق صورة التحويل إلزامي'); return; }
 
   try{
-    const area = AREAS.find(a=>a.id===areaId);
     const registeredArea = AREAS.find(a=>a.id===registeredAreaId);
 
     await db.collection('deliveryDiffs').add({
@@ -674,8 +683,7 @@ async function submitDiff(){
       orderNo,
       registeredAreaId,
       registeredAreaName: registeredArea ? registeredArea.name : registeredAreaId,
-      areaId,
-      areaName: area ? area.name : areaId,
+      areaName: actualAreaText,
       amount,
       proofImage: diffPhotoBase64, // صورة الإثبات كنص Base64
       status: 'pending', // pending -> approved / rejected من لوحة الإدارة
@@ -684,6 +692,7 @@ async function submitDiff(){
 
     toast('تم إرسال الفارق للمراجعة ✅');
     document.getElementById('diffOrderNo').value = '';
+    document.getElementById('diffArea').value = '';
     document.getElementById('diffAmount').value = '';
     document.getElementById('diffPreview').style.display = 'none';
     diffPhotoBase64 = null;
@@ -699,10 +708,22 @@ async function loadTodaySummary(){
   const snap = await db.collection('dailyEntries')
     .where('repUid','==',myPhone())
     .where('date','==',today).get();
-  let count = 0, amount = 0;
-  snap.forEach(d=>{ count += d.data().totalCount; amount += d.data().totalAmount; });
+  let count = 0, amount = 0, pendingCount = 0, pendingAmount = 0;
+  snap.forEach(d=>{
+    const e = d.data();
+    if(e.status === 'approved'){ count += e.totalCount; amount += e.totalAmount; }
+    else { pendingCount += e.totalCount; pendingAmount += e.totalAmount; }
+  });
   document.getElementById('todayCount').textContent = count;
   document.getElementById('todayAmount').textContent = amount;
+
+  const notice = document.getElementById('pendingNotice');
+  if(pendingCount > 0){
+    notice.style.display = 'block';
+    notice.textContent = `⏳ بانتظار اعتماد الإدارة: ${pendingCount} طلب بقيمة ${pendingAmount} ر.س`;
+  } else {
+    notice.style.display = 'none';
+  }
 }
 
 /* ---------------- LOG ---------------- */
@@ -718,15 +739,18 @@ async function loadLog(){
     let periodCount = 0, periodAmount = 0;
     snap.forEach(d=>{
       const e = d.data();
-      periodCount += e.totalCount; periodAmount += e.totalAmount;
+      const isApproved = e.status === 'approved';
+      if(isApproved){ periodCount += e.totalCount; periodAmount += e.totalAmount; }
+      const badgeClass = isApproved ? 'approved' : 'pending';
+      const badgeText = isApproved ? 'معتمد' : 'قيد المراجعة';
       html += `<div class="log-item">
-        <div><div class="date">${e.date}</div><div class="desc">${e.totalCount} طلب</div></div>
+        <div><div class="date">${e.date}</div><div class="desc">${e.totalCount} طلب <span class="badge ${badgeClass}">${badgeText}</span></div></div>
         <div class="amt">${e.totalAmount} ر.س</div>
       </div>`;
     });
     list.innerHTML = html;
     document.getElementById('periodCount').textContent = periodCount;
-    document.getElementById('periodAmount').textContent = periodAmount + ' ريال';
+    document.getElementById('periodAmount').textContent = periodAmount + ' ريال (المعتمد فقط)';
   }
 
   const diffSnap = await db.collection('deliveryDiffs')

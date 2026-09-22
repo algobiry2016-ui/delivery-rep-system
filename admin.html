@@ -9,7 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;900&display=swap" rel="stylesheet">
 <style>
   :root{
-    --rose:#7A2E3C; --rose-dark:#5C2230;
+    --rose:#000000; --rose-dark:#262626;
     --cream:#F7F3EE; --card:#FFFFFF;
     --ink:#2B2420; --ink-soft:#6B615A;
     --gold:#B8935F;
@@ -38,7 +38,7 @@
     padding:11px 14px;border-radius:10px;cursor:pointer;
     margin-bottom:4px;opacity:.85;
   }
-  .navitem.active{background:rgba(255,255,255,.18);opacity:1;}
+  .navitem.active{background:rgba(184,147,95,.28);opacity:1;border-inline-start:3px solid var(--gold);}
   .sidebar .logout{
     position:absolute;bottom:20px;width:190px;
     background:rgba(255,255,255,.12);border:none;color:#fff;
@@ -178,15 +178,25 @@
         <h1>نظرة عامة</h1>
         <p class="page-sub">آخر الطلبات المدخلة من كل المناديب</p>
         <div class="tiles">
-          <div class="tile"><div class="num" id="dashToday">0</div><div class="lbl">طلبات اليوم</div></div>
+          <div class="tile"><div class="num" id="dashToday">0</div><div class="lbl">طلبات اليوم (معتمدة)</div></div>
           <div class="tile"><div class="num" id="dashTodayAmt">0</div><div class="lbl">مستحقات اليوم (ر.س)</div></div>
+          <div class="tile"><div class="num" id="dashPendingEntries">0</div><div class="lbl">إدخالات بانتظار الاعتماد</div></div>
           <div class="tile"><div class="num" id="dashPendingDiffs">0</div><div class="lbl">فوارق بانتظار المراجعة</div></div>
-          <div class="tile"><div class="num" id="dashReps">0</div><div class="lbl">عدد المناديب</div></div>
         </div>
+
+        <div class="card">
+          <h3>طلبات بانتظار الاعتماد</h3>
+          <table>
+            <thead><tr><th>التاريخ</th><th>المندوب</th><th>البراند</th><th>عدد الطلبات</th><th>المبلغ</th><th></th></tr></thead>
+            <tbody id="pendingEntriesBody"></tbody>
+          </table>
+          <div id="pendingEntriesEmpty" class="empty" style="display:none;">لا يوجد طلبات بانتظار الاعتماد</div>
+        </div>
+
         <div class="card">
           <h3>أحدث الإدخالات</h3>
           <table>
-            <thead><tr><th>التاريخ</th><th>المندوب</th><th>البراند</th><th>عدد الطلبات</th><th>المبلغ</th></tr></thead>
+            <thead><tr><th>التاريخ</th><th>المندوب</th><th>البراند</th><th>عدد الطلبات</th><th>المبلغ</th><th>الحالة</th></tr></thead>
             <tbody id="recentEntriesBody"></tbody>
           </table>
           <div id="recentEmpty" class="empty" style="display:none;">لا يوجد إدخالات بعد</div>
@@ -525,19 +535,38 @@ async function deleteRep(id){
 }
 
 /* ---------------- DASHBOARD ---------------- */
+const brandLabel = {both:'الكل', documentation:'دوكمنتيشن', ward:'وورد إكسبريس'};
+
 async function loadDashboard(){
   const today = new Date().toISOString().slice(0,10);
-  const snap = await db.collection('dailyEntries').where('date','==',today).get();
+  const todaySnap = await db.collection('dailyEntries').where('date','==',today).get();
   let count=0, amount=0;
-  snap.forEach(d=>{ count += d.data().totalCount; amount += d.data().totalAmount; });
+  todaySnap.forEach(d=>{
+    const e = d.data();
+    if(e.status === 'approved'){ count += e.totalCount; amount += e.totalAmount; }
+  });
   document.getElementById('dashToday').textContent = count;
   document.getElementById('dashTodayAmt').textContent = amount;
 
   const diffSnap = await db.collection('deliveryDiffs').where('status','==','pending').get();
   document.getElementById('dashPendingDiffs').textContent = diffSnap.size;
 
-  const repsSnap = await db.collection('reps').get();
-  document.getElementById('dashReps').textContent = repsSnap.size;
+  const pendingEntriesSnap = await db.collection('dailyEntries').where('status','==','pending').orderBy('createdAt','desc').get();
+  document.getElementById('dashPendingEntries').textContent = pendingEntriesSnap.size;
+
+  const pBody = document.getElementById('pendingEntriesBody');
+  const pEmpty = document.getElementById('pendingEntriesEmpty');
+  if(pendingEntriesSnap.empty){ pBody.innerHTML=''; pEmpty.style.display='block'; }
+  else{
+    pEmpty.style.display='none';
+    pBody.innerHTML = pendingEntriesSnap.docs.map(d=>{
+      const e = d.data();
+      const actions = myRole==='admin'
+        ? `<button class="small-approve" onclick="setEntryStatus('${d.id}','approved')">اعتماد</button><button class="small-danger" onclick="setEntryStatus('${d.id}','rejected')">رفض</button>`
+        : '';
+      return `<tr><td>${e.date}</td><td>${e.repName||'—'}</td><td>${brandLabel[e.brand]||e.brand||'—'}</td><td>${e.totalCount}</td><td>${e.totalAmount} ر.س</td><td>${actions}</td></tr>`;
+    }).join('');
+  }
 
   const recentSnap = await db.collection('dailyEntries').orderBy('createdAt','desc').limit(15).get();
   const body = document.getElementById('recentEntriesBody');
@@ -545,12 +574,20 @@ async function loadDashboard(){
   if(recentSnap.empty){ body.innerHTML=''; empty.style.display='block'; }
   else{
     empty.style.display='none';
-    const brandLabel = {both:'الكل', documentation:'دوكمنتيشن', ward:'وورد إكسبريس'};
     body.innerHTML = recentSnap.docs.map(d=>{
       const e = d.data();
-      return `<tr><td>${e.date}</td><td>${e.repName||'—'}</td><td>${brandLabel[e.brand]||e.brand||'—'}</td><td>${e.totalCount}</td><td>${e.totalAmount} ر.س</td></tr>`;
+      const badgeClass = e.status==='approved' ? 'approved' : (e.status==='rejected' ? 'rejected' : 'pending');
+      const badgeText = e.status==='approved' ? 'معتمد' : (e.status==='rejected' ? 'مرفوض' : 'قيد المراجعة');
+      return `<tr><td>${e.date}</td><td>${e.repName||'—'}</td><td>${brandLabel[e.brand]||e.brand||'—'}</td><td>${e.totalCount}</td><td>${e.totalAmount} ر.س</td><td><span class="badge ${badgeClass}">${badgeText}</span></td></tr>`;
     }).join('');
   }
+}
+
+async function setEntryStatus(id, status){
+  if(myRole !== 'admin'){ toast('ما تملك صلاحية'); return; }
+  await db.collection('dailyEntries').doc(id).update({status});
+  toast(status==='approved' ? 'تم الاعتماد ✅' : 'تم الرفض');
+  loadDashboard();
 }
 
 /* ---------------- DIFFS ---------------- */
@@ -663,6 +700,7 @@ async function runReport(){
 
   entriesSnap.forEach(d=>{
     const e = d.data();
+    if(e.status !== 'approved') return; // الطلبات غير المعتمدة ما تُحتسب بالتقرير
     const key = e.repName || e.repUid;
     if(!perRep[key]) perRep[key] = {count:0, amount:0, diffs:0, penalties:0, gifts:0};
     perRep[key].count += e.totalCount;
