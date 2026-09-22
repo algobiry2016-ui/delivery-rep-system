@@ -266,7 +266,7 @@
         <div class="card">
           <h3>إدخال طلبات اليوم</h3>
           <label>البراند</label>
-          <select id="entryBrand" onchange="buildAreaInputs()">
+          <select id="entryBrand" onchange="onBrandChange()">
             <option value="documentation">دوكمنتيشن</option>
             <option value="ward">وورد إكسبريس</option>
           </select>
@@ -524,6 +524,29 @@ function rateForRep(area, brand){
   return base;
 }
 
+let lastBrandValue = null; // نتتبع آخر براند مختار عشان نكتشف تبديل فيه أرقام غير محفوظة
+
+function hasUnsavedEntryData(){
+  return AREAS.some(area=>{
+    const site = document.getElementById('site_'+area.id);
+    const wa = document.getElementById('wa_'+area.id);
+    return (site && parseInt(site.value)>0) || (wa && parseInt(wa.value)>0);
+  });
+}
+
+function onBrandChange(){
+  const sel = document.getElementById('entryBrand');
+  if(lastBrandValue && lastBrandValue !== sel.value && hasUnsavedEntryData()){
+    const ok = confirm('عندك أرقام مدخلة للبراند الحالي لسا ما حفظتها — إذا بدّلت البراند الآن بتضيع. تبي تكمل التبديل بدون حفظ؟');
+    if(!ok){
+      sel.value = lastBrandValue; // نرجّعه زي ما كان
+      return;
+    }
+  }
+  lastBrandValue = sel.value;
+  buildAreaInputs();
+}
+
 /* ---------------- BUILD DAILY ENTRY FORM ---------------- */
 function buildAreaInputs(){
   const brand = currentBrand();
@@ -556,6 +579,8 @@ function buildAreaInputs(){
         <input type="number" min="0" id="wa_${area.id}" placeholder="0">
       </div>`;
   });
+
+  lastBrandValue = brand; // نثبّت آخر براند فعليّ ظاهر على الشاشة الآن
 }
 
 function switchEntrySource(which){

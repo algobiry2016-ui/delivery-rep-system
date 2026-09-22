@@ -194,7 +194,7 @@
         <div class="card">
           <h3>طلبات بانتظار الاعتماد</h3>
           <table>
-            <thead><tr><th>التاريخ</th><th>المندوب</th><th>البراند</th><th>عدد الطلبات</th><th>المبلغ</th><th></th></tr></thead>
+            <thead><tr><th>التاريخ</th><th>المندوب</th><th>البراند</th><th>تفصيل المناطق</th><th>الإجمالي</th><th></th></tr></thead>
             <tbody id="pendingEntriesBody"></tbody>
           </table>
           <div id="pendingEntriesEmpty" class="empty" style="display:none;">لا يوجد طلبات بانتظار الاعتماد</div>
@@ -203,7 +203,7 @@
         <div class="card">
           <h3>أحدث الإدخالات</h3>
           <table>
-            <thead><tr><th>التاريخ</th><th>المندوب</th><th>البراند</th><th>عدد الطلبات</th><th>المبلغ</th><th>الحالة</th><th></th></tr></thead>
+            <thead><tr><th>التاريخ</th><th>المندوب</th><th>البراند</th><th>تفصيل المناطق</th><th>الإجمالي</th><th>الحالة</th><th></th></tr></thead>
             <tbody id="recentEntriesBody"></tbody>
           </table>
           <div id="recentEmpty" class="empty" style="display:none;">لا يوجد إدخالات بعد</div>
@@ -670,9 +670,9 @@ async function loadDashboard(){
     pBody.innerHTML = pendingDocs.map(d=>{
       const e = d.data();
       const actions = myRole==='admin'
-        ? `<button class="ghost" style="padding:6px 10px;font-size:12px;margin-inline-end:6px;" onclick="viewEntryDetails('${d.id}')">تفاصيل</button><button class="ghost" style="padding:6px 10px;font-size:12px;margin-inline-end:6px;" onclick="openEditEntry('${d.id}')">تعديل</button><button class="small-approve" onclick="setEntryStatus('${d.id}','approved')">اعتماد</button><button class="small-danger" onclick="setEntryStatus('${d.id}','rejected')" style="margin-inline-end:6px;">رفض</button><button class="small-danger" onclick="deleteEntry('${d.id}')">حذف</button>`
-        : `<button class="ghost" style="padding:6px 10px;font-size:12px;" onclick="viewEntryDetails('${d.id}')">تفاصيل</button>`;
-      return `<tr><td>${e.date}</td><td>${e.repName||'—'}</td><td>${brandLabel[e.brand]||e.brand||'—'}</td><td>${e.totalCount}</td><td>${e.totalAmount} ر.س</td><td>${actions}</td></tr>`;
+        ? `<button class="ghost" style="padding:6px 10px;font-size:12px;margin-inline-end:6px;" onclick="openEditEntry('${d.id}')">تعديل</button><button class="small-approve" onclick="setEntryStatus('${d.id}','approved')">اعتماد</button><button class="small-danger" onclick="setEntryStatus('${d.id}','rejected')" style="margin-inline-end:6px;">رفض</button><button class="small-danger" onclick="deleteEntry('${d.id}')">حذف</button>`
+        : '';
+      return `<tr><td>${e.date}</td><td>${e.repName||'—'}</td><td>${brandLabel[e.brand]||e.brand||'—'}</td><td style="font-size:12px;">${entriesBreakdownHtml(e.entries)}</td><td>${e.totalAmount} ر.س</td><td>${actions}</td></tr>`;
     }).join('');
   }
 
@@ -686,11 +686,10 @@ async function loadDashboard(){
       const e = d.data();
       const badgeClass = e.status==='approved' ? 'approved' : (e.status==='rejected' ? 'rejected' : 'pending');
       const badgeText = e.status==='approved' ? 'معتمد' : (e.status==='rejected' ? 'مرفوض' : 'قيد المراجعة');
-      const viewBtn = `<button class="ghost" style="padding:6px 10px;font-size:12px;margin-inline-end:6px;" onclick="viewEntryDetails('${d.id}')">تفاصيل</button>`;
-      const editBtn = viewBtn + (myRole==='admin'
+      const editBtn = myRole==='admin'
         ? `<button class="ghost" style="padding:6px 10px;font-size:12px;margin-inline-end:6px;" onclick="openEditEntry('${d.id}')">تعديل</button><button class="small-danger" onclick="deleteEntry('${d.id}')">حذف</button>`
-        : '');
-      return `<tr><td>${e.date}</td><td>${e.repName||'—'}</td><td>${brandLabel[e.brand]||e.brand||'—'}</td><td>${e.totalCount}</td><td>${e.totalAmount} ر.س</td><td><span class="badge ${badgeClass}">${badgeText}</span></td><td>${editBtn}</td></tr>`;
+        : '';
+      return `<tr><td>${e.date}</td><td>${e.repName||'—'}</td><td>${brandLabel[e.brand]||e.brand||'—'}</td><td style="font-size:12px;">${entriesBreakdownHtml(e.entries)}</td><td>${e.totalAmount} ر.س</td><td><span class="badge ${badgeClass}">${badgeText}</span></td><td>${editBtn}</td></tr>`;
     }).join('');
   }
 }
@@ -1053,6 +1052,14 @@ async function deletePayout(id){
   toast('تم الحذف');
   loadBalances();
   loadPayoutHistory();
+}
+
+function entriesBreakdownHtml(entriesArr){
+  if(!entriesArr || entriesArr.length === 0) return '—';
+  return entriesArr.map(en=>{
+    const ch = en.source === 'whatsapp' ? 'واتساب' : 'متجر إلكتروني';
+    return `${en.areaName} (${ch}): ${en.count}×${en.rate}=${en.amount} ر.س`;
+  }).join('<br>');
 }
 
 function channelLabel(brand, source){
