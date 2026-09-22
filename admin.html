@@ -199,7 +199,7 @@
         <div class="card">
           <h3>طلبات بانتظار الاعتماد</h3>
           <table>
-            <thead><tr><th>التاريخ</th><th>المندوب</th><th>المنطقة</th><th>دوكمنتيشن</th><th>دوكمنتيشن واتساب</th><th>وورد إكسبريس</th><th>الإجراءات</th></tr></thead>
+            <thead><tr><th>التاريخ</th><th>المندوب</th><th>المنطقة</th><th>دوكمنتيشن</th><th>دوكمنتيشن واتساب</th><th>وورد إكسبريس</th><th>إجمالي الصف</th><th>الإجراءات</th></tr></thead>
             <tbody id="pendingEntriesBody"></tbody>
           </table>
           <div id="pendingEntriesEmpty" class="empty" style="display:none;">لا يوجد طلبات بانتظار الاعتماد</div>
@@ -208,7 +208,7 @@
         <div class="card">
           <h3>أحدث الإدخالات</h3>
           <table>
-            <thead><tr><th>التاريخ</th><th>المندوب</th><th>المنطقة</th><th>دوكمنتيشن</th><th>دوكمنتيشن واتساب</th><th>وورد إكسبريس</th><th>الحالة</th><th>الإجراءات</th></tr></thead>
+            <thead><tr><th>التاريخ</th><th>المندوب</th><th>المنطقة</th><th>دوكمنتيشن</th><th>دوكمنتيشن واتساب</th><th>وورد إكسبريس</th><th>إجمالي الصف</th><th>الحالة</th><th>الإجراءات</th></tr></thead>
             <tbody id="recentEntriesBody"></tbody>
           </table>
           <div id="recentEmpty" class="empty" style="display:none;">لا يوجد إدخالات بعد</div>
@@ -669,33 +669,42 @@ async function loadDashboard(){
 
   const pBody = document.getElementById('pendingEntriesBody');
   const pEmpty = document.getElementById('pendingEntriesEmpty');
-  if(pendingDocs.length === 0){ pBody.innerHTML=''; pEmpty.style.display='block'; }
+  const pendingGroups = groupEntriesByRepDate(pendingDocs);
+  const pendingKeys = Object.keys(pendingGroups);
+  if(pendingKeys.length === 0){ pBody.innerHTML=''; pEmpty.style.display='block'; }
   else{
     pEmpty.style.display='none';
-    pBody.innerHTML = pendingDocs.map(d=>{
-      const e = d.data();
+    pBody.innerHTML = pendingKeys.map(k=>{
+      const g = pendingGroups[k];
+      const idsCsv = g.docIds.join(',');
       const actions = myRole==='admin'
-        ? `<button class="ghost" style="padding:6px 10px;font-size:12px;margin-inline-end:6px;" onclick="openEditEntry('${d.id}')">تعديل</button><button class="small-approve" onclick="setEntryStatus('${d.id}','approved')">اعتماد</button><button class="small-danger" onclick="setEntryStatus('${d.id}','rejected')" style="margin-inline-end:6px;">رفض</button><button class="small-danger" onclick="deleteEntry('${d.id}')">حذف</button>`
+        ? `${g.docIds.length===1 ? `<button class="ghost" style="padding:6px 10px;font-size:12px;margin-inline-end:6px;" onclick="openEditEntry('${g.docIds[0]}')">تعديل</button>` : ''}<button class="small-approve" onclick="bulkSetEntryStatus('${idsCsv}','approved')">اعتماد الكل</button><button class="small-danger" onclick="bulkSetEntryStatus('${idsCsv}','rejected')" style="margin-inline-end:6px;">رفض الكل</button><button class="small-danger" onclick="bulkDeleteEntries('${idsCsv}')">حذف</button>`
         : '';
-      return buildEntryMatrixRows(e, [e.date, e.repName||'—'], [actions]);
+      return buildGroupMatrixRows(g, [g.date, g.repName||'—'], [actions]);
     }).join('');
   }
 
-  const recentSnap = await db.collection('dailyEntries').orderBy('createdAt','desc').limit(15).get();
+  // نجيب كل إدخالات آخر 30 يوم (بدل آخر 15 مستند) عشان التجميع باليوم يعطي صورة صح
+  const since = new Date(); since.setDate(since.getDate()-30);
+  const sinceStr = since.toISOString().slice(0,10);
+  const recentSnap = await db.collection('dailyEntries').where('date','>=',sinceStr).get();
+  const recentDocsSorted = recentSnap.docs.sort((a,b)=> (b.data().date||'').localeCompare(a.data().date||''));
   const body = document.getElementById('recentEntriesBody');
   const empty = document.getElementById('recentEmpty');
-  if(recentSnap.empty){ body.innerHTML=''; empty.style.display='block'; }
+  const recentGroups = groupEntriesByRepDate(recentDocsSorted);
+  const recentKeys = Object.keys(recentGroups).sort((a,b)=> (recentGroups[b].date||'').localeCompare(recentGroups[a].date||''));
+  if(recentKeys.length === 0){ body.innerHTML=''; empty.style.display='block'; }
   else{
     empty.style.display='none';
-    body.innerHTML = recentSnap.docs.map(d=>{
-      const e = d.data();
-      const badgeClass = e.status==='approved' ? 'approved' : (e.status==='rejected' ? 'rejected' : 'pending');
-      const badgeText = e.status==='approved' ? 'معتمد' : (e.status==='rejected' ? 'مرفوض' : 'قيد المراجعة');
+    body.innerHTML = recentKeys.slice(0,15).map(k=>{
+      const g = recentGroups[k];
+      const idsCsv = g.docIds.join(',');
+      const st = groupStatusInfo(g.statuses);
+      const statusCell = `<span class="badge ${st.cls}">${st.text}</span>`;
       const editBtn = myRole==='admin'
-        ? `<button class="ghost" style="padding:6px 10px;font-size:12px;margin-inline-end:6px;" onclick="openEditEntry('${d.id}')">تعديل</button><button class="small-danger" onclick="deleteEntry('${d.id}')">حذف</button>`
+        ? `${g.docIds.length===1 ? `<button class="ghost" style="padding:6px 10px;font-size:12px;margin-inline-end:6px;" onclick="openEditEntry('${g.docIds[0]}')">تعديل</button>` : ''}<button class="small-danger" onclick="bulkDeleteEntries('${idsCsv}')">حذف</button>`
         : '';
-      const statusCell = `<span class="badge ${badgeClass}">${badgeText}</span>`;
-      return buildEntryMatrixRows(e, [e.date, e.repName||'—'], [statusCell, editBtn]);
+      return buildGroupMatrixRows(g, [g.date, g.repName||'—'], [statusCell, editBtn]);
     }).join('');
   }
 }
@@ -1060,37 +1069,107 @@ async function deletePayout(id){
   loadPayoutHistory();
 }
 
-// يبني صفوف <tr> متعددة مباشرة داخل الجدول الرئيسي — صف لكل منطقة، وصف أخير للإجمالي.
-// leadingCells: خلايا ثابتة (التاريخ/المندوب/البراند) تنعرض مرة وحدة فوق بـ rowspan.
-// trailingCells: خلايا ثابتة تنحط بعد أعمدة المناطق (زي الحالة أو الإجراءات) بنفس منطق rowspan.
-function buildEntryMatrixRows(e, leadingCells, trailingCells){
-  const map = {};
-  (e.entries || []).forEach(en=>{
-    if(!map[en.areaId]) map[en.areaId] = {docSite:null, docWa:null, ward:null, name:en.areaName};
-    if(e.brand === 'ward') map[en.areaId].ward = en;
-    else if(en.source === 'whatsapp') map[en.areaId].docWa = en;
-    else map[en.areaId].docSite = en;
-  });
+// يجمع كل مستندات dailyEntries حسب (المندوب + التاريخ) بمجموعة واحدة —
+// حتى لو المندوب سوى عدة عمليات "حفظ" بنفس اليوم (دوكمنتيشن ثم واتس ثم إكسبريس
+// مثلاً)، تتجمع كلها بصف واحد بدل ما تتكرر.
+function groupEntriesByRepDate(docs){
+  const groups = {};
+  docs.forEach(d=>{
+    const e = d.data();
+    const key = e.repUid + '|' + e.date;
+    if(!groups[key]) groups[key] = {
+      repUid: e.repUid, repName: e.repName, date: e.date,
+      docIds: [], merged: {}, totalCount: 0, totalAmount: 0, statuses: new Set()
+    };
+    const g = groups[key];
+    g.docIds.push(d.id);
+    g.totalCount += e.totalCount;
+    g.totalAmount += e.totalAmount;
+    g.statuses.add(e.status || 'pending');
 
-  const areaOrder = AREAS.length ? AREAS.filter(a=>map[a.id]) : Object.keys(map).map(id=>({id, name:map[id].name}));
+    (e.entries || []).forEach(en=>{
+      if(!g.merged[en.areaId]) g.merged[en.areaId] = {name: en.areaName, docSite:0, docSiteAmt:0, docWa:0, docWaAmt:0, ward:0, wardAmt:0};
+      const m = g.merged[en.areaId];
+      if(e.brand === 'ward'){ m.ward += en.count; m.wardAmt += en.amount; }
+      else if(en.source === 'whatsapp'){ m.docWa += en.count; m.docWaAmt += en.amount; }
+      else { m.docSite += en.count; m.docSiteAmt += en.amount; }
+    });
+  });
+  return groups;
+}
+
+function groupStatusInfo(statuses){
+  if(statuses.size === 1){
+    const s = [...statuses][0];
+    if(s === 'approved') return {cls:'approved', text:'معتمد'};
+    if(s === 'rejected') return {cls:'rejected', text:'مرفوض'};
+    return {cls:'pending', text:'قيد المراجعة'};
+  }
+  return {cls:'pending', text:'مختلط — راجعها'};
+}
+
+// يبني صفوف <tr> متعددة مباشرة داخل الجدول الرئيسي لمجموعة (مندوب+تاريخ) واحدة —
+// صف لكل منطقة (بعمود إجمالي الصف بالنهاية)، وصف أخير فيه إجمالي كل عمود + الإجمالي الكلي.
+function buildGroupMatrixRows(g, leadingCells, trailingCells){
+  const areaIds = Object.keys(g.merged);
+  const areaOrder = AREAS.length ? AREAS.filter(a=>g.merged[a.id]) : areaIds.map(id=>({id, name:g.merged[id].name}));
+
   if(areaOrder.length === 0){
     const lead = leadingCells.map(h=>`<td>${h}</td>`).join('');
     const trail = trailingCells.map(h=>`<td>${h}</td>`).join('');
-    return `<tr class="entry-group-sep">${lead}<td colspan="4">لا يوجد تفاصيل</td>${trail}</tr>`;
+    return `<tr class="entry-group-sep">${lead}<td colspan="5">لا يوجد تفاصيل</td>${trail}</tr>`;
   }
 
-  const cell = (en)=> en ? `${en.count}<span class="mini-amt">${en.amount} ر.س</span>` : '<span class="cell-empty">—</span>';
-  const rowspan = areaOrder.length + 1; // +1 لصف الإجمالي بالنهاية
+  const cell = (count, amt) => count > 0 ? `${count}<span class="mini-amt">${amt} ر.س</span>` : '<span class="cell-empty">—</span>';
+  const rowspan = areaOrder.length + 1; // +1 لصف الإجمالي
+
+  let colTotals = {docSite:0, docSiteAmt:0, docWa:0, docWaAmt:0, ward:0, wardAmt:0};
 
   let html = '';
   areaOrder.forEach((a,i)=>{
-    const m = map[a.id];
+    const m = g.merged[a.id];
+    const rowTotalCount = m.docSite + m.docWa + m.ward;
+    const rowTotalAmt = m.docSiteAmt + m.docWaAmt + m.wardAmt;
+    colTotals.docSite += m.docSite; colTotals.docSiteAmt += m.docSiteAmt;
+    colTotals.docWa += m.docWa; colTotals.docWaAmt += m.docWaAmt;
+    colTotals.ward += m.ward; colTotals.wardAmt += m.wardAmt;
+
     const lead = i===0 ? leadingCells.map(h=>`<td rowspan="${rowspan}">${h}</td>`).join('') : '';
     const trail = i===0 ? trailingCells.map(h=>`<td rowspan="${rowspan}">${h}</td>`).join('') : '';
-    html += `<tr>${lead}<td>${a.name}</td><td>${cell(m.docSite)}</td><td>${cell(m.docWa)}</td><td>${cell(m.ward)}</td>${trail}</tr>`;
+    html += `<tr>${lead}<td>${a.name}</td><td>${cell(m.docSite,m.docSiteAmt)}</td><td>${cell(m.docWa,m.docWaAmt)}</td><td>${cell(m.ward,m.wardAmt)}</td><td><b>${cell(rowTotalCount,rowTotalAmt)}</b></td>${trail}</tr>`;
   });
-  html += `<tr class="entry-total-row entry-group-sep"><td>الإجمالي</td><td colspan="3">${e.totalCount} طلب — ${e.totalAmount} ر.س</td></tr>`;
+
+  html += `<tr class="entry-total-row entry-group-sep">
+    <td>الإجمالي</td>
+    <td>${cell(colTotals.docSite, colTotals.docSiteAmt)}</td>
+    <td>${cell(colTotals.docWa, colTotals.docWaAmt)}</td>
+    <td>${cell(colTotals.ward, colTotals.wardAmt)}</td>
+    <td><b>${g.totalCount}<span class="mini-amt">${g.totalAmount} ر.س</span></b></td>
+  </tr>`;
   return html;
+}
+
+function bulkSetEntryStatus(idsCsv, status){
+  if(myRole !== 'admin'){ toast('ما تملك صلاحية'); return; }
+  const ids = idsCsv.split(',');
+  const batch = db.batch();
+  ids.forEach(id => batch.update(db.collection('dailyEntries').doc(id), {status}));
+  batch.commit().then(()=>{
+    toast(status==='approved' ? 'تم اعتماد كل طلبات اليوم ✅' : 'تم الرفض');
+    loadDashboard();
+  });
+}
+
+function bulkDeleteEntries(idsCsv){
+  if(myRole !== 'admin'){ toast('ما تملك صلاحية'); return; }
+  if(!confirm('تأكيد حذف كل طلبات هذا اليوم لهذا المندوب نهائياً؟')) return;
+  const ids = idsCsv.split(',');
+  const batch = db.batch();
+  ids.forEach(id => batch.delete(db.collection('dailyEntries').doc(id)));
+  batch.commit().then(()=>{
+    toast('تم الحذف');
+    loadDashboard();
+  });
 }
 
 function channelLabel(brand, source){
