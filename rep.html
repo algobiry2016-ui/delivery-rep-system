@@ -173,6 +173,7 @@
   }
   .badge.pending{background:var(--amber-bg);color:var(--amber);}
   .badge.approved{background:var(--green-bg);color:var(--green);}
+  .badge.rejected{background:#FBEAEA;color:#B23A3A;}
 
   .penalty-item{
     padding:12px;border-radius:10px;margin-bottom:8px;
@@ -712,7 +713,7 @@ async function loadTodaySummary(){
   snap.forEach(d=>{
     const e = d.data();
     if(e.status === 'approved'){ count += e.totalCount; amount += e.totalAmount; }
-    else { pendingCount += e.totalCount; pendingAmount += e.totalAmount; }
+    else if(e.status !== 'rejected'){ pendingCount += e.totalCount; pendingAmount += e.totalAmount; }
   });
   document.getElementById('todayCount').textContent = count;
   document.getElementById('todayAmount').textContent = amount;
@@ -741,10 +742,9 @@ async function loadLog(){
     let periodCount = 0, periodAmount = 0;
     snap.forEach(d=>{
       const e = d.data();
-      const isApproved = e.status === 'approved';
-      if(isApproved){ periodCount += e.totalCount; periodAmount += e.totalAmount; }
-      const badgeClass = isApproved ? 'approved' : 'pending';
-      const badgeText = isApproved ? 'معتمد' : 'قيد المراجعة';
+      if(e.status === 'approved'){ periodCount += e.totalCount; periodAmount += e.totalAmount; }
+      const badgeClass = e.status==='approved' ? 'approved' : (e.status==='rejected' ? 'rejected' : 'pending');
+      const badgeText = e.status==='approved' ? 'معتمد' : (e.status==='rejected' ? 'مرفوض' : 'قيد المراجعة');
       html += `<div class="log-item">
         <div><div class="date">${e.date}</div><div class="desc">${e.totalCount} طلب <span class="badge ${badgeClass}">${badgeText}</span></div></div>
         <div class="amt">${e.totalAmount} ر.س</div>

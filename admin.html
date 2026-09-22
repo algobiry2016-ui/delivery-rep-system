@@ -105,6 +105,12 @@
 
   .role-note{background:var(--amber-bg);color:var(--amber);padding:10px 14px;border-radius:10px;font-size:13px;margin-bottom:16px;}
 
+  .edit-area-row{display:flex;align-items:center;gap:8px;background:var(--cream);border-radius:8px;padding:7px 10px;}
+  .edit-area-row .ea-name{flex:1;font-size:13.5px;font-weight:700;}
+  .edit-area-row .ea-col{display:flex;flex-direction:column;align-items:center;gap:2px;}
+  .edit-area-row .ea-col label{font-size:10px;color:var(--ink-soft);font-weight:700;}
+  .edit-area-row input{width:60px;text-align:center;padding:6px;font-size:13px;}
+
   .login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;}
   .login-card{background:#fff;border-radius:16px;padding:34px;width:340px;border:1px solid var(--line);}
   .login-card h2{text-align:center;color:var(--rose-dark);margin-top:0;}
@@ -196,7 +202,7 @@
         <div class="card">
           <h3>أحدث الإدخالات</h3>
           <table>
-            <thead><tr><th>التاريخ</th><th>المندوب</th><th>البراند</th><th>عدد الطلبات</th><th>المبلغ</th><th>الحالة</th></tr></thead>
+            <thead><tr><th>التاريخ</th><th>المندوب</th><th>البراند</th><th>عدد الطلبات</th><th>المبلغ</th><th>الحالة</th><th></th></tr></thead>
             <tbody id="recentEntriesBody"></tbody>
           </table>
           <div id="recentEmpty" class="empty" style="display:none;">لا يوجد إدخالات بعد</div>
@@ -333,6 +339,28 @@
     <button class="modal-close" onclick="closeImgModal(event)">×</button>
     <h3>صورة إثبات التحويل</h3>
     <img id="imgModalImg" src="">
+  </div>
+</div>
+
+<div class="modal-bg" id="editEntryBg">
+  <div class="modal" style="max-width:520px;">
+    <button class="modal-close" onclick="closeEditEntry()">×</button>
+    <h3>تعديل طلب — <span id="editEntryRepName"></span></h3>
+    <div class="toolbar">
+      <div class="field"><label>التاريخ</label><input type="date" id="editEntryDate"></div>
+      <div class="field"><label>البراند</label>
+        <select id="editEntryBrand" onchange="renderEditEntryGrid()">
+          <option value="documentation">دوكمنتيشن</option>
+          <option value="ward">وورد إكسبريس</option>
+        </select>
+      </div>
+    </div>
+    <div id="editEntryGrid" style="margin-top:10px;display:flex;flex-direction:column;gap:8px;"></div>
+    <div class="row" style="margin-top:14px;padding-top:10px;border-top:1px solid var(--line);">
+      <span class="page-sub" style="margin:0;">الإجمالي بعد التعديل</span>
+      <b id="editEntryTotal">0 ر.س</b>
+    </div>
+    <button class="primary" style="width:100%;margin-top:14px;" onclick="saveEditEntry()">حفظ التعديل</button>
   </div>
 </div>
 
@@ -569,7 +597,7 @@ async function loadDashboard(){
     pBody.innerHTML = pendingDocs.map(d=>{
       const e = d.data();
       const actions = myRole==='admin'
-        ? `<button class="small-approve" onclick="setEntryStatus('${d.id}','approved')">اعتماد</button><button class="small-danger" onclick="setEntryStatus('${d.id}','rejected')">رفض</button>`
+        ? `<button class="ghost" style="padding:6px 10px;font-size:12px;margin-inline-end:6px;" onclick="openEditEntry('${d.id}')">تعديل</button><button class="small-approve" onclick="setEntryStatus('${d.id}','approved')">اعتماد</button><button class="small-danger" onclick="setEntryStatus('${d.id}','rejected')">رفض</button>`
         : '';
       return `<tr><td>${e.date}</td><td>${e.repName||'—'}</td><td>${brandLabel[e.brand]||e.brand||'—'}</td><td>${e.totalCount}</td><td>${e.totalAmount} ر.س</td><td>${actions}</td></tr>`;
     }).join('');
@@ -585,9 +613,102 @@ async function loadDashboard(){
       const e = d.data();
       const badgeClass = e.status==='approved' ? 'approved' : (e.status==='rejected' ? 'rejected' : 'pending');
       const badgeText = e.status==='approved' ? 'معتمد' : (e.status==='rejected' ? 'مرفوض' : 'قيد المراجعة');
-      return `<tr><td>${e.date}</td><td>${e.repName||'—'}</td><td>${brandLabel[e.brand]||e.brand||'—'}</td><td>${e.totalCount}</td><td>${e.totalAmount} ر.س</td><td><span class="badge ${badgeClass}">${badgeText}</span></td></tr>`;
+      const editBtn = myRole==='admin' ? `<button class="ghost" style="padding:6px 10px;font-size:12px;" onclick="openEditEntry('${d.id}')">تعديل</button>` : '';
+      return `<tr><td>${e.date}</td><td>${e.repName||'—'}</td><td>${brandLabel[e.brand]||e.brand||'—'}</td><td>${e.totalCount}</td><td>${e.totalAmount} ر.س</td><td><span class="badge ${badgeClass}">${badgeText}</span></td><td>${editBtn}</td></tr>`;
     }).join('');
   }
+}
+
+/* ---------------- EDIT ENTRY ---------------- */
+let editState = { id:null, repUid:null, isAmmar:false, originalBrand:null, prefill:{} };
+
+async function openEditEntry(id){
+  const doc = await db.collection('dailyEntries').doc(id).get();
+  if(!doc.exists){ toast('الطلب غير موجود'); return; }
+  const e = doc.data();
+
+  let isAmmar = false;
+  if(e.repUid){
+    const repDoc = await db.collection('reps').doc(e.repUid).get();
+    if(repDoc.exists) isAmmar = !!repDoc.data().isAmmar;
+  }
+
+  editState = { id, repUid: e.repUid, isAmmar, originalBrand: e.brand, prefill:{} };
+  (e.entries || []).forEach(en=>{
+    editState.prefill[en.areaId + '_' + en.source] = en.count;
+  });
+
+  document.getElementById('editEntryRepName').textContent = e.repName || '—';
+  document.getElementById('editEntryDate').value = e.date || '';
+  document.getElementById('editEntryBrand').value = e.brand || 'documentation';
+
+  await loadAreas();
+  renderEditEntryGrid();
+  document.getElementById('editEntryBg').classList.add('show');
+}
+
+function closeEditEntry(){
+  document.getElementById('editEntryBg').classList.remove('show');
+}
+
+function editRateFor(area, brand){
+  const base = brand === 'ward' ? area.rateWard : area.rateDoc;
+  return editState.isAmmar ? Math.max(0, base - 5) : base;
+}
+
+function renderEditEntryGrid(){
+  const brand = document.getElementById('editEntryBrand').value;
+  const samebrand = brand === editState.originalBrand;
+  const grid = document.getElementById('editEntryGrid');
+
+  grid.innerHTML = AREAS.map(a=>{
+    const rate = editRateFor(a, brand);
+    const siteVal = samebrand ? (editState.prefill[a.id+'_site'] || 0) : 0;
+    const waVal = samebrand ? (editState.prefill[a.id+'_whatsapp'] || 0) : 0;
+    return `<div class="edit-area-row">
+      <span class="ea-name">${a.name} <span class="page-sub" style="margin:0;">(${rate} ر.س)</span></span>
+      <div class="ea-col"><label>موقع</label><input type="number" min="0" id="e_site_${a.id}" value="${siteVal}" oninput="updateEditEntryTotal()"></div>
+      <div class="ea-col"><label>واتس</label><input type="number" min="0" id="e_wa_${a.id}" value="${waVal}" oninput="updateEditEntryTotal()"></div>
+    </div>`;
+  }).join('');
+
+  updateEditEntryTotal();
+}
+
+function updateEditEntryTotal(){
+  const brand = document.getElementById('editEntryBrand').value;
+  let total = 0;
+  AREAS.forEach(a=>{
+    const rate = editRateFor(a, brand);
+    const site = parseInt(document.getElementById('e_site_'+a.id).value) || 0;
+    const wa = parseInt(document.getElementById('e_wa_'+a.id).value) || 0;
+    total += (site + wa) * rate;
+  });
+  document.getElementById('editEntryTotal').textContent = total + ' ر.س';
+}
+
+async function saveEditEntry(){
+  if(myRole !== 'admin'){ toast('ما تملك صلاحية'); return; }
+  const brand = document.getElementById('editEntryBrand').value;
+  const date = document.getElementById('editEntryDate').value;
+  if(!date){ toast('حدد التاريخ'); return; }
+
+  let entries = [], totalAmount = 0, totalCount = 0;
+  AREAS.forEach(a=>{
+    const rate = editRateFor(a, brand);
+    const site = parseInt(document.getElementById('e_site_'+a.id).value) || 0;
+    const wa = parseInt(document.getElementById('e_wa_'+a.id).value) || 0;
+    if(site > 0){ entries.push({areaId:a.id, areaName:a.name, source:'site', count:site, rate, amount:site*rate}); totalAmount += site*rate; totalCount += site; }
+    if(wa > 0){ entries.push({areaId:a.id, areaName:a.name, source:'whatsapp', count:wa, rate, amount:wa*rate}); totalAmount += wa*rate; totalCount += wa; }
+  });
+
+  await db.collection('dailyEntries').doc(editState.id).update({
+    brand, date, entries, totalAmount, totalCount
+  });
+
+  toast('تم حفظ التعديل ✅');
+  closeEditEntry();
+  loadDashboard();
 }
 
 async function setEntryStatus(id, status){
