@@ -105,6 +105,13 @@
 
   .role-note{background:var(--amber-bg);color:var(--amber);padding:10px 14px;border-radius:10px;font-size:13px;margin-bottom:16px;}
 
+  .breakdown-table{width:100%;border-collapse:collapse;background:var(--cream);border-radius:8px;overflow:hidden;}
+  .breakdown-table th{background:#EFE9E1;font-size:10.5px;padding:5px 6px;color:var(--ink-soft);border:none;text-align:center;}
+  .breakdown-table td{padding:5px 6px;font-size:11.5px;text-align:center;border-bottom:1px solid var(--line);}
+  .breakdown-table td:first-child{text-align:right;font-weight:700;}
+  .breakdown-table tr:last-child td{border-bottom:none;}
+  .breakdown-table .empty-cell{color:#C9BDB6;}
+
   .edit-area-row{display:flex;align-items:center;gap:8px;background:var(--cream);border-radius:8px;padding:7px 10px;}
   .edit-area-row .ea-name{flex:1;font-size:13.5px;font-weight:700;}
   .edit-area-row .ea-col{display:flex;flex-direction:column;align-items:center;gap:2px;}
@@ -672,7 +679,7 @@ async function loadDashboard(){
       const actions = myRole==='admin'
         ? `<button class="ghost" style="padding:6px 10px;font-size:12px;margin-inline-end:6px;" onclick="openEditEntry('${d.id}')">تعديل</button><button class="small-approve" onclick="setEntryStatus('${d.id}','approved')">اعتماد</button><button class="small-danger" onclick="setEntryStatus('${d.id}','rejected')" style="margin-inline-end:6px;">رفض</button><button class="small-danger" onclick="deleteEntry('${d.id}')">حذف</button>`
         : '';
-      return `<tr><td>${e.date}</td><td>${e.repName||'—'}</td><td>${brandLabel[e.brand]||e.brand||'—'}</td><td style="font-size:12px;">${entriesBreakdownHtml(e.entries)}</td><td>${e.totalAmount} ر.س</td><td>${actions}</td></tr>`;
+      return `<tr><td>${e.date}</td><td>${e.repName||'—'}</td><td>${brandLabel[e.brand]||e.brand||'—'}</td><td style="font-size:12px;">${entriesBreakdownHtml(e.entries, e.brand)}</td><td>${e.totalAmount} ر.س</td><td>${actions}</td></tr>`;
     }).join('');
   }
 
@@ -689,7 +696,7 @@ async function loadDashboard(){
       const editBtn = myRole==='admin'
         ? `<button class="ghost" style="padding:6px 10px;font-size:12px;margin-inline-end:6px;" onclick="openEditEntry('${d.id}')">تعديل</button><button class="small-danger" onclick="deleteEntry('${d.id}')">حذف</button>`
         : '';
-      return `<tr><td>${e.date}</td><td>${e.repName||'—'}</td><td>${brandLabel[e.brand]||e.brand||'—'}</td><td style="font-size:12px;">${entriesBreakdownHtml(e.entries)}</td><td>${e.totalAmount} ر.س</td><td><span class="badge ${badgeClass}">${badgeText}</span></td><td>${editBtn}</td></tr>`;
+      return `<tr><td>${e.date}</td><td>${e.repName||'—'}</td><td>${brandLabel[e.brand]||e.brand||'—'}</td><td style="font-size:12px;">${entriesBreakdownHtml(e.entries, e.brand)}</td><td>${e.totalAmount} ر.س</td><td><span class="badge ${badgeClass}">${badgeText}</span></td><td>${editBtn}</td></tr>`;
     }).join('');
   }
 }
@@ -705,7 +712,7 @@ async function viewEntryDetails(id){
 
   const body = document.getElementById('viewEntryBody');
   body.innerHTML = (e.entries || []).map(en=>{
-    const ch = en.source === 'whatsapp' ? 'واتساب' : 'متجر إلكتروني';
+    const ch = en.source === 'whatsapp' ? 'واتساب' : 'دوكمنتيشن';
     return `<tr><td>${en.areaName}</td><td>${ch}</td><td>${en.count}</td><td>${en.rate} ر.س</td><td>${en.amount} ر.س</td></tr>`;
   }).join('');
 
@@ -1054,17 +1061,37 @@ async function deletePayout(id){
   loadPayoutHistory();
 }
 
-function entriesBreakdownHtml(entriesArr){
+function entriesBreakdownHtml(entriesArr, brand){
   if(!entriesArr || entriesArr.length === 0) return '—';
-  return entriesArr.map(en=>{
-    const ch = en.source === 'whatsapp' ? 'واتساب' : 'متجر إلكتروني';
-    return `${en.areaName} (${ch}): ${en.count}×${en.rate}=${en.amount} ر.س`;
-  }).join('<br>');
+
+  // نبني مصفوفة: كل صف منطقة، وثلاث أعمدة ثابتة للقنوات الثلاث —
+  // حتى لو صف الطلب هذا كله لبراند واحد، الأعمدة الثلاث تضل ظاهرة (فاضية "—")
+  // عشان يسهل عليك تقارن بسرعة بين الجداول المختلفة بنفس الشكل.
+  const map = {};
+  entriesArr.forEach(en=>{
+    if(!map[en.areaId]) map[en.areaId] = {docSite:null, docWa:null, ward:null, name:en.areaName};
+    if(brand === 'ward') map[en.areaId].ward = en;
+    else if(en.source === 'whatsapp') map[en.areaId].docWa = en;
+    else map[en.areaId].docSite = en;
+  });
+
+  const cell = (en)=> en ? `${en.count}<br><span style="color:var(--ink-soft);font-size:10px;">${en.amount} ر.س</span>` : '<span class="empty-cell">—</span>';
+
+  const areaOrder = AREAS.length ? AREAS.filter(a=>map[a.id]) : Object.keys(map).map(id=>({id, name:map[id].name}));
+  const rows = areaOrder.map(a=>{
+    const m = map[a.id];
+    return `<tr><td>${a.name}</td><td>${cell(m.docSite)}</td><td>${cell(m.docWa)}</td><td>${cell(m.ward)}</td></tr>`;
+  }).join('');
+
+  return `<table class="breakdown-table">
+    <thead><tr><th>المنطقة</th><th>دوكمنتيشن</th><th>دوكمنتيشن<br>واتساب</th><th>وورد إكسبريس</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
 }
 
 function channelLabel(brand, source){
   if(brand === 'ward') return source === 'whatsapp' ? 'وورد إكسبريس (واتساب)' : 'وورد إكسبريس';
-  return source === 'whatsapp' ? 'دوكمنتيشن (واتساب)' : 'دوكمنتيشن (متجر إلكتروني)';
+  return source === 'whatsapp' ? 'دوكمنتيشن (واتساب)' : 'دوكمنتيشن';
 }
 
 async function runReport(){
