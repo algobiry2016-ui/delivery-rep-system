@@ -348,6 +348,15 @@
           <div class="row"><span class="muted">إجمالي الطلبات</span><b id="periodCount">0</b></div>
           <div class="row" style="margin-top:8px;"><span class="muted">إجمالي المستحق</span><b id="periodAmount">0 ريال</b></div>
         </div>
+
+        <div class="card">
+          <h3>رصيدي</h3>
+          <div class="row"><span class="muted">إجمالي المستحق (كل الوقت)</span><b id="balEarned">0 ر.س</b></div>
+          <div class="row" style="margin-top:8px;"><span class="muted">إجمالي اللي استلمته</span><b id="balPaid">0 ر.س</b></div>
+          <div class="row" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line);">
+            <span class="muted">الباقي لي</span><b id="balRemaining" style="font-size:17px;">0 ر.س</b>
+          </div>
+        </div>
       </div>
 
     </div>
@@ -840,6 +849,36 @@ function showTab(name){
   event.currentTarget.classList.add('active');
   if(name==='log') loadLog();
   if(name==='penalties') loadPenalties();
+  if(name==='account') loadMyBalance();
+}
+
+/* ---------------- MY BALANCE ---------------- */
+// الرصيد التراكمي: كل الطلبات والفوارق المعتمدة منذ الأول، ناقص الجزاءات
+// والهدايا، ناقص كل الدفعات اللي استلمتها. نفس حساب لوحة الإدارة بالضبط،
+// بس مفلتر على المندوب نفسه فقط.
+async function loadMyBalance(){
+  let earned = 0, paid = 0;
+
+  const entriesSnap = await db.collection('dailyEntries')
+    .where('repUid','==',myPhone()).where('status','==','approved').get();
+  entriesSnap.forEach(d=> earned += d.data().totalAmount);
+
+  const diffsSnap = await db.collection('deliveryDiffs')
+    .where('repUid','==',myPhone()).where('status','==','approved').get();
+  diffsSnap.forEach(d=> earned += d.data().amount);
+
+  const penSnap = await db.collection('penalties').where('repUid','==',myPhone()).get();
+  penSnap.forEach(d=> earned -= (d.data().amount || 0));
+
+  const payoutsSnap = await db.collection('payouts').where('repUid','==',myPhone()).get();
+  payoutsSnap.forEach(d=> paid += (d.data().amount || 0));
+
+  const remaining = earned - paid;
+  document.getElementById('balEarned').textContent = earned + ' ر.س';
+  document.getElementById('balPaid').textContent = paid + ' ر.س';
+  const remEl = document.getElementById('balRemaining');
+  remEl.textContent = remaining + ' ر.س';
+  remEl.style.color = remaining > 0 ? 'var(--rose)' : 'var(--green)';
 }
 </script>
 </body>

@@ -335,6 +335,13 @@
           <table>
             <thead><tr><th>المندوب</th><th>المنطقة</th><th>القناة</th><th>عدد الطلبات</th><th>المبلغ</th></tr></thead>
             <tbody id="reportBreakdownBody"></tbody>
+            <tfoot>
+              <tr style="border-top:2px solid var(--line);">
+                <td colspan="3"><b>الإجمالي</b></td>
+                <td><b id="reportBreakdownTotalCount">0</b></td>
+                <td><b id="reportBreakdownTotalAmount">0 ر.س</b></td>
+              </tr>
+            </tfoot>
           </table>
           <div id="reportBreakdownEmpty" class="empty" style="display:none;">لا يوجد تفاصيل</div>
         </div>
@@ -384,6 +391,26 @@
     <button class="modal-close" onclick="closeImgModal(event)">×</button>
     <h3>صورة إثبات التحويل</h3>
     <img id="imgModalImg" src="">
+  </div>
+</div>
+
+<div class="modal-bg" id="viewEntryBg" onclick="closeViewEntry(event)">
+  <div class="modal" style="max-width:480px;">
+    <button class="modal-close" onclick="closeViewEntry(event)">×</button>
+    <h3>تفاصيل الطلب — <span id="viewEntryRepName"></span></h3>
+    <p class="page-sub" id="viewEntryMeta" style="margin-top:-6px;"></p>
+    <table>
+      <thead><tr><th>المنطقة</th><th>القناة</th><th>العدد</th><th>السعر</th><th>المبلغ</th></tr></thead>
+      <tbody id="viewEntryBody"></tbody>
+      <tfoot>
+        <tr style="border-top:2px solid var(--line);">
+          <td colspan="2"><b>الإجمالي</b></td>
+          <td><b id="viewEntryTotalCount">0</b></td>
+          <td></td>
+          <td><b id="viewEntryTotalAmount">0 ر.س</b></td>
+        </tr>
+      </tfoot>
+    </table>
   </div>
 </div>
 
@@ -643,8 +670,8 @@ async function loadDashboard(){
     pBody.innerHTML = pendingDocs.map(d=>{
       const e = d.data();
       const actions = myRole==='admin'
-        ? `<button class="ghost" style="padding:6px 10px;font-size:12px;margin-inline-end:6px;" onclick="openEditEntry('${d.id}')">تعديل</button><button class="small-approve" onclick="setEntryStatus('${d.id}','approved')">اعتماد</button><button class="small-danger" onclick="setEntryStatus('${d.id}','rejected')" style="margin-inline-end:6px;">رفض</button><button class="small-danger" onclick="deleteEntry('${d.id}')">حذف</button>`
-        : '';
+        ? `<button class="ghost" style="padding:6px 10px;font-size:12px;margin-inline-end:6px;" onclick="viewEntryDetails('${d.id}')">تفاصيل</button><button class="ghost" style="padding:6px 10px;font-size:12px;margin-inline-end:6px;" onclick="openEditEntry('${d.id}')">تعديل</button><button class="small-approve" onclick="setEntryStatus('${d.id}','approved')">اعتماد</button><button class="small-danger" onclick="setEntryStatus('${d.id}','rejected')" style="margin-inline-end:6px;">رفض</button><button class="small-danger" onclick="deleteEntry('${d.id}')">حذف</button>`
+        : `<button class="ghost" style="padding:6px 10px;font-size:12px;" onclick="viewEntryDetails('${d.id}')">تفاصيل</button>`;
       return `<tr><td>${e.date}</td><td>${e.repName||'—'}</td><td>${brandLabel[e.brand]||e.brand||'—'}</td><td>${e.totalCount}</td><td>${e.totalAmount} ر.س</td><td>${actions}</td></tr>`;
     }).join('');
   }
@@ -659,11 +686,38 @@ async function loadDashboard(){
       const e = d.data();
       const badgeClass = e.status==='approved' ? 'approved' : (e.status==='rejected' ? 'rejected' : 'pending');
       const badgeText = e.status==='approved' ? 'معتمد' : (e.status==='rejected' ? 'مرفوض' : 'قيد المراجعة');
-      const editBtn = myRole==='admin'
+      const viewBtn = `<button class="ghost" style="padding:6px 10px;font-size:12px;margin-inline-end:6px;" onclick="viewEntryDetails('${d.id}')">تفاصيل</button>`;
+      const editBtn = viewBtn + (myRole==='admin'
         ? `<button class="ghost" style="padding:6px 10px;font-size:12px;margin-inline-end:6px;" onclick="openEditEntry('${d.id}')">تعديل</button><button class="small-danger" onclick="deleteEntry('${d.id}')">حذف</button>`
-        : '';
+        : '');
       return `<tr><td>${e.date}</td><td>${e.repName||'—'}</td><td>${brandLabel[e.brand]||e.brand||'—'}</td><td>${e.totalCount}</td><td>${e.totalAmount} ر.س</td><td><span class="badge ${badgeClass}">${badgeText}</span></td><td>${editBtn}</td></tr>`;
     }).join('');
+  }
+}
+
+/* ---------------- VIEW ENTRY DETAILS ---------------- */
+async function viewEntryDetails(id){
+  const doc = await db.collection('dailyEntries').doc(id).get();
+  if(!doc.exists){ toast('الطلب غير موجود'); return; }
+  const e = doc.data();
+
+  document.getElementById('viewEntryRepName').textContent = e.repName || '—';
+  document.getElementById('viewEntryMeta').textContent = `${e.date} — ${brandLabel[e.brand]||e.brand||''}`;
+
+  const body = document.getElementById('viewEntryBody');
+  body.innerHTML = (e.entries || []).map(en=>{
+    const ch = en.source === 'whatsapp' ? 'واتساب' : 'متجر إلكتروني';
+    return `<tr><td>${en.areaName}</td><td>${ch}</td><td>${en.count}</td><td>${en.rate} ر.س</td><td>${en.amount} ر.س</td></tr>`;
+  }).join('');
+
+  document.getElementById('viewEntryTotalCount').textContent = e.totalCount;
+  document.getElementById('viewEntryTotalAmount').textContent = e.totalAmount + ' ر.س';
+  document.getElementById('viewEntryBg').classList.add('show');
+}
+
+function closeViewEntry(e){
+  if(e.target.id === 'viewEntryBg' || e.target.classList.contains('modal-close')){
+    document.getElementById('viewEntryBg').classList.remove('show');
   }
 }
 
@@ -1073,14 +1127,18 @@ async function runReport(){
   const bBody = document.getElementById('reportBreakdownBody');
   const bEmpty = document.getElementById('reportBreakdownEmpty');
   const bKeys = Object.keys(breakdown).sort((a,b)=> breakdown[a].repName.localeCompare(breakdown[b].repName) || breakdown[a].areaName.localeCompare(breakdown[b].areaName));
+  let bTotalCount = 0, bTotalAmount = 0;
   if(bKeys.length === 0){ bBody.innerHTML=''; bEmpty.style.display='block'; }
   else{
     bEmpty.style.display='none';
     bBody.innerHTML = bKeys.map(k=>{
       const r = breakdown[k];
+      bTotalCount += r.count; bTotalAmount += r.amount;
       return `<tr><td>${r.repName}</td><td>${r.areaName}</td><td>${r.channel}</td><td>${r.count}</td><td>${r.amount} ر.س</td></tr>`;
     }).join('');
   }
+  document.getElementById('reportBreakdownTotalCount').textContent = bTotalCount;
+  document.getElementById('reportBreakdownTotalAmount').textContent = bTotalAmount + ' ر.س';
 }
 </script>
 </body>
