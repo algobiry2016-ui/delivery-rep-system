@@ -551,15 +551,22 @@ async function loadDashboard(){
   const diffSnap = await db.collection('deliveryDiffs').where('status','==','pending').get();
   document.getElementById('dashPendingDiffs').textContent = diffSnap.size;
 
-  const pendingEntriesSnap = await db.collection('dailyEntries').where('status','==','pending').orderBy('createdAt','desc').get();
-  document.getElementById('dashPendingEntries').textContent = pendingEntriesSnap.size;
+  // ملاحظة: تفادينا orderBy مع where على حقل مختلف حتى لا يحتاج الاستعلام
+  // فهرس مركّب (composite index) لسا ما انبنى بـ Firestore — نرتب بجافاسكربت بدلاً منه.
+  const pendingEntriesSnap = await db.collection('dailyEntries').where('status','==','pending').get();
+  const pendingDocs = pendingEntriesSnap.docs.sort((a,b)=>{
+    const ta = a.data().createdAt ? a.data().createdAt.toMillis() : 0;
+    const tb = b.data().createdAt ? b.data().createdAt.toMillis() : 0;
+    return tb - ta;
+  });
+  document.getElementById('dashPendingEntries').textContent = pendingDocs.length;
 
   const pBody = document.getElementById('pendingEntriesBody');
   const pEmpty = document.getElementById('pendingEntriesEmpty');
-  if(pendingEntriesSnap.empty){ pBody.innerHTML=''; pEmpty.style.display='block'; }
+  if(pendingDocs.length === 0){ pBody.innerHTML=''; pEmpty.style.display='block'; }
   else{
     pEmpty.style.display='none';
-    pBody.innerHTML = pendingEntriesSnap.docs.map(d=>{
+    pBody.innerHTML = pendingDocs.map(d=>{
       const e = d.data();
       const actions = myRole==='admin'
         ? `<button class="small-approve" onclick="setEntryStatus('${d.id}','approved')">اعتماد</button><button class="small-danger" onclick="setEntryStatus('${d.id}','rejected')">رفض</button>`

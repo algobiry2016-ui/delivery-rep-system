@@ -31,7 +31,7 @@
     background:var(--cream);
     color:var(--ink);
     min-height:100%;
-    padding-bottom:70px;
+
   }
   .app{max-width:480px;margin:0 auto;min-height:100vh;background:var(--cream);position:relative;}
 
@@ -53,7 +53,7 @@
   }
 
   /* ---------- Layout ---------- */
-  .content{padding:16px;}
+  .content{padding:16px 16px calc(90px + env(safe-area-inset-bottom,0px));}
   .card{
     background:var(--card);
     border:1px solid var(--line);
@@ -728,9 +728,11 @@ async function loadTodaySummary(){
 
 /* ---------------- LOG ---------------- */
 async function loadLog(){
-  const snap = await db.collection('dailyEntries')
-    .where('repUid','==',myPhone())
-    .orderBy('date','desc').limit(30).get();
+  // بدون orderBy مع where على حقل مختلف — يتجنب الحاجة لفهرس مركّب، ونرتب بجافاسكربت.
+  const rawSnap = await db.collection('dailyEntries')
+    .where('repUid','==',myPhone()).limit(60).get();
+  const snapDocs = rawSnap.docs.sort((a,b)=> (b.data().date||'').localeCompare(a.data().date||'')).slice(0,30);
+  const snap = { empty: snapDocs.length===0, docs: snapDocs, forEach:(fn)=>snapDocs.forEach(fn) };
 
   const list = document.getElementById('logList');
   if(snap.empty){ list.innerHTML = '<div class="empty">لا يوجد سجل بعد</div>'; }
@@ -753,14 +755,18 @@ async function loadLog(){
     document.getElementById('periodAmount').textContent = periodAmount + ' ريال (المعتمد فقط)';
   }
 
-  const diffSnap = await db.collection('deliveryDiffs')
-    .where('repUid','==',myPhone())
-    .orderBy('createdAt','desc').limit(20).get();
+  const diffRaw = await db.collection('deliveryDiffs')
+    .where('repUid','==',myPhone()).limit(40).get();
+  const diffDocs = diffRaw.docs.sort((a,b)=>{
+    const ta = a.data().createdAt ? a.data().createdAt.toMillis() : 0;
+    const tb = b.data().createdAt ? b.data().createdAt.toMillis() : 0;
+    return tb - ta;
+  }).slice(0,20);
   const diffList = document.getElementById('diffList');
-  if(diffSnap.empty){ diffList.innerHTML = '<div class="empty">لا يوجد فوارق مرسلة</div>'; }
+  if(diffDocs.length === 0){ diffList.innerHTML = '<div class="empty">لا يوجد فوارق مرسلة</div>'; }
   else{
     let html = '';
-    diffSnap.forEach(d=>{
+    diffDocs.forEach(d=>{
       const e = d.data();
       const badgeClass = e.status === 'approved' ? 'approved' : 'pending';
       const badgeText = e.status === 'approved' ? 'معتمد' : 'قيد المراجعة';
