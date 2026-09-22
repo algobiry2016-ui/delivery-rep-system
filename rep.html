@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>شاشة المندوب — نظام مناديب التوصيل</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --rose:#7A2E3C;
+    --rose-dark:#5C2230;
+    --cream:#F7F3EE;
+    --card:#FFFFFF;
+    --ink:#2B2420;
+    --ink-soft:#6B615A;
+    --gold:#B8935F;
+    --green:#4C7A5C;
+    --green-bg:#EAF2EC;
+    --amber:#A9762F;
+    --amber-bg:#FBF1E2;
+    --line:#E8E0D8;
+    --radius:14px;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    font-family:'Tajawal',sans-serif;
+    background:var(--cream);
+    color:var(--ink);
+    min-height:100%;
+    padding-bottom:70px;
+  }
+  .app{max-width:480px;margin:0 auto;min-height:100vh;background:var(--cream);position:relative;}
+
+  /* ---------- Top bar ---------- */
+  .topbar{
+    background:var(--rose);
+    color:#fff;
+    padding:18px 20px 22px;
+    border-radius:0 0 20px 20px;
+  }
+  .topbar .brand{font-size:13px;opacity:.85;font-weight:500;}
+  .topbar .rep-name{font-size:22px;font-weight:900;margin-top:2px;}
+  .topbar .logout{
+    position:absolute;top:18px;left:20px;
+    background:rgba(255,255,255,.15);
+    border:none;color:#fff;
+    padding:6px 12px;border-radius:20px;
+    font-family:inherit;font-size:12px;cursor:pointer;
+  }
+
+  /* ---------- Layout ---------- */
+  .content{padding:16px;}
+  .card{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:16px;
+    margin-bottom:14px;
+  }
+  .card h3{margin:0 0 12px;font-size:15px;font-weight:700;color:var(--rose-dark);}
+  .row{display:flex;justify-content:space-between;align-items:center;}
+  .muted{color:var(--ink-soft);font-size:13px;}
+
+  /* ---------- Summary tiles ---------- */
+  .tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;}
+  .tile{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:14px;
+    text-align:center;
+  }
+  .tile .num{font-size:26px;font-weight:900;color:var(--rose);}
+  .tile .lbl{font-size:12px;color:var(--ink-soft);margin-top:2px;}
+
+  /* ---------- Forms ---------- */
+  label{display:block;font-size:13px;font-weight:700;margin:10px 0 6px;color:var(--ink);}
+  label:first-child{margin-top:0;}
+  input, select{
+    width:100%;
+    padding:12px 14px;
+    border:1.5px solid var(--line);
+    border-radius:10px;
+    font-family:inherit;
+    font-size:15px;
+    background:#fff;
+    color:var(--ink);
+  }
+  input:focus, select:focus{outline:none;border-color:var(--rose);}
+  .area-grid{display:flex;flex-direction:column;gap:8px;}
+  .area-row{
+    display:flex;align-items:center;gap:10px;
+    background:var(--cream);
+    border-radius:10px;
+    padding:8px 10px;
+  }
+  .area-row .area-name{flex:1;font-size:14px;font-weight:700;}
+  .area-row input{width:70px;text-align:center;padding:8px;}
+  .area-row .rate{font-size:11px;color:var(--ink-soft);min-width:52px;text-align:left;}
+
+  .seg{display:flex;background:var(--cream);border-radius:10px;padding:3px;gap:3px;}
+  .segbtn{
+    flex:1;background:none;border:none;padding:8px;border-radius:8px;
+    font-family:inherit;font-size:13px;font-weight:700;color:var(--ink-soft);cursor:pointer;
+  }
+  .segbtn.active{background:var(--rose);color:#fff;}
+
+  button.primary{
+    width:100%;
+    background:var(--rose);
+    color:#fff;
+    border:none;
+    padding:14px;
+    border-radius:10px;
+    font-family:inherit;
+    font-size:15px;
+    font-weight:700;
+    cursor:pointer;
+    margin-top:14px;
+  }
+  button.primary:active{background:var(--rose-dark);}
+  button.secondary{
+    width:100%;
+    background:var(--amber-bg);
+    color:var(--amber);
+    border:1.5px dashed var(--amber);
+    padding:12px;
+    border-radius:10px;
+    font-family:inherit;
+    font-size:14px;
+    font-weight:700;
+    cursor:pointer;
+    margin-top:8px;
+  }
+  button.ghost{
+    background:none;border:none;color:var(--rose);
+    font-family:inherit;font-size:13px;font-weight:700;
+    padding:6px 0;cursor:pointer;
+  }
+
+  .file-input{
+    display:block;width:100%;
+    border:1.5px dashed var(--line);
+    border-radius:10px;
+    padding:14px;
+    text-align:center;
+    font-size:13px;
+    color:var(--ink-soft);
+    cursor:pointer;
+  }
+  .preview-img{width:100%;border-radius:10px;margin-top:8px;display:none;max-height:220px;object-fit:cover;}
+
+  /* ---------- Log list ---------- */
+  .log-item{
+    display:flex;justify-content:space-between;align-items:flex-start;
+    padding:12px 0;border-bottom:1px solid var(--line);
+  }
+  .log-item:last-child{border-bottom:none;}
+  .log-item .date{font-size:12px;color:var(--ink-soft);}
+  .log-item .desc{font-size:14px;font-weight:700;margin-top:2px;}
+  .log-item .amt{font-weight:900;color:var(--rose);font-size:15px;}
+  .badge{
+    display:inline-block;font-size:11px;font-weight:700;
+    padding:2px 8px;border-radius:20px;margin-inline-start:6px;
+  }
+  .badge.pending{background:var(--amber-bg);color:var(--amber);}
+  .badge.approved{background:var(--green-bg);color:var(--green);}
+
+  .penalty-item{
+    padding:12px;border-radius:10px;margin-bottom:8px;
+    background:var(--amber-bg);
+  }
+  .penalty-item.warn{background:#FBEAEA;}
+  .penalty-item .ptype{font-weight:700;font-size:14px;}
+  .penalty-item .pdate{font-size:11px;color:var(--ink-soft);margin-top:2px;}
+  .penalty-item .pamt{font-weight:900;color:#B23A3A;margin-top:4px;font-size:14px;}
+
+  .empty{text-align:center;padding:30px 10px;color:var(--ink-soft);font-size:14px;}
+
+  /* ---------- Bottom nav ---------- */
+  .navbar{
+    position:fixed;bottom:0;left:50%;transform:translateX(-50%);
+    width:100%;max-width:480px;
+    background:#fff;border-top:1px solid var(--line);
+    display:flex;padding:8px 6px calc(8px + env(safe-area-inset-bottom,0px));
+    z-index:10;
+  }
+  .navbtn{
+    flex:1;text-align:center;background:none;border:none;
+    font-family:inherit;font-size:11px;color:var(--ink-soft);
+    padding:6px 2px;cursor:pointer;font-weight:700;
+  }
+  .navbtn.active{color:var(--rose);}
+  .navbtn .ic{font-size:19px;display:block;margin-bottom:2px;}
+
+  .screen{display:none;}
+  .screen.active{display:block;}
+
+  .toast{
+    position:fixed;bottom:80px;left:50%;transform:translateX(-50%);
+    background:var(--ink);color:#fff;
+    padding:10px 20px;border-radius:30px;font-size:13px;
+    z-index:50;opacity:0;transition:opacity .25s;pointer-events:none;
+  }
+  .toast.show{opacity:1;}
+
+  /* Login */
+  .login-wrap{min-height:100vh;display:flex;flex-direction:column;justify-content:center;padding:30px;}
+  .login-title{text-align:center;margin-bottom:30px;}
+  .login-title .lg{font-size:28px;font-weight:900;color:var(--rose);}
+  .login-title .sm{font-size:13px;color:var(--ink-soft);margin-top:4px;}
+  .error-box{
+    background:#FBEAEA;color:#B23A3A;font-size:13px;
+    padding:10px 14px;border-radius:10px;margin-top:10px;display:none;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ======= LOGIN SCREEN ======= -->
+  <div id="loginScreen" class="screen active">
+    <div class="login-wrap">
+      <div class="login-title">
+        <div class="lg">مناديب التوصيل</div>
+        <div class="sm">دوكمنتيشن · وورد إكسبريس</div>
+      </div>
+      <div class="card">
+        <label>رقم الجوال</label>
+        <input id="loginPhone" type="tel" placeholder="05xxxxxxxx" inputmode="tel">
+        <label>كلمة المرور</label>
+        <input id="loginPass" type="password" placeholder="••••••••">
+        <button class="primary" onclick="doLogin()">دخول</button>
+        <div id="loginError" class="error-box"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======= MAIN APP (after login) ======= -->
+  <div id="mainScreen" class="screen">
+    <div class="topbar">
+      <button class="logout" onclick="doLogout()">خروج</button>
+      <div class="brand">مرحباً بك</div>
+      <div class="rep-name" id="repNameDisplay">—</div>
+    </div>
+
+    <div class="content">
+
+      <!-- ---- HOME ---- -->
+      <div id="tab-home" class="tab-panel">
+        <div class="tiles">
+          <div class="tile"><div class="num" id="todayCount">0</div><div class="lbl">طلبات اليوم</div></div>
+          <div class="tile"><div class="num" id="todayAmount">0</div><div class="lbl">مستحق اليوم (ريال)</div></div>
+        </div>
+
+        <div class="card">
+          <h3>إدخال طلبات اليوم</h3>
+          <label>البراند</label>
+          <select id="entryBrand" onchange="buildAreaInputs()">
+            <option value="documentation">دوكمنتيشن</option>
+            <option value="ward">وورد إكسبريس</option>
+          </select>
+          <label>التاريخ</label>
+          <input type="date" id="entryDate">
+
+          <div class="seg" style="margin-top:14px;">
+            <button type="button" class="segbtn active" id="segSite" onclick="switchEntrySource('site')">طلبات الموقع</button>
+            <button type="button" class="segbtn" id="segWa" onclick="switchEntrySource('wa')">طلبات واتساب</button>
+          </div>
+
+          <div class="area-grid" id="areaInputGrid"><!-- filled by JS --></div>
+          <div class="area-grid" id="waAreaInputGrid" style="display:none;"><!-- filled by JS --></div>
+
+          <button class="primary" onclick="submitDailyEntry()">حفظ طلبات اليوم</button>
+        </div>
+      </div>
+
+      <!-- ---- DIFF ---- -->
+      <div id="tab-diff" class="tab-panel" style="display:none;">
+        <div class="card">
+          <h3>فارق توصيل (حالة خاصة)</h3>
+          <p class="muted" style="margin:0 0 10px;">فقط إذا اختلفت منطقة التسليم الفعلية عن المسجّلة بالموقع.</p>
+          <label>البراند</label>
+          <select id="diffBrand" onchange="populateDiffAreaSelect()">
+            <option value="documentation">دوكمنتيشن</option>
+            <option value="ward">وورد إكسبريس</option>
+          </select>
+          <label>رقم الطلب</label>
+          <input id="diffOrderNo" type="text" placeholder="مثال: 10452">
+          <label>المنطقة المسجّلة بالطلب (بالموقع)</label>
+          <select id="diffAreaRegistered"></select>
+          <label>المنطقة الفعلية (اللي وصل لها فعلياً)</label>
+          <select id="diffArea"></select>
+          <label>المبلغ (ريال)</label>
+          <input id="diffAmount" type="number" placeholder="0">
+          <label>صورة التحويل البنكي</label>
+          <label class="file-input" for="diffPhoto">اضغط لرفع صورة الإشعار</label>
+          <input type="file" id="diffPhoto" accept="image/*" style="display:none" onchange="previewDiffPhoto(event)">
+          <img id="diffPreview" class="preview-img">
+          <button class="secondary" onclick="submitDiff()">إرسال الفارق للمراجعة</button>
+        </div>
+      </div>
+
+      <!-- ---- LOG ---- -->
+      <div id="tab-log" class="tab-panel" style="display:none;">
+        <div class="card">
+          <h3>سجل طلباتي</h3>
+          <div id="logList"><div class="empty">لا يوجد سجل بعد</div></div>
+        </div>
+        <div class="card">
+          <h3>فوارق التوصيل المرسلة</h3>
+          <div id="diffList"><div class="empty">لا يوجد فوارق مرسلة</div></div>
+        </div>
+      </div>
+
+      <!-- ---- PENALTIES ---- -->
+      <div id="tab-penalties" class="tab-panel" style="display:none;">
+        <div class="card">
+          <h3>الجزاءات والملاحظات</h3>
+          <div id="penaltyList"><div class="empty">لا يوجد جزاءات، أحسنت 👍</div></div>
+        </div>
+      </div>
+
+      <!-- ---- ACCOUNT ---- -->
+      <div id="tab-account" class="tab-panel" style="display:none;">
+        <div class="card">
+          <h3>تغيير كلمة المرور</h3>
+          <label>كلمة المرور الحالية</label>
+          <input id="curPass" type="password">
+          <label>كلمة المرور الجديدة</label>
+          <input id="newPass" type="password">
+          <button class="primary" onclick="changePassword()">حفظ كلمة المرور</button>
+        </div>
+        <div class="card">
+          <h3>ملخص الفترة الحالية</h3>
+          <div class="row"><span class="muted">إجمالي الطلبات</span><b id="periodCount">0</b></div>
+          <div class="row" style="margin-top:8px;"><span class="muted">إجمالي المستحق</span><b id="periodAmount">0 ريال</b></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="navbar" id="navbar" style="display:none;">
+    <button class="navbtn active" onclick="showTab('home')"><span class="ic">🏠</span>الرئيسية</button>
+    <button class="navbtn" onclick="showTab('diff')"><span class="ic">🔁</span>فارق توصيل</button>
+    <button class="navbtn" onclick="showTab('log')"><span class="ic">📋</span>سجلي</button>
+    <button class="navbtn" onclick="showTab('penalties')"><span class="ic">⚠️</span>الجزاءات</button>
+    <button class="navbtn" onclick="showTab('account')"><span class="ic">⚙️</span>حسابي</button>
+  </div>
+
+  <div class="toast" id="toast"></div>
+</div>
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<!-- ملاحظة: ما نستخدم Firebase Storage هنا، لأنه صار يتطلب ترقية الحساب لخطة Blaze
+     (ربط بطاقة بنكية) حتى للاستخدام المجاني. بدلاً من ذلك، نضغط الصورة داخل
+     المتصفح ونخزنها كنص Base64 مباشرة في Firestore (انظر compressImageToBase64). -->
+
+<script>
+/* =========================================================
+   FIREBASE CONFIG — استبدل هذا بإعدادات مشروعك الجديد
+   ========================================================= */
+const firebaseConfig = {
+  apiKey: "AIzaSyAIKJSzGuRIYeCAnxq2M-qAxOcoed5XiOo",
+  authDomain: "dmflower-delivery-reps.firebaseapp.com",
+  projectId: "dmflower-delivery-reps",
+  storageBucket: "dmflower-delivery-reps.firebasestorage.app",
+  messagingSenderId: "220060385556",
+  appId: "1:220060385556:web:c32e212be0cf32b6cc8201"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+/* =========================================================
+   AREAS + RATES — تُقرأ من Firestore (collection: settings/areas)
+   حتى الإدارة تقدر تعدلها من لوحة الإعدادات بدون كود.
+   البنية المتوقعة لكل مستند في settings/areas:
+   { name: "أبها", rateDoc: 20, rateWard: 15, order: 1 }
+   سعر عمار الكثيري = السعر - 5 لأي براند (يُحسب تلقائياً، لا يُخزّن منفصل)
+   ========================================================= */
+let AREAS = []; // يُملأ بعد تسجيل الدخول من Firestore
+let currentUser = null;   // Firebase auth user
+let repDoc = null;        // مستند المندوب من collection reps
+let repRef = null;
+
+const AMMAR_DISCOUNT = 5; // فرق سعر عمار الكثيري الثابت عن باقي المناديب
+
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2200);
+}
+
+/* ---------------- AUTH ---------------- */
+// المندوب يدخل برقم الجوال، ونحوله لصيغة بريد وهمي داخلي لأن Firebase Auth
+// يتطلب بريد إلكتروني. مثال: 0501234567 -> 0501234567@reps.dmflower1.local
+function phoneToEmail(phone){
+  const clean = phone.trim().replace(/\D/g,'');
+  return clean + "@reps.dmflower1.local";
+}
+
+// رقم جوال المندوب المسجّل دخوله حالياً — نفس المعرّف المستخدم كـ Document ID
+// في collection "reps"، ونفس القيمة اللي تتحقق منها قواعد أمان Firestore.
+function myPhone(){
+  return currentUser.email.split('@')[0];
+}
+
+function doLogin(){
+  const phone = document.getElementById('loginPhone').value;
+  const pass = document.getElementById('loginPass').value;
+  const errBox = document.getElementById('loginError');
+  errBox.style.display = 'none';
+
+  if(!phone || !pass){
+    errBox.textContent = "الرجاء إدخال رقم الجوال وكلمة المرور";
+    errBox.style.display = 'block';
+    return;
+  }
+
+  auth.signInWithEmailAndPassword(phoneToEmail(phone), pass)
+    .catch(err=>{
+      errBox.textContent = "رقم الجوال أو كلمة المرور غير صحيحة";
+      errBox.style.display = 'block';
+    });
+}
+
+function doLogout(){
+  auth.signOut();
+}
+
+auth.onAuthStateChanged(async user=>{
+  if(user){
+    currentUser = user;
+    await loadRepProfile();
+    await loadAreas();
+    buildAreaInputs();
+    populateDiffAreaSelect();
+    document.getElementById('loginScreen').classList.remove('active');
+    document.getElementById('mainScreen').classList.add('active');
+    document.getElementById('navbar').style.display = 'flex';
+    document.getElementById('entryDate').valueAsDate = new Date();
+    loadLog();
+    loadPenalties();
+    loadTodaySummary();
+  } else {
+    currentUser = null;
+    document.getElementById('mainScreen').classList.remove('active');
+    document.getElementById('loginScreen').classList.add('active');
+    document.getElementById('navbar').style.display = 'none';
+  }
+});
+
+/* ---------------- LOAD REP PROFILE ---------------- */
+// نستخدم رقم الجوال نفسه (بدون @reps.dmflower1.local) كمعرّف مستند المندوب
+// في Firestore. هذا يغنينا عن ربط UID يدوياً — أي مندوب تضيفه الإدارة
+// بجواله في Authentication يرتبط تلقائياً بسجله في Firestore بنفس الرقم.
+async function loadRepProfile(){
+  const phone = currentUser.email.split('@')[0];
+  repRef = db.collection('reps').doc(phone);
+  const doc = await repRef.get();
+  if(doc.exists){
+    repDoc = doc.data();
+    document.getElementById('repNameDisplay').textContent = repDoc.name || "مندوب";
+  } else {
+    repDoc = null;
+    document.getElementById('repNameDisplay').textContent = "مندوب غير مسجّل — تواصل مع الإدارة";
+  }
+}
+
+/* ---------------- LOAD AREAS ---------------- */
+async function loadAreas(){
+  const snap = await db.collection('settings').doc('areas').collection('list').orderBy('order').get();
+  AREAS = snap.docs.map(d=>({id:d.id, ...d.data()}));
+  if(AREAS.length === 0){
+    // fallback محلي لو الإعدادات ما جُهزت بعد بلوحة الإدارة
+    AREAS = [
+      {id:'abha', name:'أبها', rateDoc:20, rateWard:15},
+      {id:'khamis', name:'خميس مشيط', rateDoc:15, rateWard:15},
+      {id:'tanumah', name:'تندحة', rateDoc:22, rateWard:15},
+      {id:'ahad', name:'أحد رفيدة', rateDoc:15, rateWard:15},
+      {id:'wadi', name:'وادي بن هشبل', rateDoc:42, rateWard:30},
+      {id:'faraa', name:'الفرعاء/الوادين', rateDoc:42, rateWard:30},
+    ];
+  }
+}
+
+function currentBrand(){
+  const el = document.getElementById('entryBrand');
+  return el ? el.value : 'documentation';
+}
+
+function rateForRep(area, brand){
+  const base = brand === 'ward' ? area.rateWard : area.rateDoc;
+  if(repDoc && repDoc.isAmmar){
+    return Math.max(0, base - AMMAR_DISCOUNT);
+  }
+  return base;
+}
+
+/* ---------------- BUILD DAILY ENTRY FORM ---------------- */
+function buildAreaInputs(){
+  const brand = currentBrand();
+  const grid = document.getElementById('areaInputGrid');
+  const waGrid = document.getElementById('waAreaInputGrid');
+  grid.innerHTML = '';
+  waGrid.innerHTML = '';
+  AREAS.forEach(area=>{
+    const rate = rateForRep(area, brand);
+    grid.innerHTML += `
+      <div class="area-row">
+        <span class="area-name">${area.name}</span>
+        <span class="rate">${rate} ر.س</span>
+        <input type="number" min="0" id="site_${area.id}" placeholder="0">
+      </div>`;
+    waGrid.innerHTML += `
+      <div class="area-row">
+        <span class="area-name">${area.name}</span>
+        <span class="rate">${rate} ر.س</span>
+        <input type="number" min="0" id="wa_${area.id}" placeholder="0">
+      </div>`;
+  });
+}
+
+function switchEntrySource(which){
+  document.getElementById('areaInputGrid').style.display = which==='site' ? 'flex' : 'none';
+  document.getElementById('waAreaInputGrid').style.display = which==='wa' ? 'flex' : 'none';
+  document.getElementById('segSite').classList.toggle('active', which==='site');
+  document.getElementById('segWa').classList.toggle('active', which==='wa');
+}
+
+function populateDiffAreaSelect(){
+  const brand = document.getElementById('diffBrand') ? document.getElementById('diffBrand').value : 'documentation';
+  const optionsHtml = AREAS.map(a=>{
+    const rate = rateForRep(a, brand);
+    return `<option value="${a.id}">${a.name} (${rate} ر.س)</option>`;
+  }).join('');
+  // نضيف خيار فاضي إجباري بالأول حتى ما يتعبّى الحقل تلقائياً — لازم المندوب يختار بنفسه
+  document.getElementById('diffAreaRegistered').innerHTML = '<option value="">اختر المنطقة المسجّلة...</option>' + optionsHtml;
+  document.getElementById('diffArea').innerHTML = '<option value="">اختر المنطقة الفعلية...</option>' + optionsHtml;
+}
+
+/* ---------------- SUBMIT DAILY ENTRY ---------------- */
+async function submitDailyEntry(){
+  const dateVal = document.getElementById('entryDate').value;
+  const brand = currentBrand();
+  if(!dateVal){ toast('اختر التاريخ'); return; }
+
+  let entries = [];
+  let totalAmount = 0;
+  let totalCount = 0;
+
+  AREAS.forEach(area=>{
+    const rate = rateForRep(area, brand);
+    const siteCount = parseInt(document.getElementById('site_'+area.id).value) || 0;
+    const waCount = parseInt(document.getElementById('wa_'+area.id).value) || 0;
+    if(siteCount > 0){
+      entries.push({areaId:area.id, areaName:area.name, source:'site', count:siteCount, rate, amount: siteCount*rate});
+      totalAmount += siteCount*rate; totalCount += siteCount;
+    }
+    if(waCount > 0){
+      entries.push({areaId:area.id, areaName:area.name, source:'whatsapp', count:waCount, rate, amount: waCount*rate});
+      totalAmount += waCount*rate; totalCount += waCount;
+    }
+  });
+
+  if(entries.length === 0){ toast('أدخل عدد طلب واحد على الأقل'); return; }
+
+  try{
+    await db.collection('dailyEntries').add({
+      repUid: myPhone(),
+      repName: repDoc ? repDoc.name : '',
+      brand: brand,
+      date: dateVal,
+      entries,
+      totalAmount,
+      totalCount,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    toast('تم حفظ طلبات اليوم ✅');
+    AREAS.forEach(area=>{
+      document.getElementById('site_'+area.id).value = '';
+      document.getElementById('wa_'+area.id).value = '';
+    });
+    loadLog();
+    loadTodaySummary();
+  }catch(e){
+    toast('حدث خطأ، حاول مرة أخرى');
+  }
+}
+
+/* ---------------- DELIVERY FEE DIFFERENCE ---------------- */
+// نخزّن صورة إشعار التحويل كنص Base64 داخل نفس سجل Firestore بدل رفعها
+// لخدمة Storage منفصلة (لأن Storage صار يتطلب خطة Blaze / ربط بطاقة بنكية).
+// نضغط الصورة داخل المتصفح (تصغير الأبعاد + تقليل الجودة) حتى تدخل ضمن
+// الحد الأقصى لحجم مستند Firestore (1 ميجابايت).
+let diffPhotoBase64 = null;
+
+function compressImageToBase64(file, maxWidth = 1000, startQuality = 0.6){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('read-failed'));
+    reader.onload = (e)=>{
+      const img = new Image();
+      img.onerror = () => reject(new Error('image-failed'));
+      img.onload = ()=>{
+        let w = img.width, h = img.height;
+        if(w > maxWidth){ h = Math.round(h * (maxWidth / w)); w = maxWidth; }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+
+        let quality = startQuality;
+        let dataUrl = canvas.toDataURL('image/jpeg', quality);
+        // نخفف الجودة تدريجياً لين الحجم يصير آمن (أقل من ~700 كيلوبايت كنص)
+        while(dataUrl.length > 700000 && quality > 0.2){
+          quality -= 0.1;
+          dataUrl = canvas.toDataURL('image/jpeg', quality);
+        }
+        resolve(dataUrl);
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function previewDiffPhoto(e){
+  const file = e.target.files[0];
+  if(!file) return;
+  toast('جاري تجهيز الصورة...');
+  try{
+    diffPhotoBase64 = await compressImageToBase64(file);
+    const img = document.getElementById('diffPreview');
+    img.src = diffPhotoBase64;
+    img.style.display = 'block';
+  }catch(err){
+    diffPhotoBase64 = null;
+    toast('تعذّر قراءة الصورة، جرّب صورة ثانية');
+  }
+}
+
+async function submitDiff(){
+  const orderNo = document.getElementById('diffOrderNo').value.trim();
+  const brand = document.getElementById('diffBrand').value;
+  const registeredAreaId = document.getElementById('diffAreaRegistered').value;
+  const areaId = document.getElementById('diffArea').value;
+  const amount = parseFloat(document.getElementById('diffAmount').value);
+
+  if(!orderNo){ toast('أدخل رقم الطلب'); return; }
+  if(!registeredAreaId){ toast('اختر المنطقة المسجّلة بالطلب'); return; }
+  if(!areaId){ toast('اختر المنطقة الفعلية'); return; }
+  if(registeredAreaId === areaId){ toast('المنطقتين متطابقتين — هذي حالة فارق، لازم تختلفان'); return; }
+  if(!amount || amount <= 0){ toast('أدخل المبلغ'); return; }
+  if(!diffPhotoBase64){ toast('إرفاق صورة التحويل إلزامي'); return; }
+
+  try{
+    const area = AREAS.find(a=>a.id===areaId);
+    const registeredArea = AREAS.find(a=>a.id===registeredAreaId);
+
+    await db.collection('deliveryDiffs').add({
+      repUid: myPhone(),
+      repName: repDoc ? repDoc.name : '',
+      brand: brand,
+      orderNo,
+      registeredAreaId,
+      registeredAreaName: registeredArea ? registeredArea.name : registeredAreaId,
+      areaId,
+      areaName: area ? area.name : areaId,
+      amount,
+      proofImage: diffPhotoBase64, // صورة الإثبات كنص Base64
+      status: 'pending', // pending -> approved / rejected من لوحة الإدارة
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    toast('تم إرسال الفارق للمراجعة ✅');
+    document.getElementById('diffOrderNo').value = '';
+    document.getElementById('diffAmount').value = '';
+    document.getElementById('diffPreview').style.display = 'none';
+    diffPhotoBase64 = null;
+    loadLog();
+  }catch(e){
+    toast('حدث خطأ، حاول مرة أخرى — إذا استمرت المشكلة، جرّب صورة أصغر');
+  }
+}
+
+/* ---------------- TODAY SUMMARY ---------------- */
+async function loadTodaySummary(){
+  const today = new Date().toISOString().slice(0,10);
+  const snap = await db.collection('dailyEntries')
+    .where('repUid','==',myPhone())
+    .where('date','==',today).get();
+  let count = 0, amount = 0;
+  snap.forEach(d=>{ count += d.data().totalCount; amount += d.data().totalAmount; });
+  document.getElementById('todayCount').textContent = count;
+  document.getElementById('todayAmount').textContent = amount;
+}
+
+/* ---------------- LOG ---------------- */
+async function loadLog(){
+  const snap = await db.collection('dailyEntries')
+    .where('repUid','==',myPhone())
+    .orderBy('date','desc').limit(30).get();
+
+  const list = document.getElementById('logList');
+  if(snap.empty){ list.innerHTML = '<div class="empty">لا يوجد سجل بعد</div>'; }
+  else{
+    let html = '';
+    let periodCount = 0, periodAmount = 0;
+    snap.forEach(d=>{
+      const e = d.data();
+      periodCount += e.totalCount; periodAmount += e.totalAmount;
+      html += `<div class="log-item">
+        <div><div class="date">${e.date}</div><div class="desc">${e.totalCount} طلب</div></div>
+        <div class="amt">${e.totalAmount} ر.س</div>
+      </div>`;
+    });
+    list.innerHTML = html;
+    document.getElementById('periodCount').textContent = periodCount;
+    document.getElementById('periodAmount').textContent = periodAmount + ' ريال';
+  }
+
+  const diffSnap = await db.collection('deliveryDiffs')
+    .where('repUid','==',myPhone())
+    .orderBy('createdAt','desc').limit(20).get();
+  const diffList = document.getElementById('diffList');
+  if(diffSnap.empty){ diffList.innerHTML = '<div class="empty">لا يوجد فوارق مرسلة</div>'; }
+  else{
+    let html = '';
+    diffSnap.forEach(d=>{
+      const e = d.data();
+      const badgeClass = e.status === 'approved' ? 'approved' : 'pending';
+      const badgeText = e.status === 'approved' ? 'معتمد' : 'قيد المراجعة';
+      html += `<div class="log-item">
+        <div><div class="date">طلب #${e.orderNo} — ${e.registeredAreaName || '—'} ← ${e.areaName}</div>
+          <div class="desc">${e.amount} ر.س <span class="badge ${badgeClass}">${badgeText}</span></div>
+        </div>
+      </div>`;
+    });
+    diffList.innerHTML = html;
+  }
+}
+
+/* ---------------- PENALTIES (view only) ---------------- */
+async function loadPenalties(){
+  const snap = await db.collection('penalties')
+    .where('repUid','==',myPhone())
+    .orderBy('createdAt','desc').get();
+
+  const list = document.getElementById('penaltyList');
+  if(snap.empty){ list.innerHTML = '<div class="empty">لا يوجد جزاءات، أحسنت 👍</div>'; return; }
+
+  let html = '';
+  snap.forEach(d=>{
+    const p = d.data();
+    const isDeduction = p.amount && p.amount > 0;
+    html += `<div class="penalty-item ${isDeduction ? 'warn' : ''}">
+      <div class="ptype">${p.type || 'ملاحظة'}</div>
+      ${p.description ? `<div class="muted" style="margin-top:4px;">${p.description}</div>` : ''}
+      <div class="pdate">${p.date || ''}</div>
+      ${isDeduction ? `<div class="pamt">خصم ${p.amount} ر.س</div>` : ''}
+    </div>`;
+  });
+  list.innerHTML = html;
+}
+
+/* ---------------- CHANGE PASSWORD ---------------- */
+async function changePassword(){
+  const cur = document.getElementById('curPass').value;
+  const next = document.getElementById('newPass').value;
+  if(!cur || !next){ toast('عبّي الحقلين'); return; }
+  if(next.length < 6){ toast('كلمة المرور يجب ألا تقل عن 6 أحرف'); return; }
+
+  try{
+    const cred = firebase.auth.EmailAuthProvider.credential(currentUser.email, cur);
+    await currentUser.reauthenticateWithCredential(cred);
+    await currentUser.updatePassword(next);
+    toast('تم تغيير كلمة المرور ✅');
+    document.getElementById('curPass').value = '';
+    document.getElementById('newPass').value = '';
+  }catch(e){
+    toast('كلمة المرور الحالية غير صحيحة');
+  }
+}
+
+/* ---------------- TABS ---------------- */
+function showTab(name){
+  document.querySelectorAll('.tab-panel').forEach(p=>p.style.display='none');
+  document.getElementById('tab-'+name).style.display='block';
+  document.querySelectorAll('.navbtn').forEach(b=>b.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+  if(name==='log') loadLog();
+  if(name==='penalties') loadPenalties();
+}
+</script>
+</body>
+</html>

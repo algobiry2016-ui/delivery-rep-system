@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>لوحة الإدارة — نظام مناديب التوصيل</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --rose:#7A2E3C; --rose-dark:#5C2230;
+    --cream:#F7F3EE; --card:#FFFFFF;
+    --ink:#2B2420; --ink-soft:#6B615A;
+    --gold:#B8935F;
+    --green:#4C7A5C; --green-bg:#EAF2EC;
+    --amber:#A9762F; --amber-bg:#FBF1E2;
+    --red:#B23A3A; --red-bg:#FBEAEA;
+    --line:#E8E0D8;
+    --radius:12px;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:'Tajawal',sans-serif;background:var(--cream);color:var(--ink);}
+  .shell{display:flex;min-height:100vh;}
+
+  /* ---- Sidebar ---- */
+  .sidebar{
+    width:220px;background:var(--rose);color:#fff;
+    padding:20px 14px;flex-shrink:0;
+    position:sticky;top:0;height:100vh;
+  }
+  .sidebar .logo{font-size:17px;font-weight:900;margin-bottom:4px;}
+  .sidebar .sub{font-size:11px;opacity:.75;margin-bottom:24px;}
+  .navitem{
+    display:block;width:100%;text-align:right;
+    background:none;border:none;color:#fff;
+    font-family:inherit;font-size:14px;font-weight:700;
+    padding:11px 14px;border-radius:10px;cursor:pointer;
+    margin-bottom:4px;opacity:.85;
+  }
+  .navitem.active{background:rgba(255,255,255,.18);opacity:1;}
+  .sidebar .logout{
+    position:absolute;bottom:20px;width:190px;
+    background:rgba(255,255,255,.12);border:none;color:#fff;
+    padding:10px;border-radius:10px;font-family:inherit;
+    font-size:13px;cursor:pointer;
+  }
+
+  /* ---- Main ---- */
+  .main{flex:1;padding:26px 30px;max-width:1100px;}
+  h1{font-size:20px;margin:0 0 4px;color:var(--rose-dark);}
+  .page-sub{color:var(--ink-soft);font-size:13px;margin-bottom:20px;}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px;margin-bottom:18px;}
+  .card h3{margin:0 0 14px;font-size:15px;font-weight:700;color:var(--rose-dark);}
+
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-bottom:16px;}
+  .field{display:flex;flex-direction:column;gap:4px;}
+  .field label{font-size:12px;font-weight:700;color:var(--ink-soft);}
+  input, select{
+    padding:9px 12px;border:1.5px solid var(--line);border-radius:8px;
+    font-family:inherit;font-size:14px;background:#fff;color:var(--ink);
+  }
+  input:focus, select:focus{outline:none;border-color:var(--rose);}
+
+  table{width:100%;border-collapse:collapse;font-size:13.5px;}
+  th{text-align:right;padding:9px 10px;color:var(--ink-soft);font-weight:700;border-bottom:2px solid var(--line);font-size:12.5px;}
+  td{padding:10px;border-bottom:1px solid var(--line);}
+  tr:last-child td{border-bottom:none;}
+
+  button.primary{
+    background:var(--rose);color:#fff;border:none;
+    padding:10px 18px;border-radius:8px;font-family:inherit;
+    font-size:14px;font-weight:700;cursor:pointer;
+  }
+  button.primary:disabled{background:#C9BDB6;cursor:not-allowed;}
+  button.ghost{
+    background:none;border:1.5px solid var(--line);color:var(--ink);
+    padding:8px 14px;border-radius:8px;font-family:inherit;
+    font-size:13px;font-weight:700;cursor:pointer;
+  }
+  button.small-danger{background:var(--red-bg);color:var(--red);border:none;padding:6px 10px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;}
+  button.small-approve{background:var(--green-bg);color:var(--green);border:none;padding:6px 10px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;margin-inline-end:6px;}
+
+  .badge{display:inline-block;font-size:11px;font-weight:700;padding:2px 9px;border-radius:20px;}
+  .badge.pending{background:var(--amber-bg);color:var(--amber);}
+  .badge.approved{background:var(--green-bg);color:var(--green);}
+  .badge.rejected{background:var(--red-bg);color:var(--red);}
+  .badge.ammar{background:var(--gold);color:#fff;}
+
+  .tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px;}
+  .tile{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px;text-align:center;}
+  .tile .num{font-size:24px;font-weight:900;color:var(--rose);}
+  .tile .lbl{font-size:12px;color:var(--ink-soft);margin-top:2px;}
+
+  .empty{text-align:center;padding:30px;color:var(--ink-soft);font-size:14px;}
+  .thumb{width:44px;height:44px;border-radius:6px;object-fit:cover;cursor:pointer;border:1px solid var(--line);}
+
+  .modal-bg{position:fixed;inset:0;background:rgba(43,36,32,.5);display:none;align-items:center;justify-content:center;z-index:100;}
+  .modal-bg.show{display:flex;}
+  .modal{background:#fff;border-radius:14px;padding:22px;max-width:420px;width:92%;max-height:88vh;overflow:auto;}
+  .modal h3{margin-top:0;}
+  .modal img{width:100%;border-radius:10px;margin-top:10px;}
+  .modal-close{float:left;background:none;border:none;font-size:20px;cursor:pointer;color:var(--ink-soft);}
+
+  .role-note{background:var(--amber-bg);color:var(--amber);padding:10px 14px;border-radius:10px;font-size:13px;margin-bottom:16px;}
+
+  .login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;}
+  .login-card{background:#fff;border-radius:16px;padding:34px;width:340px;border:1px solid var(--line);}
+  .login-card h2{text-align:center;color:var(--rose-dark);margin-top:0;}
+  .error-box{background:var(--red-bg);color:var(--red);font-size:13px;padding:9px 12px;border-radius:8px;margin-top:10px;display:none;}
+
+  .screen{display:none;}
+  .screen.active{display:block;}
+  .tab-panel{display:none;}
+  .tab-panel.active{display:block;}
+
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 20px;border-radius:30px;font-size:13px;z-index:200;opacity:0;transition:opacity .25s;pointer-events:none;}
+  .toast.show{opacity:1;}
+
+  @media (max-width:760px){
+    .shell{flex-direction:column;}
+    .sidebar{width:100%;height:auto;position:static;display:flex;align-items:center;gap:8px;padding:12px;overflow-x:auto;}
+    .sidebar .logo,.sidebar .sub,.sidebar .logout{display:none;}
+    .navitem{white-space:nowrap;margin-bottom:0;}
+    .main{padding:16px;}
+    .tiles{grid-template-columns:1fr 1fr;}
+  }
+</style>
+</head>
+<body>
+
+<!-- ======= LOGIN ======= -->
+<div id="loginScreen" class="screen active">
+  <div class="login-wrap">
+    <div class="login-card">
+      <h2>لوحة الإدارة</h2>
+      <div class="field"><label>البريد الإلكتروني</label><input id="adminEmail" type="email"></div>
+      <div class="field" style="margin-top:10px;"><label>كلمة المرور</label><input id="adminPass" type="password"></div>
+      <button class="primary" style="width:100%;margin-top:16px;" onclick="doLogin()">دخول</button>
+      <div id="loginError" class="error-box"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ======= NO ACCESS ======= -->
+<div id="deniedScreen" class="screen">
+  <div class="login-wrap">
+    <div class="login-card" style="width:380px;">
+      <h2>لا يوجد صلاحية</h2>
+      <p style="font-size:13.5px;color:var(--ink-soft);text-align:center;">
+        حسابك غير مسجّل بصلاحيات اللوحة. تواصل مع الأدمن الرئيسي ليضيفك.
+      </p>
+      <button class="ghost" style="width:100%;margin-top:10px;" onclick="doLogout()">تسجيل خروج</button>
+    </div>
+  </div>
+</div>
+
+<!-- ======= MAIN ======= -->
+<div id="mainScreen" class="screen">
+  <div class="shell">
+    <div class="sidebar">
+      <div class="logo">لوحة الإدارة</div>
+      <div class="sub">مناديب التوصيل</div>
+      <button class="navitem active" onclick="showTab('dashboard')">📊 نظرة عامة</button>
+      <button class="navitem" onclick="showTab('diffs')">🔁 فوارق التوصيل</button>
+      <button class="navitem" onclick="showTab('penalties')">⚠️ الجزاءات والهدايا</button>
+      <button class="navitem" onclick="showTab('reps')">👤 المناديب</button>
+      <button class="navitem" onclick="showTab('areas')">📍 المناطق والأسعار</button>
+      <button class="navitem" onclick="showTab('reports')">📄 التقارير</button>
+      <button class="logout" onclick="doLogout()">تسجيل الخروج</button>
+    </div>
+
+    <div class="main">
+
+      <!-- ===== DASHBOARD ===== -->
+      <div id="tab-dashboard" class="tab-panel active">
+        <h1>نظرة عامة</h1>
+        <p class="page-sub">آخر الطلبات المدخلة من كل المناديب</p>
+        <div class="tiles">
+          <div class="tile"><div class="num" id="dashToday">0</div><div class="lbl">طلبات اليوم</div></div>
+          <div class="tile"><div class="num" id="dashTodayAmt">0</div><div class="lbl">مستحقات اليوم (ر.س)</div></div>
+          <div class="tile"><div class="num" id="dashPendingDiffs">0</div><div class="lbl">فوارق بانتظار المراجعة</div></div>
+          <div class="tile"><div class="num" id="dashReps">0</div><div class="lbl">عدد المناديب</div></div>
+        </div>
+        <div class="card">
+          <h3>أحدث الإدخالات</h3>
+          <table>
+            <thead><tr><th>التاريخ</th><th>المندوب</th><th>البراند</th><th>عدد الطلبات</th><th>المبلغ</th></tr></thead>
+            <tbody id="recentEntriesBody"></tbody>
+          </table>
+          <div id="recentEmpty" class="empty" style="display:none;">لا يوجد إدخالات بعد</div>
+        </div>
+      </div>
+
+      <!-- ===== DIFFS ===== -->
+      <div id="tab-diffs" class="tab-panel">
+        <h1>فوارق التوصيل</h1>
+        <p class="page-sub">راجع صورة التحويل البنكي واعتمد أو ارفض كل فارق</p>
+        <div class="card">
+          <table>
+            <thead><tr><th>التاريخ</th><th>المندوب</th><th>رقم الطلب</th><th>المسجّلة</th><th>الفعلية</th><th>المبلغ</th><th>الإثبات</th><th>الحالة</th><th></th></tr></thead>
+            <tbody id="diffsBody"></tbody>
+          </table>
+          <div id="diffsEmpty" class="empty" style="display:none;">لا يوجد فوارق</div>
+        </div>
+      </div>
+
+      <!-- ===== PENALTIES ===== -->
+      <div id="tab-penalties" class="tab-panel">
+        <h1>الجزاءات والهدايا</h1>
+        <p class="page-sub">أضف جزاء أو هدية مأخوذة لمندوب معيّن — يظهر في شاشته فوراً</p>
+        <div class="card" id="addPenaltyCard">
+          <h3>إضافة جزاء / هدية جديدة</h3>
+          <div class="toolbar">
+            <div class="field"><label>المندوب</label><select id="penRep"></select></div>
+            <div class="field"><label>النوع</label>
+              <select id="penType">
+                <option value="إنذار">إنذار (بدون خصم)</option>
+                <option value="خصم مالي">خصم مالي</option>
+                <option value="هدية مأخوذة">هدية مأخوذة</option>
+              </select>
+            </div>
+            <div class="field"><label>التاريخ</label><input type="date" id="penDate"></div>
+            <div class="field"><label>المبلغ (إن وجد)</label><input type="number" id="penAmount" placeholder="0"></div>
+          </div>
+          <div class="field"><label>الوصف / السبب</label><input id="penDesc" style="width:100%;" placeholder="مثال: طلب وصل تالف، إنذار ثاني، هدية باقة ورد..."></div>
+          <button class="primary" style="margin-top:14px;" onclick="addPenalty()">حفظ</button>
+        </div>
+        <div class="card">
+          <h3>السجل</h3>
+          <table>
+            <thead><tr><th>التاريخ</th><th>المندوب</th><th>النوع</th><th>الوصف</th><th>المبلغ</th><th></th></tr></thead>
+            <tbody id="penaltiesBody"></tbody>
+          </table>
+          <div id="penaltiesEmpty" class="empty" style="display:none;">لا يوجد سجلات</div>
+        </div>
+      </div>
+
+      <!-- ===== REPS ===== -->
+      <div id="tab-reps" class="tab-panel">
+        <h1>المناديب</h1>
+        <p class="page-sub">أضف مندوب جديد أو عدّل بيانات مندوب موجود</p>
+        <div class="card" id="addRepCard">
+          <h3>إضافة / تعديل مندوب</h3>
+          <p class="page-sub" style="margin-top:-8px;">أضف المندوب أولاً من Authentication بلوحة Firebase (بصيغة الجوال@reps.dmflower1.local)، ثم اربطه هنا بنفس رقم الجوال.</p>
+          <div class="toolbar">
+            <div class="field"><label>الاسم</label><input id="repName" placeholder="اسم المندوب"></div>
+            <div class="field"><label>رقم الجوال</label><input id="repPhone" placeholder="05xxxxxxxx"></div>
+            <div class="field"><label>البراند</label>
+              <select id="repBrand">
+                <option value="both">الكل (دوكمنتيشن + وورد إكسبريس)</option>
+                <option value="documentation">دوكمنتيشن فقط</option>
+                <option value="ward">وورد إكسبريس فقط</option>
+              </select>
+            </div>
+            <div class="field"><label>عمار الكثيري؟</label>
+              <select id="repIsAmmar"><option value="no">لا</option><option value="yes">نعم (−5 ر.س بكل منطقة)</option></select>
+            </div>
+          </div>
+          <button class="primary" onclick="saveRep()">حفظ المندوب</button>
+        </div>
+        <div class="card">
+          <h3>قائمة المناديب</h3>
+          <table>
+            <thead><tr><th>الاسم</th><th>الجوال</th><th>البراند</th><th></th><th></th></tr></thead>
+            <tbody id="repsBody"></tbody>
+          </table>
+          <div id="repsEmpty" class="empty" style="display:none;">لا يوجد مناديب مضافين بعد</div>
+        </div>
+      </div>
+
+      <!-- ===== AREAS ===== -->
+      <div id="tab-areas" class="tab-panel">
+        <h1>المناطق والأسعار</h1>
+        <p class="page-sub">عدّل أسعار كل منطقة — سعر عمار يُحسب تلقائياً (−5 ر.س)</p>
+        <div class="card" id="addAreaCard">
+          <h3>إضافة / تعديل منطقة</h3>
+          <div class="toolbar">
+            <div class="field"><label>اسم المنطقة</label><input id="areaName" placeholder="مثال: أبها"></div>
+            <div class="field"><label>سعر دوكمنتيشن (ر.س)</label><input id="areaRateDoc" type="number" placeholder="0"></div>
+            <div class="field"><label>سعر وورد إكسبريس (ر.س)</label><input id="areaRateWard" type="number" placeholder="0"></div>
+            <div class="field"><label>الترتيب</label><input id="areaOrder" type="number" placeholder="1"></div>
+          </div>
+          <button class="primary" onclick="saveArea()">حفظ المنطقة</button>
+        </div>
+        <div class="card">
+          <h3>قائمة المناطق</h3>
+          <table>
+            <thead><tr><th>المنطقة</th><th>دوكمنتيشن (عادي / عمار)</th><th>وورد إكسبريس (عادي / عمار)</th><th></th></tr></thead>
+            <tbody id="areasBody"></tbody>
+          </table>
+          <div id="areasEmpty" class="empty" style="display:none;">لا يوجد مناطق مضافة بعد</div>
+        </div>
+      </div>
+
+      <!-- ===== REPORTS ===== -->
+      <div id="tab-reports" class="tab-panel">
+        <h1>التقارير</h1>
+        <p class="page-sub">اختر فترة، واحصل على صافي مستحق كل مندوب</p>
+        <div class="card">
+          <div class="toolbar">
+            <div class="field"><label>من تاريخ</label><input type="date" id="repFrom"></div>
+            <div class="field"><label>إلى تاريخ</label><input type="date" id="repTo"></div>
+            <button class="primary" onclick="runReport()">إنشاء التقرير</button>
+          </div>
+        </div>
+        <div class="card">
+          <table>
+            <thead><tr><th>المندوب</th><th>عدد الطلبات</th><th>مبلغ الطلبات</th><th>الفوارق المعتمدة</th><th>الجزاءات</th><th>الهدايا</th><th>الصافي</th></tr></thead>
+            <tbody id="reportBody"></tbody>
+          </table>
+          <div id="reportEmpty" class="empty">اختر فترة واضغط "إنشاء التقرير"</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="imgModalBg" onclick="closeImgModal(event)">
+  <div class="modal">
+    <button class="modal-close" onclick="closeImgModal(event)">×</button>
+    <h3>صورة إثبات التحويل</h3>
+    <img id="imgModalImg" src="">
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+
+<script>
+/* =========================================================
+   FIREBASE CONFIG — نفس مشروع شاشة المندوب
+   ========================================================= */
+const firebaseConfig = {
+  apiKey: "AIzaSyAIKJSzGuRIYeCAnxq2M-qAxOcoed5XiOo",
+  authDomain: "dmflower-delivery-reps.firebaseapp.com",
+  projectId: "dmflower-delivery-reps",
+  storageBucket: "dmflower-delivery-reps.firebasestorage.app",
+  messagingSenderId: "220060385556",
+  appId: "1:220060385556:web:c32e212be0cf32b6cc8201"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+let currentUser = null;
+let myRole = 'reviewer'; // 'admin' أو 'reviewer' — يُقرأ من collection admins
+let AREAS = [];
+
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2200);
+}
+
+/* ---------------- AUTH ---------------- */
+function doLogin(){
+  const email = document.getElementById('adminEmail').value;
+  const pass = document.getElementById('adminPass').value;
+  const errBox = document.getElementById('loginError');
+  errBox.style.display = 'none';
+  auth.signInWithEmailAndPassword(email, pass).catch(()=>{
+    errBox.textContent = 'البريد أو كلمة المرور غير صحيحة';
+    errBox.style.display = 'block';
+  });
+}
+function doLogout(){ auth.signOut(); }
+
+function showScreen(id){
+  ['loginScreen','deniedScreen','mainScreen'].forEach(s=>{
+    document.getElementById(s).classList.toggle('active', s===id);
+  });
+}
+
+// ملاحظة أمان: لا يوجد أي مسار بالكود يسمح لأي حساب يعطي نفسه صلاحية admin.
+// إضافة أدمن (بما فيه أول أدمن) تتم فقط يدوياً من لوحة Firebase مباشرة —
+// هذا مقصود، حتى ما يقدر أي شخص يفتح الملف ويرفّع صلاحياته لنفسه.
+auth.onAuthStateChanged(async user=>{
+  if(user){
+    currentUser = user;
+    const adminDoc = await db.collection('admins').doc(user.uid).get();
+
+    if(adminDoc.exists){
+      myRole = adminDoc.data().role || 'reviewer';
+      applyRoleRestrictions();
+      showScreen('mainScreen');
+      await loadAreas();
+      loadDashboard();
+    } else {
+      showScreen('deniedScreen');
+    }
+  } else {
+    showScreen('loginScreen');
+  }
+});
+
+function applyRoleRestrictions(){
+  if(myRole !== 'admin'){
+    // صلاحية مراجعة/مطابقة فقط — نخفي كل عناصر الإضافة والتعديل والحذف
+    ['addPenaltyCard','addRepCard','addAreaCard'].forEach(id=>{
+      const el = document.getElementById(id);
+      if(el){
+        el.innerHTML = '<div class="role-note">صلاحيتك: عرض ومطابقة فقط — لا تملك صلاحية الإضافة أو التعديل</div>';
+      }
+    });
+  }
+}
+
+/* ---------------- TABS ---------------- */
+function showTab(name){
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('tab-'+name).classList.add('active');
+  document.querySelectorAll('.navitem').forEach(b=>b.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+  if(name==='dashboard') loadDashboard();
+  if(name==='diffs') loadDiffs();
+  if(name==='penalties') { loadPenaltyRepSelect(); loadPenalties(); }
+  if(name==='reps') loadReps();
+  if(name==='areas') loadAreasTable();
+}
+
+/* ---------------- AREAS ---------------- */
+async function loadAreas(){
+  const snap = await db.collection('settings').doc('areas').collection('list').orderBy('order').get();
+  AREAS = snap.docs.map(d=>({id:d.id, ...d.data()}));
+}
+
+async function saveArea(){
+  if(myRole !== 'admin'){ toast('ما تملك صلاحية'); return; }
+  const name = document.getElementById('areaName').value.trim();
+  const rateDoc = parseFloat(document.getElementById('areaRateDoc').value);
+  const rateWard = parseFloat(document.getElementById('areaRateWard').value);
+  const order = parseInt(document.getElementById('areaOrder').value) || 99;
+  if(!name || !rateDoc || !rateWard){ toast('عبّي اسم المنطقة وسعري البراندين'); return; }
+
+  const id = name.replace(/\s+/g,'_');
+  await db.collection('settings').doc('areas').collection('list').doc(id).set({
+    name, rateDoc, rateWard, order
+  }, {merge:true});
+
+  toast('تم حفظ المنطقة ✅');
+  document.getElementById('areaName').value='';
+  document.getElementById('areaRateDoc').value='';
+  document.getElementById('areaRateWard').value='';
+  document.getElementById('areaOrder').value='';
+  await loadAreas();
+  loadAreasTable();
+}
+
+async function loadAreasTable(){
+  await loadAreas();
+  const body = document.getElementById('areasBody');
+  const empty = document.getElementById('areasEmpty');
+  if(AREAS.length === 0){ body.innerHTML=''; empty.style.display='block'; return; }
+  empty.style.display='none';
+  body.innerHTML = AREAS.map(a=>`
+    <tr>
+      <td>${a.name}</td>
+      <td>${a.rateDoc} / ${Math.max(0,a.rateDoc-5)} ر.س</td>
+      <td>${a.rateWard} / ${Math.max(0,a.rateWard-5)} ر.س</td>
+      <td>${myRole==='admin' ? `<button class="small-danger" onclick="deleteArea('${a.id}')">حذف</button>` : ''}</td>
+    </tr>`).join('');
+}
+
+async function deleteArea(id){
+  if(myRole !== 'admin'){ toast('ما تملك صلاحية'); return; }
+  if(!confirm('تأكيد حذف المنطقة؟')) return;
+  await db.collection('settings').doc('areas').collection('list').doc(id).delete();
+  toast('تم الحذف');
+  loadAreasTable();
+}
+
+/* ---------------- REPS ---------------- */
+async function saveRep(){
+  if(myRole !== 'admin'){ toast('ما تملك صلاحية'); return; }
+  const name = document.getElementById('repName').value.trim();
+  const phoneRaw = document.getElementById('repPhone').value.trim();
+  const phone = phoneRaw.replace(/\D/g,'');
+  const brand = document.getElementById('repBrand').value;
+  const isAmmar = document.getElementById('repIsAmmar').value === 'yes';
+
+  if(!name || !phone){ toast('عبّي الاسم والجوال'); return; }
+
+  await db.collection('reps').doc(phone).set({
+    name, phone, brand, isAmmar,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  }, {merge:true});
+
+  toast('تم حفظ المندوب ✅ — تأكد أنه مضاف بنفس الرقم في Authentication');
+  document.getElementById('repName').value='';
+  document.getElementById('repPhone').value='';
+  loadReps();
+}
+
+async function loadReps(){
+  const snap = await db.collection('reps').get();
+  const body = document.getElementById('repsBody');
+  const empty = document.getElementById('repsEmpty');
+  if(snap.empty){ body.innerHTML=''; empty.style.display='block'; return; }
+  empty.style.display='none';
+  const brandLabel = {both:'الكل', documentation:'دوكمنتيشن', ward:'وورد إكسبريس'};
+  body.innerHTML = snap.docs.map(d=>{
+    const r = d.data();
+    return `<tr>
+      <td>${r.name} ${r.isAmmar ? '<span class="badge ammar">عمار</span>' : ''}</td>
+      <td>${r.phone}</td>
+      <td>${brandLabel[r.brand] || r.brand}</td>
+      <td></td>
+      <td>${myRole==='admin' ? `<button class="small-danger" onclick="deleteRep('${d.id}')">حذف</button>` : ''}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function deleteRep(id){
+  if(myRole !== 'admin'){ toast('ما تملك صلاحية'); return; }
+  if(!confirm('تأكيد حذف المندوب من النظام؟ (لن يُحذف من Authentication)')) return;
+  await db.collection('reps').doc(id).delete();
+  toast('تم الحذف');
+  loadReps();
+}
+
+/* ---------------- DASHBOARD ---------------- */
+async function loadDashboard(){
+  const today = new Date().toISOString().slice(0,10);
+  const snap = await db.collection('dailyEntries').where('date','==',today).get();
+  let count=0, amount=0;
+  snap.forEach(d=>{ count += d.data().totalCount; amount += d.data().totalAmount; });
+  document.getElementById('dashToday').textContent = count;
+  document.getElementById('dashTodayAmt').textContent = amount;
+
+  const diffSnap = await db.collection('deliveryDiffs').where('status','==','pending').get();
+  document.getElementById('dashPendingDiffs').textContent = diffSnap.size;
+
+  const repsSnap = await db.collection('reps').get();
+  document.getElementById('dashReps').textContent = repsSnap.size;
+
+  const recentSnap = await db.collection('dailyEntries').orderBy('createdAt','desc').limit(15).get();
+  const body = document.getElementById('recentEntriesBody');
+  const empty = document.getElementById('recentEmpty');
+  if(recentSnap.empty){ body.innerHTML=''; empty.style.display='block'; }
+  else{
+    empty.style.display='none';
+    const brandLabel = {both:'الكل', documentation:'دوكمنتيشن', ward:'وورد إكسبريس'};
+    body.innerHTML = recentSnap.docs.map(d=>{
+      const e = d.data();
+      return `<tr><td>${e.date}</td><td>${e.repName||'—'}</td><td>${brandLabel[e.brand]||e.brand||'—'}</td><td>${e.totalCount}</td><td>${e.totalAmount} ر.س</td></tr>`;
+    }).join('');
+  }
+}
+
+/* ---------------- DIFFS ---------------- */
+async function loadDiffs(){
+  const snap = await db.collection('deliveryDiffs').orderBy('createdAt','desc').get();
+  const body = document.getElementById('diffsBody');
+  const empty = document.getElementById('diffsEmpty');
+  if(snap.empty){ body.innerHTML=''; empty.style.display='block'; return; }
+  empty.style.display='none';
+  body.innerHTML = snap.docs.map(d=>{
+    const e = d.data();
+    const dateStr = e.createdAt && e.createdAt.toDate ? e.createdAt.toDate().toLocaleDateString('ar-SA') : '—';
+    const badgeClass = e.status==='approved' ? 'approved' : (e.status==='rejected' ? 'rejected' : 'pending');
+    const badgeText = e.status==='approved' ? 'معتمد' : (e.status==='rejected' ? 'مرفوض' : 'قيد المراجعة');
+    const actions = (myRole==='admin' && e.status==='pending')
+      ? `<button class="small-approve" onclick="setDiffStatus('${d.id}','approved')">اعتماد</button><button class="small-danger" onclick="setDiffStatus('${d.id}','rejected')">رفض</button>`
+      : '';
+    return `<tr>
+      <td>${dateStr}</td><td>${e.repName||'—'}</td><td>#${e.orderNo}</td>
+      <td>${e.registeredAreaName || '—'}</td><td>${e.areaName}</td><td>${e.amount} ر.س</td>
+      <td>${e.proofImage ? `<img class="thumb" src="${e.proofImage}" onclick="openImgModal('${e.proofImage.replace(/'/g,"")}')">` : '—'}</td>
+      <td><span class="badge ${badgeClass}">${badgeText}</span></td>
+      <td>${actions}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function setDiffStatus(id, status){
+  if(myRole !== 'admin'){ toast('ما تملك صلاحية'); return; }
+  await db.collection('deliveryDiffs').doc(id).update({status});
+  toast(status==='approved' ? 'تم الاعتماد ✅' : 'تم الرفض');
+  loadDiffs();
+  loadDashboard();
+}
+
+function openImgModal(src){
+  document.getElementById('imgModalImg').src = src;
+  document.getElementById('imgModalBg').classList.add('show');
+}
+function closeImgModal(e){
+  if(e.target.id === 'imgModalBg' || e.target.classList.contains('modal-close')){
+    document.getElementById('imgModalBg').classList.remove('show');
+  }
+}
+
+/* ---------------- PENALTIES ---------------- */
+async function loadPenaltyRepSelect(){
+  const snap = await db.collection('reps').get();
+  const sel = document.getElementById('penRep');
+  if(!sel) return;
+  sel.innerHTML = snap.docs.map(d=>`<option value="${d.id}">${d.data().name}</option>`).join('');
+}
+
+async function addPenalty(){
+  if(myRole !== 'admin'){ toast('ما تملك صلاحية'); return; }
+  const repPhone = document.getElementById('penRep').value;
+  const type = document.getElementById('penType').value;
+  const date = document.getElementById('penDate').value || new Date().toISOString().slice(0,10);
+  const amount = parseFloat(document.getElementById('penAmount').value) || 0;
+  const description = document.getElementById('penDesc').value.trim();
+
+  if(!repPhone){ toast('اختر المندوب'); return; }
+
+  const repSnap = await db.collection('reps').doc(repPhone).get();
+  const repName = repSnap.exists ? repSnap.data().name : '';
+
+  await db.collection('penalties').add({
+    repUid: repPhone, repName, type, date, amount, description,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+
+  toast('تم الحفظ ✅ — ظهر للمندوب بشاشته');
+  document.getElementById('penDesc').value='';
+  document.getElementById('penAmount').value='';
+  loadPenalties();
+}
+
+async function loadPenalties(){
+  const snap = await db.collection('penalties').orderBy('createdAt','desc').limit(50).get();
+  const body = document.getElementById('penaltiesBody');
+  const empty = document.getElementById('penaltiesEmpty');
+  if(snap.empty){ body.innerHTML=''; empty.style.display='block'; return; }
+  empty.style.display='none';
+  body.innerHTML = snap.docs.map(d=>{
+    const p = d.data();
+    return `<tr>
+      <td>${p.date}</td><td>${p.repName||'—'}</td><td>${p.type}</td><td>${p.description||'—'}</td>
+      <td>${p.amount ? p.amount+' ر.س' : '—'}</td>
+      <td>${myRole==='admin' ? `<button class="small-danger" onclick="deletePenalty('${d.id}')">حذف</button>` : ''}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function deletePenalty(id){
+  if(myRole !== 'admin'){ toast('ما تملك صلاحية'); return; }
+  if(!confirm('تأكيد الحذف؟')) return;
+  await db.collection('penalties').doc(id).delete();
+  toast('تم الحذف');
+  loadPenalties();
+}
+
+/* ---------------- REPORTS ---------------- */
+async function runReport(){
+  const from = document.getElementById('repFrom').value;
+  const to = document.getElementById('repTo').value;
+  if(!from || !to){ toast('اختر الفترة كاملة'); return; }
+
+  const entriesSnap = await db.collection('dailyEntries').where('date','>=',from).where('date','<=',to).get();
+  const perRep = {};
+
+  entriesSnap.forEach(d=>{
+    const e = d.data();
+    const key = e.repName || e.repUid;
+    if(!perRep[key]) perRep[key] = {count:0, amount:0, diffs:0, penalties:0, gifts:0};
+    perRep[key].count += e.totalCount;
+    perRep[key].amount += e.totalAmount;
+  });
+
+  const diffsSnap = await db.collection('deliveryDiffs').where('status','==','approved').get();
+  diffsSnap.forEach(d=>{
+    const e = d.data();
+    const key = e.repName || e.repUid;
+    if(!perRep[key]) perRep[key] = {count:0, amount:0, diffs:0, penalties:0, gifts:0};
+    perRep[key].diffs += e.amount;
+  });
+
+  const penSnap = await db.collection('penalties').where('date','>=',from).where('date','<=',to).get();
+  penSnap.forEach(d=>{
+    const e = d.data();
+    const key = e.repName || e.repUid;
+    if(!perRep[key]) perRep[key] = {count:0, amount:0, diffs:0, penalties:0, gifts:0};
+    if(e.type === 'هدية مأخوذة') perRep[key].gifts += (e.amount||0);
+    else perRep[key].penalties += (e.amount||0);
+  });
+
+  const body = document.getElementById('reportBody');
+  const empty = document.getElementById('reportEmpty');
+  const keys = Object.keys(perRep);
+  if(keys.length === 0){ body.innerHTML=''; empty.style.display='block'; empty.textContent='لا يوجد بيانات بهذه الفترة'; return; }
+  empty.style.display='none';
+
+  body.innerHTML = keys.map(k=>{
+    const r = perRep[k];
+    const net = r.amount + r.diffs - r.penalties - r.gifts;
+    return `<tr>
+      <td>${k}</td><td>${r.count}</td><td>${r.amount} ر.س</td><td>${r.diffs} ر.س</td>
+      <td>${r.penalties} ر.س</td><td>${r.gifts} ر.س</td><td><b>${net} ر.س</b></td>
+    </tr>`;
+  }).join('');
+}
+</script>
+</body>
+</html>
