@@ -174,6 +174,7 @@
       <button class="navitem" onclick="showTab('reps')">👤 المناديب</button>
       <button class="navitem" onclick="showTab('areas')">📍 المناطق والأسعار</button>
       <button class="navitem" onclick="showTab('reports')">📄 التقارير</button>
+      <button class="navitem" onclick="showTab('payouts')">💰 المستحقات والدفعات</button>
       <button class="logout" onclick="doLogout()">تسجيل الخروج</button>
     </div>
 
@@ -322,11 +323,55 @@
           </div>
         </div>
         <div class="card">
+          <h3>الملخص الإجمالي</h3>
           <table>
             <thead><tr><th>المندوب</th><th>عدد الطلبات</th><th>مبلغ الطلبات</th><th>الفوارق المعتمدة</th><th>الجزاءات</th><th>الهدايا</th><th>الصافي</th></tr></thead>
             <tbody id="reportBody"></tbody>
           </table>
           <div id="reportEmpty" class="empty">اختر فترة واضغط "إنشاء التقرير"</div>
+        </div>
+        <div class="card">
+          <h3>التفصيل حسب المنطقة والقناة</h3>
+          <table>
+            <thead><tr><th>المندوب</th><th>المنطقة</th><th>القناة</th><th>عدد الطلبات</th><th>المبلغ</th></tr></thead>
+            <tbody id="reportBreakdownBody"></tbody>
+          </table>
+          <div id="reportBreakdownEmpty" class="empty" style="display:none;">لا يوجد تفاصيل</div>
+        </div>
+      </div>
+
+      <!-- ===== PAYOUTS / BALANCES ===== -->
+      <div id="tab-payouts" class="tab-panel">
+        <h1>المستحقات والدفعات</h1>
+        <p class="page-sub">الرصيد المتراكم لكل مندوب منذ بداية النظام — سجّل أي دفعة (كاملة أو جزئية) والباقي يبقى محفوظ له</p>
+
+        <div class="card">
+          <h3>أرصدة المناديب</h3>
+          <table>
+            <thead><tr><th>المندوب</th><th>إجمالي المستحق (كل الوقت)</th><th>إجمالي المدفوع</th><th>الرصيد المتبقي</th></tr></thead>
+            <tbody id="balancesBody"></tbody>
+          </table>
+          <div id="balancesEmpty" class="empty" style="display:none;">لا يوجد بيانات بعد</div>
+        </div>
+
+        <div class="card" id="addPayoutCard">
+          <h3>تسجيل دفعة جديدة</h3>
+          <div class="toolbar">
+            <div class="field"><label>المندوب</label><select id="payoutRep"></select></div>
+            <div class="field"><label>المبلغ المدفوع (ر.س)</label><input id="payoutAmount" type="number" placeholder="0"></div>
+            <div class="field"><label>التاريخ</label><input type="date" id="payoutDate"></div>
+          </div>
+          <div class="field"><label>ملاحظة (اختياري)</label><input id="payoutNote" style="width:100%;" placeholder="مثال: دفعة جزئية، الباقي الأسبوع الجاي"></div>
+          <button class="primary" style="margin-top:14px;" onclick="addPayout()">حفظ الدفعة</button>
+        </div>
+
+        <div class="card">
+          <h3>سجل الدفعات</h3>
+          <table>
+            <thead><tr><th>التاريخ</th><th>المندوب</th><th>المبلغ</th><th>ملاحظة</th><th></th></tr></thead>
+            <tbody id="payoutsHistoryBody"></tbody>
+          </table>
+          <div id="payoutsHistoryEmpty" class="empty" style="display:none;">لا يوجد دفعات مسجّلة</div>
         </div>
       </div>
 
@@ -440,7 +485,7 @@ auth.onAuthStateChanged(async user=>{
 function applyRoleRestrictions(){
   if(myRole !== 'admin'){
     // صلاحية مراجعة/مطابقة فقط — نخفي كل عناصر الإضافة والتعديل والحذف
-    ['addPenaltyCard','addRepCard','addAreaCard'].forEach(id=>{
+    ['addPenaltyCard','addRepCard','addAreaCard','addPayoutCard'].forEach(id=>{
       const el = document.getElementById(id);
       if(el){
         el.innerHTML = '<div class="role-note">صلاحيتك: عرض ومطابقة فقط — لا تملك صلاحية الإضافة أو التعديل</div>';
@@ -460,6 +505,7 @@ function showTab(name){
   if(name==='penalties') { loadPenaltyRepSelect(); loadPenalties(); }
   if(name==='reps') loadReps();
   if(name==='areas') loadAreasTable();
+  if(name==='payouts') { loadPayoutRepSelect(); loadBalances(); loadPayoutHistory(); }
 }
 
 /* ---------------- AREAS ---------------- */
@@ -597,7 +643,7 @@ async function loadDashboard(){
     pBody.innerHTML = pendingDocs.map(d=>{
       const e = d.data();
       const actions = myRole==='admin'
-        ? `<button class="ghost" style="padding:6px 10px;font-size:12px;margin-inline-end:6px;" onclick="openEditEntry('${d.id}')">تعديل</button><button class="small-approve" onclick="setEntryStatus('${d.id}','approved')">اعتماد</button><button class="small-danger" onclick="setEntryStatus('${d.id}','rejected')">رفض</button>`
+        ? `<button class="ghost" style="padding:6px 10px;font-size:12px;margin-inline-end:6px;" onclick="openEditEntry('${d.id}')">تعديل</button><button class="small-approve" onclick="setEntryStatus('${d.id}','approved')">اعتماد</button><button class="small-danger" onclick="setEntryStatus('${d.id}','rejected')" style="margin-inline-end:6px;">رفض</button><button class="small-danger" onclick="deleteEntry('${d.id}')">حذف</button>`
         : '';
       return `<tr><td>${e.date}</td><td>${e.repName||'—'}</td><td>${brandLabel[e.brand]||e.brand||'—'}</td><td>${e.totalCount}</td><td>${e.totalAmount} ر.س</td><td>${actions}</td></tr>`;
     }).join('');
@@ -613,7 +659,9 @@ async function loadDashboard(){
       const e = d.data();
       const badgeClass = e.status==='approved' ? 'approved' : (e.status==='rejected' ? 'rejected' : 'pending');
       const badgeText = e.status==='approved' ? 'معتمد' : (e.status==='rejected' ? 'مرفوض' : 'قيد المراجعة');
-      const editBtn = myRole==='admin' ? `<button class="ghost" style="padding:6px 10px;font-size:12px;" onclick="openEditEntry('${d.id}')">تعديل</button>` : '';
+      const editBtn = myRole==='admin'
+        ? `<button class="ghost" style="padding:6px 10px;font-size:12px;margin-inline-end:6px;" onclick="openEditEntry('${d.id}')">تعديل</button><button class="small-danger" onclick="deleteEntry('${d.id}')">حذف</button>`
+        : '';
       return `<tr><td>${e.date}</td><td>${e.repName||'—'}</td><td>${brandLabel[e.brand]||e.brand||'—'}</td><td>${e.totalCount}</td><td>${e.totalAmount} ر.س</td><td><span class="badge ${badgeClass}">${badgeText}</span></td><td>${editBtn}</td></tr>`;
     }).join('');
   }
@@ -718,6 +766,14 @@ async function setEntryStatus(id, status){
   loadDashboard();
 }
 
+async function deleteEntry(id){
+  if(myRole !== 'admin'){ toast('ما تملك صلاحية'); return; }
+  if(!confirm('تأكيد حذف هذا الطلب نهائياً؟ لا يمكن التراجع.')) return;
+  await db.collection('dailyEntries').doc(id).delete();
+  toast('تم الحذف');
+  loadDashboard();
+}
+
 /* ---------------- DIFFS ---------------- */
 async function loadDiffs(){
   const snap = await db.collection('deliveryDiffs').orderBy('createdAt','desc').get();
@@ -731,14 +787,15 @@ async function loadDiffs(){
     const badgeClass = e.status==='approved' ? 'approved' : (e.status==='rejected' ? 'rejected' : 'pending');
     const badgeText = e.status==='approved' ? 'معتمد' : (e.status==='rejected' ? 'مرفوض' : 'قيد المراجعة');
     const actions = (myRole==='admin' && e.status==='pending')
-      ? `<button class="small-approve" onclick="setDiffStatus('${d.id}','approved')">اعتماد</button><button class="small-danger" onclick="setDiffStatus('${d.id}','rejected')">رفض</button>`
+      ? `<button class="small-approve" onclick="setDiffStatus('${d.id}','approved')">اعتماد</button><button class="small-danger" onclick="setDiffStatus('${d.id}','rejected')" style="margin-inline-end:6px;">رفض</button>`
       : '';
+    const diffDeleteBtn = myRole==='admin' ? `<button class="small-danger" onclick="deleteDiff('${d.id}')">حذف</button>` : '';
     return `<tr>
       <td>${dateStr}</td><td>${e.repName||'—'}</td><td>#${e.orderNo}</td>
       <td>${e.registeredAreaName || '—'}</td><td>${e.areaName}</td><td>${e.amount} ر.س</td>
       <td>${e.proofImage ? `<img class="thumb" src="${e.proofImage}" onclick="openImgModal('${e.proofImage.replace(/'/g,"")}')">` : '—'}</td>
       <td><span class="badge ${badgeClass}">${badgeText}</span></td>
-      <td>${actions}</td>
+      <td>${actions}${diffDeleteBtn}</td>
     </tr>`;
   }).join('');
 }
@@ -747,6 +804,15 @@ async function setDiffStatus(id, status){
   if(myRole !== 'admin'){ toast('ما تملك صلاحية'); return; }
   await db.collection('deliveryDiffs').doc(id).update({status});
   toast(status==='approved' ? 'تم الاعتماد ✅' : 'تم الرفض');
+  loadDiffs();
+  loadDashboard();
+}
+
+async function deleteDiff(id){
+  if(myRole !== 'admin'){ toast('ما تملك صلاحية'); return; }
+  if(!confirm('تأكيد حذف هذا الفارق نهائياً؟')) return;
+  await db.collection('deliveryDiffs').doc(id).delete();
+  toast('تم الحذف');
   loadDiffs();
   loadDashboard();
 }
@@ -818,13 +884,138 @@ async function deletePenalty(id){
 }
 
 /* ---------------- REPORTS ---------------- */
+/* ---------------- PAYOUTS / BALANCES ---------------- */
+// الرصيد لكل مندوب = (كل الطلبات المعتمدة + كل الفوارق المعتمدة منذ الأول)
+//                    − (كل الجزاءات والهدايا) − (كل الدفعات المسجّلة له)
+// هذا رصيد تراكمي دائم، مستقل عن فلترة "التقارير" اللي بفترة محددة —
+// فيه هيك تقدر تدفع للمندوب جزء من مستحقاته والباقي يضل محفوظ له تلقائياً للمرة الجاية.
+async function computeAllBalances(){
+  const balances = {}; // repUid -> {repName, earned, paid, balance}
+
+  const repsSnap = await db.collection('reps').get();
+  repsSnap.forEach(d=>{
+    balances[d.id] = {repName:d.data().name, earned:0, paid:0};
+  });
+
+  const entriesSnap = await db.collection('dailyEntries').where('status','==','approved').get();
+  entriesSnap.forEach(d=>{
+    const e = d.data();
+    if(!balances[e.repUid]) balances[e.repUid] = {repName:e.repName||e.repUid, earned:0, paid:0};
+    balances[e.repUid].earned += e.totalAmount;
+  });
+
+  const diffsSnap = await db.collection('deliveryDiffs').where('status','==','approved').get();
+  diffsSnap.forEach(d=>{
+    const e = d.data();
+    if(!balances[e.repUid]) balances[e.repUid] = {repName:e.repName||e.repUid, earned:0, paid:0};
+    balances[e.repUid].earned += e.amount;
+  });
+
+  const penSnap = await db.collection('penalties').get();
+  penSnap.forEach(d=>{
+    const e = d.data();
+    if(!balances[e.repUid]) balances[e.repUid] = {repName:e.repName||e.repUid, earned:0, paid:0};
+    balances[e.repUid].earned -= (e.amount || 0);
+  });
+
+  const payoutsSnap = await db.collection('payouts').get();
+  payoutsSnap.forEach(d=>{
+    const e = d.data();
+    if(!balances[e.repUid]) balances[e.repUid] = {repName:e.repName||e.repUid, earned:0, paid:0};
+    balances[e.repUid].paid += (e.amount || 0);
+  });
+
+  return balances;
+}
+
+async function loadBalances(){
+  const balances = await computeAllBalances();
+  const body = document.getElementById('balancesBody');
+  const empty = document.getElementById('balancesEmpty');
+  const keys = Object.keys(balances);
+  if(keys.length === 0){ body.innerHTML=''; empty.style.display='block'; return; }
+  empty.style.display='none';
+  body.innerHTML = keys.map(uid=>{
+    const b = balances[uid];
+    const remaining = b.earned - b.paid;
+    return `<tr>
+      <td>${b.repName}</td><td>${b.earned} ر.س</td><td>${b.paid} ر.س</td>
+      <td><b style="${remaining>0?'color:var(--red)':'color:var(--green)'}">${remaining} ر.س</b></td>
+    </tr>`;
+  }).join('');
+}
+
+async function loadPayoutRepSelect(){
+  const snap = await db.collection('reps').get();
+  const sel = document.getElementById('payoutRep');
+  if(!sel) return;
+  sel.innerHTML = snap.docs.map(d=>`<option value="${d.id}">${d.data().name}</option>`).join('');
+}
+
+async function addPayout(){
+  if(myRole !== 'admin'){ toast('ما تملك صلاحية'); return; }
+  const repPhone = document.getElementById('payoutRep').value;
+  const amount = parseFloat(document.getElementById('payoutAmount').value);
+  const date = document.getElementById('payoutDate').value || new Date().toISOString().slice(0,10);
+  const note = document.getElementById('payoutNote').value.trim();
+
+  if(!repPhone){ toast('اختر المندوب'); return; }
+  if(!amount || amount <= 0){ toast('أدخل مبلغ صحيح'); return; }
+
+  const repSnap = await db.collection('reps').doc(repPhone).get();
+  const repName = repSnap.exists ? repSnap.data().name : '';
+
+  await db.collection('payouts').add({
+    repUid: repPhone, repName, amount, date, note,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+
+  toast('تم تسجيل الدفعة ✅');
+  document.getElementById('payoutAmount').value='';
+  document.getElementById('payoutNote').value='';
+  loadBalances();
+  loadPayoutHistory();
+}
+
+async function loadPayoutHistory(){
+  const snap = await db.collection('payouts').orderBy('createdAt','desc').limit(50).get();
+  const body = document.getElementById('payoutsHistoryBody');
+  const empty = document.getElementById('payoutsHistoryEmpty');
+  if(snap.empty){ body.innerHTML=''; empty.style.display='block'; return; }
+  empty.style.display='none';
+  body.innerHTML = snap.docs.map(d=>{
+    const p = d.data();
+    return `<tr>
+      <td>${p.date}</td><td>${p.repName||'—'}</td><td>${p.amount} ر.س</td><td>${p.note||'—'}</td>
+      <td>${myRole==='admin' ? `<button class="small-danger" onclick="deletePayout('${d.id}')">حذف</button>` : ''}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function deletePayout(id){
+  if(myRole !== 'admin'){ toast('ما تملك صلاحية'); return; }
+  if(!confirm('تأكيد حذف هذه الدفعة؟')) return;
+  await db.collection('payouts').doc(id).delete();
+  toast('تم الحذف');
+  loadBalances();
+  loadPayoutHistory();
+}
+
+function channelLabel(brand, source){
+  if(brand === 'ward') return source === 'whatsapp' ? 'وورد إكسبريس (واتساب)' : 'وورد إكسبريس';
+  return source === 'whatsapp' ? 'دوكمنتيشن (واتساب)' : 'دوكمنتيشن (متجر إلكتروني)';
+}
+
 async function runReport(){
   const from = document.getElementById('repFrom').value;
   const to = document.getElementById('repTo').value;
   if(!from || !to){ toast('اختر الفترة كاملة'); return; }
+  const fromMs = new Date(from+'T00:00:00').getTime();
+  const toMs = new Date(to+'T23:59:59').getTime();
 
   const entriesSnap = await db.collection('dailyEntries').where('date','>=',from).where('date','<=',to).get();
   const perRep = {};
+  const breakdown = {}; // key: repName|areaName|channel -> {repName, areaName, channel, count, amount}
 
   entriesSnap.forEach(d=>{
     const e = d.data();
@@ -833,11 +1024,22 @@ async function runReport(){
     if(!perRep[key]) perRep[key] = {count:0, amount:0, diffs:0, penalties:0, gifts:0};
     perRep[key].count += e.totalCount;
     perRep[key].amount += e.totalAmount;
+
+    (e.entries || []).forEach(en=>{
+      const ch = channelLabel(e.brand, en.source);
+      const bKey = key+'|'+en.areaName+'|'+ch;
+      if(!breakdown[bKey]) breakdown[bKey] = {repName:key, areaName:en.areaName, channel:ch, count:0, amount:0};
+      breakdown[bKey].count += en.count;
+      breakdown[bKey].amount += en.amount;
+    });
   });
 
+  // فوارق التوصيل المعتمدة خلال نفس الفترة (بالاعتماد على تاريخ الإنشاء، لأن الفارق ما له حقل "تاريخ" مستقل)
   const diffsSnap = await db.collection('deliveryDiffs').where('status','==','approved').get();
   diffsSnap.forEach(d=>{
     const e = d.data();
+    const t = e.createdAt ? e.createdAt.toMillis() : 0;
+    if(t < fromMs || t > toMs) return;
     const key = e.repName || e.repUid;
     if(!perRep[key]) perRep[key] = {count:0, amount:0, diffs:0, penalties:0, gifts:0};
     perRep[key].diffs += e.amount;
@@ -855,17 +1057,30 @@ async function runReport(){
   const body = document.getElementById('reportBody');
   const empty = document.getElementById('reportEmpty');
   const keys = Object.keys(perRep);
-  if(keys.length === 0){ body.innerHTML=''; empty.style.display='block'; empty.textContent='لا يوجد بيانات بهذه الفترة'; return; }
-  empty.style.display='none';
+  if(keys.length === 0){ body.innerHTML=''; empty.style.display='block'; empty.textContent='لا يوجد بيانات بهذه الفترة'; }
+  else{
+    empty.style.display='none';
+    body.innerHTML = keys.map(k=>{
+      const r = perRep[k];
+      const net = r.amount + r.diffs - r.penalties - r.gifts;
+      return `<tr>
+        <td>${k}</td><td>${r.count}</td><td>${r.amount} ر.س</td><td>${r.diffs} ر.س</td>
+        <td>${r.penalties} ر.س</td><td>${r.gifts} ر.س</td><td><b>${net} ر.س</b></td>
+      </tr>`;
+    }).join('');
+  }
 
-  body.innerHTML = keys.map(k=>{
-    const r = perRep[k];
-    const net = r.amount + r.diffs - r.penalties - r.gifts;
-    return `<tr>
-      <td>${k}</td><td>${r.count}</td><td>${r.amount} ر.س</td><td>${r.diffs} ر.س</td>
-      <td>${r.penalties} ر.س</td><td>${r.gifts} ر.س</td><td><b>${net} ر.س</b></td>
-    </tr>`;
-  }).join('');
+  const bBody = document.getElementById('reportBreakdownBody');
+  const bEmpty = document.getElementById('reportBreakdownEmpty');
+  const bKeys = Object.keys(breakdown).sort((a,b)=> breakdown[a].repName.localeCompare(breakdown[b].repName) || breakdown[a].areaName.localeCompare(breakdown[b].areaName));
+  if(bKeys.length === 0){ bBody.innerHTML=''; bEmpty.style.display='block'; }
+  else{
+    bEmpty.style.display='none';
+    bBody.innerHTML = bKeys.map(k=>{
+      const r = breakdown[k];
+      return `<tr><td>${r.repName}</td><td>${r.areaName}</td><td>${r.channel}</td><td>${r.count}</td><td>${r.amount} ر.س</td></tr>`;
+    }).join('');
+  }
 }
 </script>
 </body>

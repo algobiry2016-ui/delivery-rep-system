@@ -273,7 +273,7 @@
           <label>التاريخ</label>
           <input type="date" id="entryDate">
 
-          <div class="seg" style="margin-top:14px;">
+          <div class="seg" style="margin-top:14px;" id="entrySourceSeg">
             <button type="button" class="segbtn active" id="segSite" onclick="switchEntrySource('site')">🌐 طلبات الموقع</button>
             <button type="button" class="segbtn" id="segWa" onclick="switchEntrySource('wa')">💬 طلبات واتساب</button>
           </div>
@@ -518,6 +518,16 @@ function rateForRep(area, brand){
 /* ---------------- BUILD DAILY ENTRY FORM ---------------- */
 function buildAreaInputs(){
   const brand = currentBrand();
+
+  // وورد إكسبريس ما فيه قناة واتساب أصلاً — نخفي مفتاح التبديل ونثبت على "الموقع"
+  const segEl = document.getElementById('entrySourceSeg');
+  if(brand === 'ward'){
+    segEl.style.display = 'none';
+    switchEntrySource('site');
+  } else {
+    segEl.style.display = 'flex';
+  }
+
   const grid = document.getElementById('areaInputGrid');
   const waGrid = document.getElementById('waAreaInputGrid');
   grid.innerHTML = '';
@@ -573,7 +583,7 @@ async function submitDailyEntry(){
   AREAS.forEach(area=>{
     const rate = rateForRep(area, brand);
     const siteCount = parseInt(document.getElementById('site_'+area.id).value) || 0;
-    const waCount = parseInt(document.getElementById('wa_'+area.id).value) || 0;
+    const waCount = (brand === 'ward') ? 0 : (parseInt(document.getElementById('wa_'+area.id).value) || 0);
     if(siteCount > 0){
       entries.push({areaId:area.id, areaName:area.name, source:'site', count:siteCount, rate, amount: siteCount*rate});
       totalAmount += siteCount*rate; totalCount += siteCount;
