@@ -759,6 +759,18 @@ async function loadTodaySummary(){
     if(e.status === 'approved'){ count += e.totalCount; amount += e.totalAmount; }
     else if(e.status !== 'rejected'){ pendingCount += e.totalCount; pendingAmount += e.totalAmount; }
   });
+
+  // فوارق التوصيل المعتمدة اليوم تُضاف كمان لمستحق اليوم — الفارق ما له
+  // حقل تاريخ مستقل، فنقارن على تاريخ الإنشاء.
+  const diffSnap = await db.collection('deliveryDiffs').where('repUid','==',myPhone()).get();
+  diffSnap.forEach(d=>{
+    const e = d.data();
+    const dDate = e.createdAt && e.createdAt.toDate ? e.createdAt.toDate().toISOString().slice(0,10) : null;
+    if(dDate !== today) return;
+    if(e.status === 'approved'){ count += 1; amount += e.amount; }
+    else if(e.status !== 'rejected'){ pendingCount += 1; pendingAmount += e.amount; }
+  });
+
   document.getElementById('todayCount').textContent = count;
   document.getElementById('todayAmount').textContent = amount;
 

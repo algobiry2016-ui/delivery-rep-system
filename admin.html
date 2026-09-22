@@ -651,8 +651,19 @@ async function loadDashboard(){
     const e = d.data();
     if(e.status === 'approved'){ count += e.totalCount; amount += e.totalAmount; }
   });
-  document.getElementById('dashToday').textContent = count;
-  document.getElementById('dashTodayAmt').textContent = amount;
+
+  // فوارق التوصيل المعتمدة اليوم تُضاف لمستحقات اليوم كمان — الفارق ما له حقل
+  // "تاريخ" مستقل، فنقارن على تاريخ الإنشاء (createdAt).
+  const allDiffsSnap = await db.collection('deliveryDiffs').where('status','==','approved').get();
+  let diffCountToday = 0, diffAmountToday = 0;
+  allDiffsSnap.forEach(d=>{
+    const e = d.data();
+    const dDate = e.createdAt && e.createdAt.toDate ? e.createdAt.toDate().toISOString().slice(0,10) : null;
+    if(dDate === today){ diffCountToday++; diffAmountToday += e.amount; }
+  });
+
+  document.getElementById('dashToday').textContent = count + diffCountToday;
+  document.getElementById('dashTodayAmt').textContent = amount + diffAmountToday;
 
   const diffSnap = await db.collection('deliveryDiffs').where('status','==','pending').get();
   document.getElementById('dashPendingDiffs').textContent = diffSnap.size;
