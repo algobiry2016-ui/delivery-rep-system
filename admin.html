@@ -678,7 +678,7 @@ async function loadDashboard(){
       const g = pendingGroups[k];
       const idsCsv = g.docIds.join(',');
       const actions = myRole==='admin'
-        ? `${g.docIds.length===1 ? `<button class="ghost" style="padding:6px 10px;font-size:12px;margin-inline-end:6px;" onclick="openEditEntry('${g.docIds[0]}')">تعديل</button>` : ''}<button class="small-approve" onclick="bulkSetEntryStatus('${idsCsv}','approved')">اعتماد الكل</button><button class="small-danger" onclick="bulkSetEntryStatus('${idsCsv}','rejected')" style="margin-inline-end:6px;">رفض الكل</button><button class="small-danger" onclick="bulkDeleteEntries('${idsCsv}')">حذف</button>`
+        ? `${g.docIds.length===1 ? `<button class="ghost" style="padding:6px 10px;font-size:12px;margin-inline-end:6px;" onclick="openEditEntry('${g.docIds[0]}')">تعديل</button>` : ''}<button class="small-approve" onclick="bulkSetEntryStatus('${idsCsv}','approved')">اعتماد الكل</button><button class="small-danger" onclick="bulkSetEntryStatus('${idsCsv}','rejected')" style="margin-inline-end:6px;">رفض الكل</button><button class="small-danger" onclick="bulkDeleteEntries('${idsCsv}')">حذف</button>${subDocsActionsHtml(g, true)}`
         : '';
       return buildGroupMatrixRows(g, [g.date, g.repName||'—'], [actions]);
     }).join('');
@@ -702,7 +702,7 @@ async function loadDashboard(){
       const st = groupStatusInfo(g.statuses);
       const statusCell = `<span class="badge ${st.cls}">${st.text}</span>`;
       const editBtn = myRole==='admin'
-        ? `${g.docIds.length===1 ? `<button class="ghost" style="padding:6px 10px;font-size:12px;margin-inline-end:6px;" onclick="openEditEntry('${g.docIds[0]}')">تعديل</button>` : ''}<button class="small-danger" onclick="bulkDeleteEntries('${idsCsv}')">حذف</button>`
+        ? `${g.docIds.length===1 ? `<button class="ghost" style="padding:6px 10px;font-size:12px;margin-inline-end:6px;" onclick="openEditEntry('${g.docIds[0]}')">تعديل</button>` : ''}<button class="small-danger" onclick="bulkDeleteEntries('${idsCsv}')">حذف</button>${subDocsActionsHtml(g, true)}`
         : '';
       return buildGroupMatrixRows(g, [g.date, g.repName||'—'], [statusCell, editBtn]);
     }).join('');
@@ -1086,6 +1086,12 @@ function groupEntriesByRepDate(docs){
     g.totalCount += e.totalCount;
     g.totalAmount += e.totalAmount;
     g.statuses.add(e.status || 'pending');
+    g.subDocs = g.subDocs || [];
+    g.subDocs.push({
+      id: d.id, brand: e.brand, count: e.totalCount, amount: e.totalAmount,
+      status: e.status || 'pending',
+      time: e.createdAt && e.createdAt.toDate ? e.createdAt.toDate().toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'}) : ''
+    });
 
     (e.entries || []).forEach(en=>{
       if(!g.merged[en.areaId]) g.merged[en.areaId] = {name: en.areaName, docSite:0, docSiteAmt:0, docWa:0, docWaAmt:0, ward:0, wardAmt:0};
@@ -1147,6 +1153,28 @@ function buildGroupMatrixRows(g, leadingCells, trailingCells){
     <td><b>${g.totalCount}<span class="mini-amt">${g.totalAmount} ر.س</span></b></td>
   </tr>`;
   return html;
+}
+
+// لو المجموعة فيها أكثر من عملية حفظ بنفس اليوم، نعرض قائمة صغيرة تحت أزرار
+// "اعتماد الكل" تفصّل كل عملية لحالها مع أزرار اعتماد/رفض/حذف خاصة فيها —
+// عشان تقدر تعتمد وحدة وترفض الثانية لو احتجت.
+function subDocsActionsHtml(g, includeStatusBtns){
+  if(!g.subDocs || g.subDocs.length <= 1) return '';
+  if(myRole !== 'admin') return '';
+  const rows = g.subDocs.map(sub=>{
+    const label = brandLabel[sub.brand] || sub.brand || '—';
+    const statusBadge = sub.status==='approved' ? '✅' : (sub.status==='rejected' ? '❌' : '⏳');
+    const btns = includeStatusBtns && sub.status==='pending'
+      ? `<button class="small-approve" style="padding:3px 7px;font-size:11px;" onclick="setEntryStatus('${sub.id}','approved')">اعتماد</button><button class="small-danger" style="padding:3px 7px;font-size:11px;margin-inline-end:4px;" onclick="setEntryStatus('${sub.id}','rejected')">رفض</button>`
+      : '';
+    return `<div style="display:flex;align-items:center;gap:5px;font-size:11px;padding:3px 0;border-top:1px dashed var(--line);">
+      <span>${statusBadge} ${label} (${sub.time})</span>
+      <span style="color:var(--ink-soft);">${sub.count} طلب — ${sub.amount} ر.س</span>
+      ${btns}
+      <button class="small-danger" style="padding:3px 7px;font-size:11px;" onclick="deleteEntry('${sub.id}')">حذف</button>
+    </div>`;
+  }).join('');
+  return `<details style="margin-top:6px;"><summary style="cursor:pointer;font-size:11px;color:var(--rose-dark);">عرض كل عملية لحالها (${g.subDocs.length})</summary>${rows}</details>`;
 }
 
 function bulkSetEntryStatus(idsCsv, status){
