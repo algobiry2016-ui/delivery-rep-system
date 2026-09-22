@@ -86,6 +86,7 @@
   .badge.pending{background:var(--amber-bg);color:var(--amber);}
   .badge.approved{background:var(--green-bg);color:var(--green);}
   .badge.rejected{background:var(--red-bg);color:var(--red);}
+  .badge.reviewed{background:#E6EEF5;color:#3A6EA5;}
   .badge.ammar{background:var(--gold);color:#fff;}
 
   .tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px;}
@@ -670,7 +671,9 @@ async function loadDashboard(){
 
   // ملاحظة: تفادينا orderBy مع where على حقل مختلف حتى لا يحتاج الاستعلام
   // فهرس مركّب (composite index) لسا ما انبنى بـ Firestore — نرتب بجافاسكربت بدلاً منه.
-  const pendingEntriesSnap = await db.collection('dailyEntries').where('status','==','pending').get();
+  // نجيب الحالتين "قيد المراجعة" و"تمت المراجعة" مع بعض — المشرف يشتغل على الأولى،
+  // والأدمن يعتمد نهائياً من أي منهما.
+  const pendingEntriesSnap = await db.collection('dailyEntries').where('status','in',['pending','reviewed']).get();
   const pendingDocs = pendingEntriesSnap.docs.sort((a,b)=>{
     const ta = a.data().createdAt ? a.data().createdAt.toMillis() : 0;
     const tb = b.data().createdAt ? b.data().createdAt.toMillis() : 0;
@@ -688,9 +691,15 @@ async function loadDashboard(){
     pBody.innerHTML = pendingKeys.map(k=>{
       const g = pendingGroups[k];
       const idsCsv = g.docIds.join(',');
-      const actions = myRole==='admin'
-        ? `${g.docIds.length===1 ? `<button class="ghost" style="padding:6px 10px;font-size:12px;margin-inline-end:6px;" onclick="openEditEntry('${g.docIds[0]}')">تعديل</button>` : ''}<button class="small-approve" onclick="bulkSetEntryStatus('${idsCsv}','approved')">اعتماد الكل</button><button class="small-danger" onclick="bulkSetEntryStatus('${idsCsv}','rejected')" style="margin-inline-end:6px;">رفض الكل</button><button class="small-danger" onclick="bulkDeleteEntries('${idsCsv}')">حذف</button>${subDocsActionsHtml(g, true)}`
-        : '';
+      let actions = '';
+      if(myRole==='admin'){
+        actions = `${g.docIds.length===1 ? `<button class="ghost" style="padding:6px 10px;font-size:12px;margin-inline-end:6px;" onclick="openEditEntry('${g.docIds[0]}')">تعديل</button>` : ''}<button class="small-approve" onclick="bulkSetEntryStatus('${idsCsv}','approved')">اعتماد الكل</button><button class="small-danger" onclick="bulkSetEntryStatus('${idsCsv}','rejected')" style="margin-inline-end:6px;">رفض الكل</button><button class="small-danger" onclick="bulkDeleteEntries('${idsCsv}')">حذف</button>${subDocsActionsHtml(g, true)}`;
+      } else if(myRole==='supervisor'){
+        const stillPending = g.subDocs.some(s=>s.status==='pending');
+        actions = stillPending
+          ? `<button class="small-approve" onclick="bulkMarkReviewed('${idsCsv}')">تمت المراجعة (الكل)</button>${subDocsActionsHtml(g, true)}`
+          : `<span class="badge reviewed">تمت المراجعة — بانتظار اعتماد الإدارة</span>`;
+      }
       return buildGroupMatrixRows(g, [g.date, g.repName||'—'], [actions]);
     }).join('');
   }
@@ -1120,6 +1129,7 @@ function groupStatusInfo(statuses){
     const s = [...statuses][0];
     if(s === 'approved') return {cls:'approved', text:'معتمد'};
     if(s === 'rejected') return {cls:'rejected', text:'مرفوض'};
+    if(s === 'reviewed') return {cls:'reviewed', text:'تمت المراجعة'};
     return {cls:'pending', text:'قيد المراجعة'};
   }
   return {cls:'pending', text:'مختلط — راجعها'};
@@ -1171,21 +1181,44 @@ function buildGroupMatrixRows(g, leadingCells, trailingCells){
 // عشان تقدر تعتمد وحدة وترفض الثانية لو احتجت.
 function subDocsActionsHtml(g, includeStatusBtns){
   if(!g.subDocs || g.subDocs.length <= 1) return '';
-  if(myRole !== 'admin') return '';
+  if(myRole !== 'admin' && myRole !== 'supervisor') return '';
+  const statusIcon = {approved:'✅', rejected:'❌', reviewed:'👁️', pending:'⏳'};
   const rows = g.subDocs.map(sub=>{
     const label = brandLabel[sub.brand] || sub.brand || '—';
-    const statusBadge = sub.status==='approved' ? '✅' : (sub.status==='rejected' ? '❌' : '⏳');
-    const btns = includeStatusBtns && sub.status==='pending'
-      ? `<button class="small-approve" style="padding:3px 7px;font-size:11px;" onclick="setEntryStatus('${sub.id}','approved')">اعتماد</button><button class="small-danger" style="padding:3px 7px;font-size:11px;margin-inline-end:4px;" onclick="setEntryStatus('${sub.id}','rejected')">رفض</button>`
-      : '';
+    let btns = '';
+    if(includeStatusBtns && myRole==='admin' && (sub.status==='pending' || sub.status==='reviewed')){
+      btns = `<button class="small-approve" style="padding:3px 7px;font-size:11px;" onclick="setEntryStatus('${sub.id}','approved')">اعتماد</button><button class="small-danger" style="padding:3px 7px;font-size:11px;margin-inline-end:4px;" onclick="setEntryStatus('${sub.id}','rejected')">رفض</button>`;
+    } else if(includeStatusBtns && myRole==='supervisor' && sub.status==='pending'){
+      btns = `<button class="small-approve" style="padding:3px 7px;font-size:11px;" onclick="markReviewed('${sub.id}')">تمت المراجعة</button>`;
+    }
+    const delBtn = myRole==='admin' ? `<button class="small-danger" style="padding:3px 7px;font-size:11px;" onclick="deleteEntry('${sub.id}')">حذف</button>` : '';
     return `<div style="display:flex;align-items:center;gap:5px;font-size:11px;padding:3px 0;border-top:1px dashed var(--line);">
-      <span>${statusBadge} ${label} (${sub.time})</span>
+      <span>${statusIcon[sub.status]||'⏳'} ${label} (${sub.time})</span>
       <span style="color:var(--ink-soft);">${sub.count} طلب — ${sub.amount} ر.س</span>
-      ${btns}
-      <button class="small-danger" style="padding:3px 7px;font-size:11px;" onclick="deleteEntry('${sub.id}')">حذف</button>
+      ${btns}${delBtn}
     </div>`;
   }).join('');
   return `<details style="margin-top:6px;"><summary style="cursor:pointer;font-size:11px;color:var(--rose-dark);">عرض كل عملية لحالها (${g.subDocs.length})</summary>${rows}</details>`;
+}
+
+// دور "المشرف": يقدر يحوّل الطلب من "قيد المراجعة" إلى "تمت المراجعة" بس —
+// ما يقدر يعتمد ولا يرفض ولا يحذف ولا يعدّل أي شي. الاعتماد النهائي للأدمن فقط.
+async function markReviewed(id){
+  if(myRole !== 'admin' && myRole !== 'supervisor'){ toast('ما تملك صلاحية'); return; }
+  await db.collection('dailyEntries').doc(id).update({status:'reviewed'});
+  toast('تم تحديدها "تمت المراجعة" ✅ — بانتظار اعتماد الإدارة');
+  loadDashboard();
+}
+
+function bulkMarkReviewed(idsCsv){
+  if(myRole !== 'admin' && myRole !== 'supervisor'){ toast('ما تملك صلاحية'); return; }
+  const ids = idsCsv.split(',');
+  const batch = db.batch();
+  ids.forEach(id => batch.update(db.collection('dailyEntries').doc(id), {status:'reviewed'}));
+  batch.commit().then(()=>{
+    toast('تم تحديدها "تمت المراجعة" ✅ — بانتظار اعتماد الإدارة');
+    loadDashboard();
+  });
 }
 
 function bulkSetEntryStatus(idsCsv, status){
