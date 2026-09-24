@@ -51,7 +51,8 @@
   h1{font-size:20px;margin:0 0 4px;color:var(--rose-dark);}
   .page-sub{color:var(--ink-soft);font-size:13px;margin-bottom:20px;}
 
-  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px;margin-bottom:18px;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px;margin-bottom:18px;overflow-x:auto;}
+  .card table{min-width:640px;}
   .card h3{margin:0 0 14px;font-size:15px;font-weight:700;color:var(--rose-dark);}
 
   .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-bottom:16px;}
@@ -130,13 +131,43 @@
   .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 20px;border-radius:30px;font-size:13px;z-index:200;opacity:0;transition:opacity .25s;pointer-events:none;}
   .toast.show{opacity:1;}
 
+  .mobile-topbar{display:none;}
+  .nav-backdrop{display:none;}
+
   @media (max-width:760px){
     .shell{flex-direction:column;}
-    .sidebar{width:100%;height:auto;position:static;display:flex;align-items:center;gap:8px;padding:12px;overflow-x:auto;}
-    .sidebar .logo,.sidebar .sub,.sidebar .logout{display:none;}
-    .navitem{white-space:nowrap;margin-bottom:0;}
-    .main{padding:16px;}
+
+    .mobile-topbar{
+      display:flex;align-items:center;gap:12px;
+      background:var(--rose);color:#fff;
+      padding:14px 16px;
+      position:sticky;top:0;z-index:60;
+    }
+    .hamburger-btn{
+      background:none;border:none;color:#fff;
+      font-size:22px;cursor:pointer;padding:0;line-height:1;
+    }
+    .mobile-title{font-weight:900;font-size:15px;}
+
+    .nav-backdrop.show{
+      display:block;position:fixed;inset:0;
+      background:rgba(0,0,0,.4);z-index:90;
+    }
+
+    .sidebar{
+      display:none;
+      position:fixed;top:0;bottom:0;right:0;
+      width:250px;height:100vh;
+      z-index:100;
+      box-shadow:-4px 0 20px rgba(0,0,0,.2);
+      overflow-y:auto;
+    }
+    .sidebar.open{display:flex;}
+
+    .main{padding:14px;}
     .tiles{grid-template-columns:1fr 1fr;}
+    .card{padding:14px;}
+    h1{font-size:17px;}
   }
 </style>
 </head>
@@ -170,8 +201,14 @@
 
 <!-- ======= MAIN ======= -->
 <div id="mainScreen" class="screen">
+  <div class="mobile-topbar">
+    <button class="hamburger-btn" onclick="toggleMobileNav()">☰</button>
+    <span class="mobile-title">لوحة الإدارة</span>
+  </div>
+  <div class="nav-backdrop" id="navBackdrop" onclick="toggleMobileNav()"></div>
+
   <div class="shell">
-    <div class="sidebar">
+    <div class="sidebar" id="sidebar">
       <div class="logo">لوحة الإدارة</div>
       <div class="sub">مناديب التوصيل</div>
       <button class="navitem active" onclick="showTab('dashboard')">📊 نظرة عامة</button>
@@ -200,7 +237,7 @@
         <div class="card">
           <h3>طلبات بانتظار الاعتماد</h3>
           <table>
-            <thead><tr><th>التاريخ</th><th>المندوب</th><th>المنطقة</th><th>دوكمنتيشن</th><th>دوكمنتيشن واتساب</th><th>وورد إكسبريس</th><th>إجمالي الصف</th><th>الإجراءات</th></tr></thead>
+            <thead><tr><th>التاريخ</th><th>المندوب</th><th>المنطقة</th><th>دوكمنتيشن</th><th>دوكمنتيشن واتساب</th><th>وورد إكسبريس</th><th>إجمالي الصف</th><th>الحالة</th><th>الإجراءات</th></tr></thead>
             <tbody id="pendingEntriesBody"></tbody>
           </table>
           <div id="pendingEntriesEmpty" class="empty" style="display:none;">لا يوجد طلبات بانتظار الاعتماد</div>
@@ -468,6 +505,13 @@ let currentUser = null;
 let myRole = 'reviewer'; // 'admin' أو 'reviewer' — يُقرأ من collection admins
 let AREAS = [];
 
+function noPermissionToast(){
+  const msg = myRole==='supervisor'
+    ? '🚫 أنت مشرف — تقدر بس تحدد الطلب "تمت المراجعة"، هذا الإجراء بيد الإدارة (الأدمن) فقط'
+    : '🚫 ما تملك صلاحية لهذا الإجراء — صلاحيتك عرض فقط';
+  toast(msg);
+}
+
 function toast(msg){
   const t = document.getElementById('toast');
   t.textContent = msg; t.classList.add('show');
@@ -518,10 +562,13 @@ auth.onAuthStateChanged(async user=>{
 function applyRoleRestrictions(){
   if(myRole !== 'admin'){
     // صلاحية مراجعة/مطابقة فقط — نخفي كل عناصر الإضافة والتعديل والحذف
+    const noteText = myRole==='supervisor'
+      ? 'صلاحيتك: مشرف — تقدر بس تحدد الطلبات "تمت المراجعة"، ولا تقدر تعتمد أو ترفض أو تحذف أو تعدّل أو تضيف أي شي'
+      : 'صلاحيتك: عرض ومطابقة فقط — لا تملك صلاحية الإضافة أو التعديل';
     ['addPenaltyCard','addRepCard','addAreaCard','addPayoutCard'].forEach(id=>{
       const el = document.getElementById(id);
       if(el){
-        el.innerHTML = '<div class="role-note">صلاحيتك: عرض ومطابقة فقط — لا تملك صلاحية الإضافة أو التعديل</div>';
+        el.innerHTML = `<div class="role-note">${noteText}</div>`;
       }
     });
   }
@@ -533,12 +580,22 @@ function showTab(name){
   document.getElementById('tab-'+name).classList.add('active');
   document.querySelectorAll('.navitem').forEach(b=>b.classList.remove('active'));
   event.currentTarget.classList.add('active');
+  closeMobileNav();
   if(name==='dashboard') loadDashboard();
   if(name==='diffs') loadDiffs();
   if(name==='penalties') { loadPenaltyRepSelect(); loadPenalties(); }
   if(name==='reps') loadReps();
   if(name==='areas') loadAreasTable();
   if(name==='payouts') { loadPayoutRepSelect(); loadBalances(); loadPayoutHistory(); }
+}
+
+function toggleMobileNav(){
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('navBackdrop').classList.toggle('show');
+}
+function closeMobileNav(){
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('navBackdrop').classList.remove('show');
 }
 
 /* ---------------- AREAS ---------------- */
@@ -548,7 +605,7 @@ async function loadAreas(){
 }
 
 async function saveArea(){
-  if(myRole !== 'admin'){ toast('ما تملك صلاحية'); return; }
+  if(myRole !== 'admin'){ noPermissionToast(); return; }
   const name = document.getElementById('areaName').value.trim();
   const rateDoc = parseFloat(document.getElementById('areaRateDoc').value);
   const rateWard = parseFloat(document.getElementById('areaRateWard').value);
@@ -585,7 +642,7 @@ async function loadAreasTable(){
 }
 
 async function deleteArea(id){
-  if(myRole !== 'admin'){ toast('ما تملك صلاحية'); return; }
+  if(myRole !== 'admin'){ noPermissionToast(); return; }
   if(!confirm('تأكيد حذف المنطقة؟')) return;
   await db.collection('settings').doc('areas').collection('list').doc(id).delete();
   toast('تم الحذف');
@@ -594,7 +651,7 @@ async function deleteArea(id){
 
 /* ---------------- REPS ---------------- */
 async function saveRep(){
-  if(myRole !== 'admin'){ toast('ما تملك صلاحية'); return; }
+  if(myRole !== 'admin'){ noPermissionToast(); return; }
   const name = document.getElementById('repName').value.trim();
   const phoneRaw = document.getElementById('repPhone').value.trim();
   const phone = phoneRaw.replace(/\D/g,'');
@@ -634,7 +691,7 @@ async function loadReps(){
 }
 
 async function deleteRep(id){
-  if(myRole !== 'admin'){ toast('ما تملك صلاحية'); return; }
+  if(myRole !== 'admin'){ noPermissionToast(); return; }
   if(!confirm('تأكيد حذف المندوب من النظام؟ (لن يُحذف من Authentication)')) return;
   await db.collection('reps').doc(id).delete();
   toast('تم الحذف');
@@ -691,6 +748,8 @@ async function loadDashboard(){
     pBody.innerHTML = pendingKeys.map(k=>{
       const g = pendingGroups[k];
       const idsCsv = g.docIds.join(',');
+      const st = groupStatusInfo(g.statuses);
+      const statusCell = `<span class="badge ${st.cls}">${st.text}</span>`;
       let actions = '';
       if(myRole==='admin'){
         actions = `${g.docIds.length===1 ? `<button class="ghost" style="padding:6px 10px;font-size:12px;margin-inline-end:6px;" onclick="openEditEntry('${g.docIds[0]}')">تعديل</button>` : ''}<button class="small-approve" onclick="bulkSetEntryStatus('${idsCsv}','approved')">اعتماد الكل</button><button class="small-danger" onclick="bulkSetEntryStatus('${idsCsv}','rejected')" style="margin-inline-end:6px;">رفض الكل</button><button class="small-danger" onclick="bulkDeleteEntries('${idsCsv}')">حذف</button>${subDocsActionsHtml(g, true)}`;
@@ -698,9 +757,11 @@ async function loadDashboard(){
         const stillPending = g.subDocs.some(s=>s.status==='pending');
         actions = stillPending
           ? `<button class="small-approve" onclick="bulkMarkReviewed('${idsCsv}')">تمت المراجعة (الكل)</button>${subDocsActionsHtml(g, true)}`
-          : `<span class="badge reviewed">تمت المراجعة — بانتظار اعتماد الإدارة</span>`;
+          : `<span class="page-sub" style="margin:0;">بانتظار اعتماد الإدارة</span>`;
+      } else {
+        actions = `<span class="page-sub" style="margin:0;">عرض فقط — ما تملك صلاحية التعديل</span>`;
       }
-      return buildGroupMatrixRows(g, [g.date, g.repName||'—'], [actions]);
+      return buildGroupMatrixRows(g, [g.date, g.repName||'—'], [statusCell, actions]);
     }).join('');
   }
 
@@ -824,7 +885,7 @@ function updateEditEntryTotal(){
 }
 
 async function saveEditEntry(){
-  if(myRole !== 'admin'){ toast('ما تملك صلاحية'); return; }
+  if(myRole !== 'admin'){ noPermissionToast(); return; }
   const brand = document.getElementById('editEntryBrand').value;
   const date = document.getElementById('editEntryDate').value;
   if(!date){ toast('حدد التاريخ'); return; }
@@ -848,14 +909,14 @@ async function saveEditEntry(){
 }
 
 async function setEntryStatus(id, status){
-  if(myRole !== 'admin'){ toast('ما تملك صلاحية'); return; }
+  if(myRole !== 'admin'){ noPermissionToast(); return; }
   await db.collection('dailyEntries').doc(id).update({status});
   toast(status==='approved' ? 'تم الاعتماد ✅' : 'تم الرفض');
   loadDashboard();
 }
 
 async function deleteEntry(id){
-  if(myRole !== 'admin'){ toast('ما تملك صلاحية'); return; }
+  if(myRole !== 'admin'){ noPermissionToast(); return; }
   if(!confirm('تأكيد حذف هذا الطلب نهائياً؟ لا يمكن التراجع.')) return;
   await db.collection('dailyEntries').doc(id).delete();
   toast('تم الحذف');
@@ -873,7 +934,7 @@ async function loadDiffs(){
     const e = d.data();
     const dateStr = e.createdAt && e.createdAt.toDate ? e.createdAt.toDate().toLocaleDateString('ar-SA') : '—';
     const badgeClass = e.status==='approved' ? 'approved' : (e.status==='rejected' ? 'rejected' : 'pending');
-    const badgeText = e.status==='approved' ? 'معتمد' : (e.status==='rejected' ? 'مرفوض' : 'قيد المراجعة');
+    const badgeText = e.status==='approved' ? 'تم الاعتماد' : (e.status==='rejected' ? 'مرفوض' : 'قيد المراجعة');
     const actions = (myRole==='admin' && e.status==='pending')
       ? `<button class="small-approve" onclick="setDiffStatus('${d.id}','approved')">اعتماد</button><button class="small-danger" onclick="setDiffStatus('${d.id}','rejected')" style="margin-inline-end:6px;">رفض</button>`
       : '';
@@ -889,7 +950,7 @@ async function loadDiffs(){
 }
 
 async function setDiffStatus(id, status){
-  if(myRole !== 'admin'){ toast('ما تملك صلاحية'); return; }
+  if(myRole !== 'admin'){ noPermissionToast(); return; }
   await db.collection('deliveryDiffs').doc(id).update({status});
   toast(status==='approved' ? 'تم الاعتماد ✅' : 'تم الرفض');
   loadDiffs();
@@ -897,7 +958,7 @@ async function setDiffStatus(id, status){
 }
 
 async function deleteDiff(id){
-  if(myRole !== 'admin'){ toast('ما تملك صلاحية'); return; }
+  if(myRole !== 'admin'){ noPermissionToast(); return; }
   if(!confirm('تأكيد حذف هذا الفارق نهائياً؟')) return;
   await db.collection('deliveryDiffs').doc(id).delete();
   toast('تم الحذف');
@@ -924,7 +985,7 @@ async function loadPenaltyRepSelect(){
 }
 
 async function addPenalty(){
-  if(myRole !== 'admin'){ toast('ما تملك صلاحية'); return; }
+  if(myRole !== 'admin'){ noPermissionToast(); return; }
   const repPhone = document.getElementById('penRep').value;
   const type = document.getElementById('penType').value;
   const date = document.getElementById('penDate').value || new Date().toISOString().slice(0,10);
@@ -964,7 +1025,7 @@ async function loadPenalties(){
 }
 
 async function deletePenalty(id){
-  if(myRole !== 'admin'){ toast('ما تملك صلاحية'); return; }
+  if(myRole !== 'admin'){ noPermissionToast(); return; }
   if(!confirm('تأكيد الحذف؟')) return;
   await db.collection('penalties').doc(id).delete();
   toast('تم الحذف');
@@ -1041,7 +1102,7 @@ async function loadPayoutRepSelect(){
 }
 
 async function addPayout(){
-  if(myRole !== 'admin'){ toast('ما تملك صلاحية'); return; }
+  if(myRole !== 'admin'){ noPermissionToast(); return; }
   const repPhone = document.getElementById('payoutRep').value;
   const amount = parseFloat(document.getElementById('payoutAmount').value);
   const date = document.getElementById('payoutDate').value || new Date().toISOString().slice(0,10);
@@ -1081,7 +1142,7 @@ async function loadPayoutHistory(){
 }
 
 async function deletePayout(id){
-  if(myRole !== 'admin'){ toast('ما تملك صلاحية'); return; }
+  if(myRole !== 'admin'){ noPermissionToast(); return; }
   if(!confirm('تأكيد حذف هذه الدفعة؟')) return;
   await db.collection('payouts').doc(id).delete();
   toast('تم الحذف');
@@ -1127,7 +1188,7 @@ function groupEntriesByRepDate(docs){
 function groupStatusInfo(statuses){
   if(statuses.size === 1){
     const s = [...statuses][0];
-    if(s === 'approved') return {cls:'approved', text:'معتمد'};
+    if(s === 'approved') return {cls:'approved', text:'تم الاعتماد'};
     if(s === 'rejected') return {cls:'rejected', text:'مرفوض'};
     if(s === 'reviewed') return {cls:'reviewed', text:'تمت المراجعة'};
     return {cls:'pending', text:'قيد المراجعة'};
@@ -1204,14 +1265,14 @@ function subDocsActionsHtml(g, includeStatusBtns){
 // دور "المشرف": يقدر يحوّل الطلب من "قيد المراجعة" إلى "تمت المراجعة" بس —
 // ما يقدر يعتمد ولا يرفض ولا يحذف ولا يعدّل أي شي. الاعتماد النهائي للأدمن فقط.
 async function markReviewed(id){
-  if(myRole !== 'admin' && myRole !== 'supervisor'){ toast('ما تملك صلاحية'); return; }
+  if(myRole !== 'admin' && myRole !== 'supervisor'){ noPermissionToast(); return; }
   await db.collection('dailyEntries').doc(id).update({status:'reviewed'});
   toast('تم تحديدها "تمت المراجعة" ✅ — بانتظار اعتماد الإدارة');
   loadDashboard();
 }
 
 function bulkMarkReviewed(idsCsv){
-  if(myRole !== 'admin' && myRole !== 'supervisor'){ toast('ما تملك صلاحية'); return; }
+  if(myRole !== 'admin' && myRole !== 'supervisor'){ noPermissionToast(); return; }
   const ids = idsCsv.split(',');
   const batch = db.batch();
   ids.forEach(id => batch.update(db.collection('dailyEntries').doc(id), {status:'reviewed'}));
@@ -1222,7 +1283,7 @@ function bulkMarkReviewed(idsCsv){
 }
 
 function bulkSetEntryStatus(idsCsv, status){
-  if(myRole !== 'admin'){ toast('ما تملك صلاحية'); return; }
+  if(myRole !== 'admin'){ noPermissionToast(); return; }
   const ids = idsCsv.split(',');
   const batch = db.batch();
   ids.forEach(id => batch.update(db.collection('dailyEntries').doc(id), {status}));
@@ -1233,7 +1294,7 @@ function bulkSetEntryStatus(idsCsv, status){
 }
 
 function bulkDeleteEntries(idsCsv){
-  if(myRole !== 'admin'){ toast('ما تملك صلاحية'); return; }
+  if(myRole !== 'admin'){ noPermissionToast(); return; }
   if(!confirm('تأكيد حذف كل طلبات هذا اليوم لهذا المندوب نهائياً؟')) return;
   const ids = idsCsv.split(',');
   const batch = db.batch();

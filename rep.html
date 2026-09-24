@@ -801,7 +801,7 @@ async function loadLog(){
       const e = d.data();
       if(e.status === 'approved'){ periodCount += e.totalCount; periodAmount += e.totalAmount; }
       const badgeClass = e.status==='approved' ? 'approved' : (e.status==='rejected' ? 'rejected' : (e.status==='reviewed' ? 'reviewed' : 'pending'));
-      const badgeText = e.status==='approved' ? 'معتمد' : (e.status==='rejected' ? 'مرفوض' : (e.status==='reviewed' ? 'تمت المراجعة' : 'قيد المراجعة'));
+      const badgeText = e.status==='approved' ? 'تم الاعتماد' : (e.status==='rejected' ? 'مرفوض' : (e.status==='reviewed' ? 'تمت المراجعة' : 'قيد المراجعة'));
       html += `<div class="log-item">
         <div><div class="date">${e.date}</div><div class="desc">${e.totalCount} طلب <span class="badge ${badgeClass}">${badgeText}</span></div></div>
         <div class="amt">${e.totalAmount} ر.س</div>
@@ -826,7 +826,7 @@ async function loadLog(){
     diffDocs.forEach(d=>{
       const e = d.data();
       const badgeClass = e.status === 'approved' ? 'approved' : 'pending';
-      const badgeText = e.status === 'approved' ? 'معتمد' : 'قيد المراجعة';
+      const badgeText = e.status === 'approved' ? 'تم الاعتماد' : 'قيد المراجعة';
       html += `<div class="log-item">
         <div><div class="date">طلب #${e.orderNo} — ${e.registeredAreaName || '—'} ← ${e.areaName}</div>
           <div class="desc">${e.amount} ر.س <span class="badge ${badgeClass}">${badgeText}</span></div>
