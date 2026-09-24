@@ -610,7 +610,7 @@ auth.onAuthStateChanged(async user=>{
       applyRoleRestrictions();
       showScreen('mainScreen');
       await loadAreas();
-      loadDashboard();
+      attachRealtimeListeners();
     } else {
       showScreen('deniedScreen');
     }
@@ -760,6 +760,25 @@ async function deleteRep(id){
 
 /* ---------------- DASHBOARD ---------------- */
 const brandLabel = {both:'الكل', documentation:'دوكمنتيشن', ward:'وورد إكسبريس'};
+
+/* ---------------- REAL-TIME UPDATES ---------------- */
+// بدل ما نقرأ البيانات مرة وحدة، نستمع للتغييرات المباشرة على dailyEntries
+// وdeliveryDiffs — أي طلب يدخله أي مندوب يحدّث لوحتك فوراً بدون ما تحتاج Refresh.
+let realtimeListenersAttached = false;
+function attachRealtimeListeners(){
+  if(realtimeListenersAttached) return;
+  realtimeListenersAttached = true;
+
+  db.collection('dailyEntries').onSnapshot(()=>{
+    loadDashboard();
+    if(document.getElementById('tab-reports').classList.contains('active')) { /* التقارير تحتاج فترة محددة، ما نحدثها تلقائي */ }
+  }, err=>{ /* صمت — لو صار خطأ اتصال مؤقت ما نزعج المستخدم */ });
+
+  db.collection('deliveryDiffs').onSnapshot(()=>{
+    loadDashboard();
+    if(document.getElementById('tab-diffs').classList.contains('active')) loadDiffs();
+  }, err=>{});
+}
 
 async function loadRepOrderCounts(){
   const snap = await db.collection('dailyEntries').where('status','==','approved').get();
