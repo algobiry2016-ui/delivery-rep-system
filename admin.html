@@ -162,7 +162,7 @@
       box-shadow:-4px 0 20px rgba(0,0,0,.2);
       overflow-y:auto;
     }
-    .sidebar.open{display:flex;}
+    .sidebar.open{display:flex;flex-direction:column;}
 
     .main{padding:14px;}
     .tiles{grid-template-columns:1fr 1fr;}
@@ -218,6 +218,7 @@
       <button class="navitem" onclick="showTab('areas')">📍 المناطق والأسعار</button>
       <button class="navitem" onclick="showTab('reports')">📄 التقارير</button>
       <button class="navitem" onclick="showTab('payouts')">💰 المستحقات والدفعات</button>
+      <button class="navitem" onclick="openChangePasswordModal()">🔑 تغيير كلمة المرور</button>
       <button class="logout" onclick="doLogout()">تسجيل الخروج</button>
     </div>
 
@@ -227,6 +228,16 @@
       <div id="tab-dashboard" class="tab-panel active">
         <h1>نظرة عامة</h1>
         <p class="page-sub">آخر الطلبات المدخلة من كل المناديب</p>
+
+        <div class="card">
+          <h3>إجمالي الطلبات لكل مندوب (كل الوقت)</h3>
+          <p class="page-sub" style="margin-top:-8px;">اضغط على اسم المندوب لتشوف تفاصيله يوم بيوم</p>
+          <table>
+            <thead><tr><th>المندوب</th><th>عدد الطلبات</th></tr></thead>
+            <tbody id="repCountsBody"></tbody>
+          </table>
+        </div>
+
         <div class="tiles">
           <div class="tile"><div class="num" id="dashToday">0</div><div class="lbl">طلبات اليوم (معتمدة)</div></div>
           <div class="tile"><div class="num" id="dashTodayAmt">0</div><div class="lbl">مستحقات اليوم (ر.س)</div></div>
@@ -429,6 +440,27 @@
   </div>
 </div>
 
+<div class="modal-bg" id="repDetailBg" onclick="closeRepDetail(event)">
+  <div class="modal" style="max-width:480px;">
+    <button class="modal-close" onclick="closeRepDetail(event)">×</button>
+    <h3>تفاصيل — <span id="repDetailName"></span></h3>
+    <table>
+      <thead><tr><th>التاريخ</th><th>عدد الطلبات</th><th>المبلغ</th></tr></thead>
+      <tbody id="repDetailBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="modal-bg" id="changePasswordBg" onclick="closeChangePasswordModal(event)">
+  <div class="modal" style="max-width:380px;">
+    <button class="modal-close" onclick="closeChangePasswordModal(event)">×</button>
+    <h3>تغيير كلمة المرور</h3>
+    <div class="field"><label>كلمة المرور الحالية</label><input type="password" id="myCurPass" style="width:100%;"></div>
+    <div class="field" style="margin-top:10px;"><label>كلمة المرور الجديدة</label><input type="password" id="myNewPass" style="width:100%;"></div>
+    <button class="primary" style="width:100%;margin-top:16px;" onclick="changeMyPassword()">حفظ</button>
+  </div>
+</div>
+
 <div class="modal-bg" id="imgModalBg" onclick="closeImgModal(event)">
   <div class="modal">
     <button class="modal-close" onclick="closeImgModal(event)">×</button>
@@ -504,6 +536,34 @@ const db = firebase.firestore();
 let currentUser = null;
 let myRole = 'reviewer'; // 'admin' أو 'reviewer' — يُقرأ من collection admins
 let AREAS = [];
+
+/* ---------------- CHANGE MY PASSWORD (admin/supervisor/reviewer) ---------------- */
+function openChangePasswordModal(){
+  closeMobileNav();
+  document.getElementById('myCurPass').value = '';
+  document.getElementById('myNewPass').value = '';
+  document.getElementById('changePasswordBg').classList.add('show');
+}
+function closeChangePasswordModal(e){
+  if(e.target.id === 'changePasswordBg' || e.target.classList.contains('modal-close')){
+    document.getElementById('changePasswordBg').classList.remove('show');
+  }
+}
+async function changeMyPassword(){
+  const cur = document.getElementById('myCurPass').value;
+  const next = document.getElementById('myNewPass').value;
+  if(!cur || !next){ toast('عبّي الحقلين'); return; }
+  if(next.length < 6){ toast('كلمة المرور يجب ألا تقل عن 6 أحرف'); return; }
+  try{
+    const cred = firebase.auth.EmailAuthProvider.credential(currentUser.email, cur);
+    await currentUser.reauthenticateWithCredential(cred);
+    await currentUser.updatePassword(next);
+    toast('تم تغيير كلمة المرور ✅');
+    document.getElementById('changePasswordBg').classList.remove('show');
+  }catch(e){
+    toast('كلمة المرور الحالية غير صحيحة');
+  }
+}
 
 function noPermissionToast(){
   const msg = myRole==='supervisor'
@@ -701,7 +761,56 @@ async function deleteRep(id){
 /* ---------------- DASHBOARD ---------------- */
 const brandLabel = {both:'الكل', documentation:'دوكمنتيشن', ward:'وورد إكسبريس'};
 
+async function loadRepOrderCounts(){
+  const snap = await db.collection('dailyEntries').where('status','==','approved').get();
+  const counts = {}; // repUid -> {name, count}
+  snap.forEach(d=>{
+    const e = d.data();
+    if(!counts[e.repUid]) counts[e.repUid] = {name: e.repName || e.repUid, count: 0};
+    counts[e.repUid].count += e.totalCount;
+  });
+  const body = document.getElementById('repCountsBody');
+  const uids = Object.keys(counts).sort((a,b)=> counts[b].count - counts[a].count);
+  body.innerHTML = uids.length
+    ? uids.map(uid=>`<tr style="cursor:pointer;" onclick="viewRepDetail('${uid}','${counts[uid].name}')"><td><span style="color:var(--rose-dark);text-decoration:underline;">${counts[uid].name}</span></td><td><b>${counts[uid].count}</b></td></tr>`).join('')
+    : '<tr><td colspan="2" style="text-align:center;color:var(--ink-soft);">لا يوجد بيانات معتمدة بعد</td></tr>';
+}
+
+async function viewRepDetail(repUid, repName){
+  document.getElementById('repDetailName').textContent = repName;
+  document.getElementById('repDetailBody').innerHTML = '<tr><td colspan="3">جاري التحميل...</td></tr>';
+  document.getElementById('repDetailBg').classList.add('show');
+
+  const snap = await db.collection('dailyEntries').where('repUid','==',repUid).where('status','==','approved').get();
+  const byDate = {}; // date -> {count, amount}
+  snap.forEach(d=>{
+    const e = d.data();
+    if(!byDate[e.date]) byDate[e.date] = {count:0, amount:0};
+    byDate[e.date].count += e.totalCount;
+    byDate[e.date].amount += e.totalAmount;
+  });
+
+  const dates = Object.keys(byDate).sort((a,b)=> b.localeCompare(a));
+  const body = document.getElementById('repDetailBody');
+  if(dates.length === 0){
+    body.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--ink-soft);">لا يوجد طلبات معتمدة لهذا المندوب</td></tr>';
+  } else {
+    let totalCount=0, totalAmount=0;
+    body.innerHTML = dates.map(dt=>{
+      totalCount += byDate[dt].count; totalAmount += byDate[dt].amount;
+      return `<tr><td>${dt}</td><td>${byDate[dt].count}</td><td>${byDate[dt].amount} ر.س</td></tr>`;
+    }).join('') + `<tr class="entry-total-row"><td>الإجمالي</td><td><b>${totalCount}</b></td><td><b>${totalAmount} ر.س</b></td></tr>`;
+  }
+}
+
+function closeRepDetail(e){
+  if(e.target.id === 'repDetailBg' || e.target.classList.contains('modal-close')){
+    document.getElementById('repDetailBg').classList.remove('show');
+  }
+}
+
 async function loadDashboard(){
+  loadRepOrderCounts();
   const today = new Date().toISOString().slice(0,10);
   const todaySnap = await db.collection('dailyEntries').where('date','==',today).get();
   let count=0, amount=0;
