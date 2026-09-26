@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>تسليم الطلبات للمناديب — نظام مناديب التوصيل</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --rose:#000000; --rose-dark:#262626;
+    --cream:#F7F3EE; --card:#FFFFFF;
+    --ink:#2B2420; --ink-soft:#6B615A;
+    --gold:#B8935F;
+    --green:#4C7A5C; --green-bg:#EAF2EC;
+    --amber:#A9762F; --amber-bg:#FBF1E2;
+    --red:#B23A3A; --red-bg:#FBEAEA;
+    --line:#E8E0D8;
+    --radius:12px;
+    --t-doc:#262626; --t-ward:#B8935F; --t-wa:#4C7A5C;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:'Tajawal',sans-serif;background:var(--cream);color:var(--ink);}
+  .screen{display:none;} .screen.active{display:block;}
+
+  /* Login */
+  .login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}
+  .login-card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:28px;width:100%;max-width:380px;}
+  .login-card h2{margin:0 0 4px;font-size:20px;}
+  .login-card p{margin:0 0 20px;color:var(--ink-soft);font-size:13px;}
+  .err{background:var(--red-bg);color:var(--red);padding:10px;border-radius:8px;font-size:13px;margin-bottom:12px;display:none;}
+
+  /* Top bar */
+  .topbar{background:var(--rose);color:#fff;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:20;}
+  .topbar .t{font-weight:900;font-size:16px;}
+  .topbar .s{font-size:11px;opacity:.75;}
+  .topbar button{background:rgba(255,255,255,.14);border:none;color:#fff;padding:8px 12px;border-radius:8px;font-family:inherit;font-size:12px;cursor:pointer;}
+  .tabs{display:flex;gap:6px;padding:10px 14px;background:#fff;border-bottom:1px solid var(--line);overflow-x:auto;position:sticky;top:56px;z-index:19;}
+  .tab{background:none;border:1.5px solid var(--line);padding:8px 14px;border-radius:20px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap;color:var(--ink);}
+  .tab.active{background:var(--rose);color:#fff;border-color:var(--rose);}
+  .main{padding:16px;max-width:1100px;margin:0 auto;}
+  .pane{display:none;} .pane.active{display:block;}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:16px;}
+  .card h3{margin:0 0 12px;font-size:15px;}
+  .scroll{overflow-x:auto;}
+  .field{display:flex;flex-direction:column;gap:4px;margin-bottom:10px;}
+  .field label{font-size:12px;font-weight:700;color:var(--ink-soft);}
+  input,select,textarea{padding:10px 12px;border:1.5px solid var(--line);border-radius:8px;font-family:inherit;font-size:15px;background:#fff;color:var(--ink);width:100%;}
+  input:focus,select:focus{outline:none;border-color:var(--rose);}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  button.primary{background:var(--rose);color:#fff;border:none;padding:12px 18px;border-radius:8px;font-family:inherit;font-size:15px;font-weight:700;cursor:pointer;}
+  button.primary:disabled{background:#C9BDB6;cursor:not-allowed;}
+  button.ghost{background:none;border:1.5px solid var(--line);color:var(--ink);padding:8px 14px;border-radius:8px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;}
+  button.green{background:var(--green);color:#fff;border:none;padding:10px 14px;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;}
+  button.danger{background:var(--red-bg);color:var(--red);border:none;padding:6px 10px;border-radius:6px;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;}
+  button.mini{background:var(--cream);border:1px solid var(--line);padding:6px 10px;border-radius:6px;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;}
+  .w100{width:100%;}
+
+  /* Order rows */
+  .orow{border:1.5px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px;position:relative;background:#FCFAF7;}
+  .orow .num{position:absolute;top:-10px;right:12px;background:var(--rose);color:#fff;font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;}
+  .orow .rm{position:absolute;top:8px;left:8px;}
+  .seg{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px;}
+  .seg button{padding:10px 4px;border:1.5px solid var(--line);background:#fff;border-radius:8px;font-family:inherit;font-weight:700;font-size:14px;cursor:pointer;color:var(--ink);}
+  .seg button.on[data-t="doc"]{background:var(--t-doc);color:#fff;border-color:var(--t-doc);}
+  .seg button.on[data-t="ward"]{background:var(--t-ward);color:#fff;border-color:var(--t-ward);}
+  .seg button.on[data-t="wa"]{background:var(--t-wa);color:#fff;border-color:var(--t-wa);}
+
+  .badge{display:inline-block;padding:2px 9px;border-radius:10px;font-size:11.5px;font-weight:700;color:#fff;}
+  .b-doc{background:var(--t-doc);} .b-ward{background:var(--t-ward);} .b-wa{background:var(--t-wa);}
+  .pill{display:inline-block;padding:3px 10px;border-radius:10px;font-size:12px;font-weight:700;}
+  .p-wait{background:var(--amber-bg);color:var(--amber);} .p-out{background:var(--green-bg);color:var(--green);}
+
+  table{width:100%;border-collapse:collapse;font-size:13.5px;min-width:520px;}
+  th{text-align:right;padding:8px;color:var(--ink-soft);font-weight:700;border-bottom:2px solid var(--line);font-size:12.5px;white-space:nowrap;}
+  td{padding:9px 8px;border-bottom:1px solid var(--line);}
+  tr:last-child td{border-bottom:none;}
+  tfoot td{font-weight:900;border-top:2px solid var(--line);}
+
+  .batch-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;margin-bottom:10px;}
+  .batch-head .rep{font-weight:900;font-size:16px;}
+  .batch-head .meta{font-size:12.5px;color:var(--ink-soft);margin-top:3px;}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px;}
+  .stat{background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px;}
+  .stat .v{font-size:24px;font-weight:900;}
+  .stat .l{font-size:12px;color:var(--ink-soft);}
+  .muted{color:var(--ink-soft);font-size:13px;}
+  .note{background:var(--amber-bg);color:var(--amber);padding:10px 12px;border-radius:8px;font-size:13px;margin-bottom:12px;}
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-bottom:14px;}
+  .toolbar .field{margin:0;min-width:140px;}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;}
+  .chip{background:var(--cream);border:1px solid var(--line);padding:6px 10px;border-radius:16px;font-size:13px;font-weight:700;display:flex;gap:8px;align-items:center;}
+  .chip button{background:none;border:none;color:var(--red);cursor:pointer;font-size:14px;padding:0;}
+
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--rose);color:#fff;padding:12px 20px;border-radius:10px;font-size:14px;z-index:100;display:none;max-width:90%;}
+  .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:50;padding:16px;}
+  .modal-bg.show{display:flex;}
+  .modal{background:#fff;border-radius:14px;padding:20px;width:100%;max-width:420px;max-height:90vh;overflow-y:auto;}
+  .diffbox{background:var(--amber-bg);border-radius:8px;padding:10px;margin-top:10px;display:none;}
+  .diffbox.show{display:block;}
+  .chk{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:700;margin-top:10px;cursor:pointer;}
+  .chk input{width:18px;height:18px;margin:0;}
+  .diff-tag{display:inline-block;background:var(--amber-bg);color:var(--amber);font-size:11.5px;font-weight:700;padding:2px 8px;border-radius:8px;margin-top:3px;}
+  .new-tag{display:inline-block;background:var(--amber-bg);color:var(--amber);font-size:11px;font-weight:700;padding:1px 7px;border-radius:8px;margin-inline-start:6px;}
+  .searchbox{display:flex;gap:8px;margin-bottom:14px;}
+  .ready-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px;}
+  .rcard{display:flex;gap:10px;align-items:center;border:1.5px solid var(--line);border-radius:10px;padding:8px;cursor:pointer;background:#fff;}
+  .rcard.sel{border-color:var(--rose);background:#F2EEE9;box-shadow:inset 0 0 0 1px var(--rose);}
+  .rcard input{width:20px;height:20px;margin:0;flex-shrink:0;}
+  .rcard .no{font-weight:900;font-size:15px;direction:ltr;unicode-bidi:isolate;}
+  .rcard .m{font-size:12px;color:var(--ink-soft);}
+  .rthumb{width:46px;height:46px;border-radius:8px;object-fit:cover;flex-shrink:0;border:1px solid var(--line);}
+  .rph{width:46px;height:46px;border-radius:8px;background:var(--cream);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .orow.from-prep{background:#F4F8F5;border-color:#CFE0D4;}
+  .src{font-size:11.5px;font-weight:700;color:var(--green);margin-bottom:8px;display:flex;gap:8px;align-items:center;}
+  .src img{width:34px;height:34px;border-radius:6px;object-fit:cover;}
+  .manual-tag{display:inline-block;background:var(--red-bg);color:var(--red);font-size:11px;font-weight:700;padding:1px 7px;border-radius:8px;}
+  .late{color:var(--red);font-weight:700;}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="loginScreen" class="screen">
+  <div class="login-wrap"><div class="login-card">
+    <h2>تسليم الطلبات للمناديب</h2>
+    <p>دخول مشرف الإنتاج — برقم الجوال (أو بريد الإدارة)</p>
+    <div id="loginError" class="err"></div>
+    <div class="field"><label>رقم الجوال أو البريد</label><input id="loginId" inputmode="tel" autocomplete="username"></div>
+    <div class="field"><label>كلمة المرور</label><input id="loginPass" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <button class="primary w100" onclick="doLogin()">دخول</button>
+  </div></div>
+</div>
+
+<!-- DENIED -->
+<div id="deniedScreen" class="screen">
+  <div class="login-wrap"><div class="login-card">
+    <h2>ما عندك صلاحية</h2>
+    <p>حسابك مو مضاف كمشرف إنتاج. تواصل مع الإدارة.</p>
+    <button class="ghost w100" onclick="doLogout()">تسجيل خروج</button>
+  </div></div>
+</div>
+
+<!-- MAIN -->
+<div id="mainScreen" class="screen">
+  <div class="topbar">
+    <div><div class="t">تسليم الطلبات للمناديب</div><div class="s" id="whoami"></div></div>
+    <button onclick="doLogout()">خروج</button>
+  </div>
+  <div class="tabs">
+    <button class="tab active" data-pane="new" onclick="showPane('new')">تسليم جديد</button>
+    <button class="tab" data-pane="day" onclick="showPane('day')">سجل اليوم</button>
+    <button class="tab" data-pane="reports" onclick="showPane('reports')">التقارير</button>
+    <button class="tab" data-pane="lists" onclick="showPane('lists')">المناديب والمناطق</button>
+  </div>
+
+  <div class="main">
+    <div id="readOnlyNote" class="note" style="display:none">صلاحيتك عرض فقط — تقدر تشوف السجل والتقارير بدون إضافة أو تعديل.</div>
+
+    <!-- NEW HANDOVER -->
+    <div id="pane-new" class="pane active">
+      <div class="card">
+        <h3>1) المندوب</h3>
+        <div class="field"><select id="repSelect" onchange="onRepSelect(this)"></select></div>
+        <div class="muted">وقت التسليم ينسجل تلقائياً لحظة الحفظ.</div>
+      </div>
+      <div class="card" id="readyCard">
+        <h3>2) الطلبات الجاهزة من المنسقين <span class="count-pill" id="readyCountPill"></span></h3>
+        <div class="muted" style="margin-bottom:10px">أشّر على الطلبات اللي بتسلّمها للمندوب — تنضاف تحت تلقائياً.</div>
+        <div id="readyList" class="ready-list"></div>
+      </div>
+      <div class="card">
+        <h3 id="ordersTitle">3) الطلبات في هذا التسليم</h3>
+        <div id="orderRows"></div>
+        <button class="ghost w100" id="addRowBtn" onclick="addRow()">+ طلب يدوي (ما سجّله المنسق)</button>
+      </div>
+      <button id="saveBtn" class="primary w100" onclick="saveHandover()">حفظ التسليم</button>
+      <div style="height:30px"></div>
+    </div>
+
+    <!-- DAY LOG -->
+    <div id="pane-day" class="pane">
+      <div class="searchbox">
+         <input id="searchNo" placeholder="ابحث برقم الطلب (كل التواريخ)" onkeydown="if(event.key==='Enter')searchOrder()">
+        <button class="primary" onclick="searchOrder()">بحث</button>
+      </div>
+      <div id="searchOut"></div>
+      <div class="toolbar">
+        <div class="field"><label>التاريخ</label><input type="date" id="dayDate" onchange="loadDay()"></div>
+        <button class="ghost" onclick="loadDay()">تحديث</button>
+      </div>
+      <div class="card" id="prepMonitor"></div>
+      <div class="stats" id="dayStats"></div>
+      <div id="dayBatches"></div>
+    </div>
+
+    <!-- REPORTS -->
+    <div id="pane-reports" class="pane">
+      <div class="toolbar">
+        <div class="field"><label>من</label><input type="date" id="repFrom"></div>
+        <div class="field"><label>إلى</label><input type="date" id="repTo"></div>
+        <button class="primary" onclick="loadReports()">عرض</button>
+      </div>
+      <div class="toolbar" style="margin-top:-6px">
+        <button class="mini" onclick="quickRange('today')">اليوم</button>
+        <button class="mini" onclick="quickRange('yesterday')">أمس</button>
+        <button class="mini" onclick="quickRange('week')">آخر ٧ أيام</button>
+        <button class="mini" onclick="quickRange('month')">هذا الشهر</button>
+        <button class="mini" onclick="quickRange('lastMonth')">الشهر الماضي</button>
+        <button class="ghost" onclick="exportCSV()">تصدير Excel (CSV)</button>
+      </div>
+      <div id="reportOut"><div class="muted">اختر الفترة واضغط عرض.</div></div>
+    </div>
+
+    <!-- LISTS -->
+    <div id="pane-lists" class="pane">
+      <div class="card">
+        <h3>المناديب</h3>
+        <div class="scroll"><table><thead><tr><th>الاسم</th><th>الجوال</th><th>البراند</th></tr></thead><tbody id="repsBody"></tbody></table></div>
+        <button class="ghost w100 wbtn" style="margin-top:12px" onclick="openRepModal()">+ إضافة مندوب</button>
+      </div>
+      <div class="card">
+        <h3>المناطق وأسعار التوصيل</h3>
+        <div class="scroll"><table><thead><tr><th>المنطقة</th><th>دوكمنتيشن / واتس</th><th>ورد إكسبرس</th></tr></thead><tbody id="areasBody"></tbody></table></div>
+        <button class="ghost w100 wbtn" style="margin-top:12px" onclick="openAreaModal()">+ إضافة منطقة</button>
+      </div>
+      <div class="card">
+        <h3>قائمة المنسقين</h3>
+        <div class="muted" style="margin-bottom:12px">هذي الأسماء اللي تظهر في خانة "المنسق" عند التسليم.</div>
+        <div class="chips" id="floristChips"></div>
+        <div id="addFloristBox" style="display:flex;gap:8px;margin-top:14px">
+          <input id="newFlorist" placeholder="اسم منسق جديد">
+          <button class="primary" onclick="addFlorist()">إضافة</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- EDIT MODAL -->
+<div class="modal-bg" id="editModal">
+  <div class="modal">
+    <h3 style="margin-top:0">تعديل الطلب <span id="editOrderNo"></span></h3>
+    <div class="field"><label>المنسق</label><select id="editFlorist"></select></div>
+    <div class="field"><label>المنطقة</label><select id="editArea"></select></div>
+    <div class="field"><label>النوع</label>
+      <div class="seg" id="editSeg">
+        <button data-t="doc" onclick="pickEditType('doc')">دوكمنتيشن</button>
+        <button data-t="ward" onclick="pickEditType('ward')">ورد إكسبرس</button>
+        <button data-t="wa" onclick="pickEditType('wa')">واتس</button>
+      </div>
+    </div>
+    <div class="field"><label>ملاحظات</label><input id="editNotes"></div>
+    <div style="display:flex;gap:8px">
+      <button class="primary" style="flex:1" onclick="saveEdit()">حفظ</button>
+      <button class="ghost" onclick="closeEdit()">إلغاء</button>
+    </div>
+  </div>
+</div>
+
+<!-- REP MODAL -->
+<div class="modal-bg" id="repModal">
+  <div class="modal">
+    <h3 style="margin-top:0">إضافة مندوب</h3>
+    <div class="field"><label>الاسم</label><input id="newRepName"></div>
+    <div class="field"><label>الجوال</label><input id="newRepPhone" inputmode="tel" placeholder="05xxxxxxxx"></div>
+    <div class="field"><label>البراند</label>
+      <select id="newRepBrand"><option value="both">الكل (دوكمنتيشن + ورد إكسبرس)</option><option value="documentation">دوكمنتيشن فقط</option><option value="ward">ورد إكسبرس فقط</option></select></div>
+    <div class="muted" style="margin-bottom:12px">يقدر تسلّمه طلبات فوراً. أما دخوله لتطبيق المناديب فيحتاج الإدارة تفعّل حسابه.</div>
+    <div style="display:flex;gap:8px"><button class="primary" style="flex:1" onclick="saveRep()">حفظ</button><button class="ghost" onclick="closeModal('repModal')">إلغاء</button></div>
+  </div>
+</div>
+
+<!-- AREA MODAL -->
+<div class="modal-bg" id="areaModal">
+  <div class="modal">
+    <h3 style="margin-top:0">إضافة منطقة</h3>
+    <div class="field"><label>اسم المنطقة</label><input id="newAreaName"></div>
+    <div class="muted" style="margin-bottom:12px">تقدر تسلّم عليها طلبات مباشرة. سعر التوصيل تحطه الإدارة، وإلى ما ينحط تظهر المنطقة "بانتظار السعر".</div>
+    <div style="display:flex;gap:8px"><button class="primary" style="flex:1" onclick="saveArea()">حفظ</button><button class="ghost" onclick="closeModal('areaModal')">إلغاء</button></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyAIKJSzGuRIYeCAnxq2M-qAxOcoed5XiOo",
+  authDomain: "dmflower-delivery-reps.firebaseapp.com",
+  projectId: "dmflower-delivery-reps",
+  storageBucket: "dmflower-delivery-reps.firebasestorage.app",
+  messagingSenderId: "220060385556",
+  appId: "1:220060385556:web:c32e212be0cf32b6cc8201"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+const TS = firebase.firestore.FieldValue.serverTimestamp;
+
+/* نوع الطلب ← البراند والمصدر (نفس القيم المستخدمة في dailyEntries بنظام المناديب) */
+const TYPES = {
+  doc:  {label:'دوكمنتيشن',  full:'دوكمنتيشن (الموقع)', brand:'documentation', source:'site'},
+  ward: {label:'ورد إكسبرس', full:'ورد إكسبرس',          brand:'ward',          source:'site'},
+  wa:   {label:'واتس',       full:'واتس دوكمنتيشن',      brand:'documentation', source:'whatsapp'}
+};
+const AMMAR_DISCOUNT = 5;
+// ربط شاشة المنسقين (florist.html): مطفي حالياً — الدورة تبدأ من مشرف الإنتاج.
+// لما نفعّل المنسقين نغيرها إلى true وكل شي يشتغل بدون تعديل ثاني.
+const FLORIST_FLOW = false;
+const DEFAULT_FLORISTS = ['حسن','طارق','سيام','نور','مؤمن','جيلي'];
+
+let currentUser = null, myName = '', canWrite = false, isFullAdmin = false;
+let REPS = [], AREAS = [], FLORISTS = [];
+let lastReportRows = [];
+
+/* ---------------- HELPERS ---------------- */
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.style.display='block'; clearTimeout(t._h); t._h=setTimeout(()=>t.style.display='none',3200); }
+function esc(s){ return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function localDate(d=new Date()){ return d.toLocaleDateString('en-CA',{timeZone:'Asia/Riyadh'}); }
+function fmtTime(ts){ if(!ts||!ts.toDate) return '—'; return ts.toDate().toLocaleTimeString('ar-SA',{hour:'numeric',minute:'2-digit',timeZone:'Asia/Riyadh'}); }
+function minsBetween(a,b){ if(!a||!b||!a.toDate||!b.toDate) return null; return Math.round((b.toDate()-a.toDate())/60000); }
+function typeBadge(t){ return `<span class="badge b-${t}">${TYPES[t]?.label||t}</span>`; }
+function rateFor(area, type, rep){
+  if(!area) return 0;
+  const base = TYPES[type].brand==='ward' ? (area.rateWard||0) : (area.rateDoc||0);
+  return rep && rep.isAmmar ? Math.max(0, base-AMMAR_DISCOUNT) : base;
+}
+
+/* ---------------- AUTH ---------------- */
+function idToEmail(id){
+  id = id.trim();
+  if(id.includes('@')) return id;                       // حساب إدارة بالبريد
+  return id.replace(/\D/g,'') + '@dispatch.dmflower1.local'; // مشرف الإنتاج بالجوال
+}
+function doLogin(){
+  const id=document.getElementById('loginId').value, pass=document.getElementById('loginPass').value;
+  const err=document.getElementById('loginError'); err.style.display='none';
+  if(!id||!pass){ err.textContent='عبّي الجوال وكلمة المرور'; err.style.display='block'; return; }
+  auth.signInWithEmailAndPassword(idToEmail(id), pass).catch(()=>{
+    err.textContent='بيانات الدخول غير صحيحة'; err.style.display='block';
+  });
+}
+function doLogout(){ auth.signOut(); }
+function showScreen(id){ ['loginScreen','deniedScreen','mainScreen'].forEach(s=>document.getElementById(s).classList.toggle('active',s===id)); }
+
+// الصلاحيات: مشرف الإنتاج (dispatchers/{uid} active) أو أدمن كامل = إضافة وتعديل.
+// باقي أدوار الإدارة (مشرف/مراجع) = ما لهم دخول. إضافة الحسابات تتم يدوياً من لوحة Firebase.
+auth.onAuthStateChanged(async user=>{
+  if(!user){ showScreen('loginScreen'); return; }
+  currentUser = user;
+  try{
+    const [dSnap, aSnap] = await Promise.all([
+      db.collection('dispatchers').doc(user.uid).get().catch(()=>null),
+      db.collection('admins').doc(user.uid).get().catch(()=>null)
+    ]);
+    const isDispatcher = dSnap && dSnap.exists && dSnap.data().active !== false;
+    const adminRole = aSnap && aSnap.exists ? (aSnap.data().role||'reviewer') : null;
+    // خاصة بمشرف الإنتاج والأدمن الكامل فقط — المشرف والمراجع ما لهم دخول
+    if(!isDispatcher && adminRole!=='admin'){ showScreen('deniedScreen'); return; }
+    isFullAdmin = adminRole === 'admin';
+    canWrite = isDispatcher || isFullAdmin;
+    myName = isDispatcher ? (dSnap.data().name||'مشرف الإنتاج') : (aSnap.data().name||user.email);
+    document.getElementById('whoami').textContent = myName + (canWrite ? '' : ' — عرض فقط');
+    document.getElementById('readOnlyNote').style.display = canWrite ? 'none' : 'block';
+    if(!canWrite){
+      document.querySelector('[data-pane="new"]').style.display='none';
+      document.getElementById('addFloristBox').style.display='none';
+      document.querySelectorAll('.wbtn').forEach(b=>b.style.display='none');
+    }
+    // لما تنفتح داخل لوحة الإدارة: نخفي الشريط العلوي وزر الخروج (الخروج يكون من لوحة الإدارة نفسها)
+    if(window.self!==window.top){ document.querySelector('.topbar').style.display='none'; document.querySelector('.tabs').style.top='0'; }
+    showScreen('mainScreen');
+    await Promise.all([loadReps(), loadAreas(), loadFlorists()]);
+    const today = localDate();
+    document.getElementById('dayDate').value = today;
+    document.getElementById('repFrom').value = today.slice(0,8)+'01';
+    document.getElementById('repTo').value = today;
+    if(FLORIST_FLOW){ listenPrep(); }
+    else{
+      document.getElementById('readyCard').style.display='none';
+      document.getElementById('prepMonitor').style.display='none';
+      document.getElementById('ordersTitle').textContent='2) الطلبات';
+      document.getElementById('addRowBtn').textContent='+ طلب ثاني';
+    }
+    if(canWrite){ resetForm(); showPane('new'); } else { showPane('day'); }
+  }catch(e){ console.error(e); toast('صار خطأ بالتحميل — تأكد من الصلاحيات'); }
+});
+
+function showPane(p){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.pane===p));
+  document.querySelectorAll('.pane').forEach(x=>x.classList.toggle('active',x.id==='pane-'+p));
+  if(p==='day') loadDay();
+  if(p==='lists'){ renderFlorists(); renderLists(); }
+}
+
+/* ---------------- LOOKUPS ---------------- */
+async function loadReps(){
+  const snap = await db.collection('reps').get();
+  REPS = snap.docs.map(d=>({id:d.id,...d.data()})).filter(r=>r.active!==false)
+    .sort((a,b)=>(a.name||'').localeCompare(b.name||'','ar'));
+  const sel = document.getElementById('repSelect'), cur = sel.value;
+  sel.innerHTML = '<option value="">اختر المندوب...</option>' +
+    REPS.map(r=>`<option value="${esc(r.id)}">${esc(r.name)}</option>`).join('') +
+    (canWrite ? '<option value="__new">+ مندوب جديد...</option>' : '');
+  if(cur && cur!=='__new') sel.value = cur;
+}
+async function loadAreas(){
+  const snap = await db.collection('settings').doc('areas').collection('list').orderBy('order').get();
+  AREAS = snap.docs.map(d=>({id:d.id,...d.data()}));
+}
+async function loadFlorists(){
+  await loadFloristList();
+  try{ // أسماء حسابات المنسقين تنضاف للقائمة تلقائياً
+    const acc = await db.collection('floristAccounts').get();
+    acc.docs.forEach(d=>{ const n=d.data().name; if(n && !FLORISTS.includes(n)) FLORISTS.push(n); });
+  }catch(e){}
+}
+async function loadFloristList(){
+  const ref = db.collection('settings').doc('florists');
+  const snap = await ref.get();
+  if(snap.exists && Array.isArray(snap.data().names)){ FLORISTS = snap.data().names; }
+  else{
+    FLORISTS = [...DEFAULT_FLORISTS];
+    if(canWrite){ try{ await ref.set({names:FLORISTS}); }catch(e){} }
+  }
+}
+function areaOptions(sel, ph='المنطقة...'){ return `<option value="">${ph}</option>`+AREAS.map(a=>`<option value="${esc(a.id)}" ${a.id===sel?'selected':''}>${esc(a.name)}</option>`).join('')+(canWrite?'<option value="__new">+ منطقة جديدة...</option>':''); }
+function refreshAreaSelects(){
+  document.querySelectorAll('.o-area').forEach(s=>{ const v=s.value; s.innerHTML=areaOptions(v==='__new'?'':v); });
+}
+
+/* ---------------- QUICK ADD: REP / AREA ---------------- */
+let pendingAreaSelect = null;
+function closeModal(id){ document.getElementById(id).classList.remove('show'); }
+function onRepSelect(s){ if(s.value==='__new'){ s.value=''; openRepModal(); } }
+function onAreaSelect(s){
+  if(s.value==='__new'){ s.value=''; pendingAreaSelect=s; openAreaModal(); return; }
+}
+function openRepModal(){ ['newRepName','newRepPhone'].forEach(i=>document.getElementById(i).value=''); document.getElementById('newRepBrand').value='both'; document.getElementById('repModal').classList.add('show'); }
+function openAreaModal(){ ['newAreaName'].forEach(i=>document.getElementById(i).value=''); document.getElementById('areaModal').classList.add('show'); }
+async function saveRep(){
+  const name=document.getElementById('newRepName').value.trim();
+  const phone=document.getElementById('newRepPhone').value.replace(/\D/g,'');
+  const brand=document.getElementById('newRepBrand').value;
+  if(!name){ toast('اكتب اسم المندوب'); return; }
+  if(!/^05\d{8}$/.test(phone)){ toast('رقم الجوال لازم يكون 05xxxxxxxx'); return; }
+  if(REPS.some(r=>r.id===phone)){ toast('هذا الرقم مسجّل لمندوب ثاني'); return; }
+  try{
+    await db.collection('reps').doc(phone).set({name, phone, brand, isAmmar:false,
+      addedByDispatcher:true, addedBy:currentUser.uid, createdAt:TS()});
+    closeModal('repModal'); await loadReps();
+    document.getElementById('repSelect').value=phone; renderLists();
+    toast(`تمت إضافة ${name} ✅`);
+  }catch(e){ console.error(e); toast('ما انحفظ — تحقق من الصلاحيات'); }
+}
+async function saveArea(){
+  const name=document.getElementById('newAreaName').value.trim();
+  if(!name){ toast('اكتب اسم المنطقة'); return; }
+  if(AREAS.some(a=>a.name===name)){ toast('المنطقة موجودة'); return; }
+  const id=name.replace(/\s+/g,'_'); // نفس طريقة لوحة الإدارة
+  try{
+    await db.collection('settings').doc('areas').collection('list').doc(id).set({name, rateDoc:null, rateWard:null,
+      order:99, addedByDispatcher:true, addedBy:currentUser.uid, createdAt:TS()});
+    closeModal('areaModal'); await loadAreas(); refreshAreaSelects(); renderLists();
+    if(pendingAreaSelect){ pendingAreaSelect.value=id; onAreaSelect(pendingAreaSelect); pendingAreaSelect=null; }
+    if(document.getElementById('editModal').classList.contains('show')){
+      document.getElementById('editArea').innerHTML=areaOptions(id);
+    }
+    toast(`تمت إضافة ${name} ✅`);
+  }catch(e){ console.error(e); toast('ما انحفظ — تحقق من الصلاحيات'); }
+}
+
+function renderLists(){
+  const bl={both:'الكل',documentation:'دوكمنتيشن',ward:'ورد إكسبرس'};
+  document.getElementById('repsBody').innerHTML = REPS.map(r=>`<tr><td><b>${esc(r.name)}</b>${r.isAmmar?' <span class="muted">(خصم 5)</span>':''}${r.addedByDispatcher?'<span class="new-tag">مضاف من مشرف الإنتاج</span>':''}</td><td>${esc(r.phone||r.id)}</td><td>${bl[r.brand]||'الكل'}</td></tr>`).join('');
+  document.getElementById('areasBody').innerHTML = AREAS.map(a=>`<tr><td><b>${esc(a.name)}</b>${a.addedByDispatcher?'<span class="new-tag">مضافة من مشرف الإنتاج</span>':''}</td>${isPriced(a)?`<td>${a.rateDoc} ر.س</td><td>${a.rateWard} ر.س</td>`:'<td colspan="2"><span class="new-tag">بانتظار السعر من الإدارة</span></td>'}</tr>`).join('');
+}
+function isPriced(a){ return a && a.rateDoc>0 && a.rateWard>0; }
+function repServes(rep,type){ const b=rep.brand||'both'; return b==='both' || b===TYPES[type].brand; }
+function floristOptions(sel){ return '<option value="">المنسق...</option>'+FLORISTS.map(f=>`<option ${f===sel?'selected':''}>${esc(f)}</option>`).join(''); }
+
+/* ---------------- NEW HANDOVER FORM ---------------- */
+let rowSeq = 0;
+function resetForm(){
+  document.getElementById('repSelect').value='';
+  document.getElementById('orderRows').innerHTML='';
+  rowSeq=0; SELECTED.clear();
+  if(FLORIST_FLOW) renderReady(); else addRow();
+}
+function addRow(prep){
+  // نسخ المنطقة والنوع من آخر طلب — غالباً طلبات الرحلة الوحدة بنفس المنطقة
+  const rows = document.querySelectorAll('.orow');
+  const last = rows[rows.length-1];
+  const prevArea = last ? last.querySelector('.o-area').value : '';
+  let prevType = last ? (last.dataset.type||'doc') : 'doc';
+  if(prevType==='wa') prevType='doc';
+  const isW = prep ? isWaCode(prep.orderNo) : false;
+  if(isW) prevType='wa';
+  const id = 'r'+(++rowSeq);
+  const div = document.createElement('div');
+  div.className='orow'+(prep?' from-prep':''); div.id=id; div.dataset.type=prevType;
+  if(prep) div.dataset.prepId=prep.id;
+  div.innerHTML = `
+    <span class="num"></span>
+    <button class="danger rm" onclick="removeRow('${id}')">✕</button>
+    ${prep?`<div class="src" style="margin-top:6px">${prep.photo?`<img src="${prep.photo}" alt="">`:''}✓ من المنسق ${esc(prep.floristName)} · جاهز ${fmtTime(prep.readyAt)}</div>`:''}
+    <div class="seg" style="margin-top:8px">
+      ${Object.keys(TYPES).map(t=>`<button data-t="${t}" class="${t===prevType?'on':''}" onclick="pickType('${id}','${t}')">${TYPES[t].label}</button>`).join('')}
+    </div>
+    <div class="field"><input class="o-no" inputmode="numeric" placeholder="${prevType==='wa'?'واتس: اتركه فاضي والرقم يطلع تلقائي':'رقم الطلب'}" ${prep?`value="${esc(prep.orderNo)}" readonly style="background:#fff;font-weight:900;direction:ltr;text-align:right"`:''}></div>
+    <div class="row2">
+      <div class="field"><select class="o-florist" ${prep?'disabled':''}>${floristOptions(prep?prep.floristName:'')}</select></div>
+      <div class="field"><select class="o-area" onchange="onAreaSelect(this)">${areaOptions(prevArea)}</select></div>
+    </div>
+    <div class="field" style="margin:0"><input class="o-notes" placeholder="ملاحظات (اختياري)"></div>`;
+  document.getElementById('orderRows').appendChild(div);
+  renumber();
+  if(!prep) div.querySelector('.o-no').focus();
+}
+function removeRow(id){
+  const r=document.getElementById(id);
+  if(r.dataset.prepId){ SELECTED.delete(r.dataset.prepId); renderReady(); }
+  r.remove(); renumber();
+}
+
+/* ---------------- READY ORDERS (من شاشة المنسقين) ---------------- */
+let READY = [], PREPARING = [], SELECTED = new Set(), prepUnsubs = [];
+function isWaCode(no){ return /^W\d{4}-\d{2,3}$/.test(no); }
+function normOrderNo(v){
+  v = String(v||'').replace(/[٠-٩]/g,d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[۰-۹]/g,d=>'۰۱۲۳۴۵۶۷۸۹'.indexOf(d)).trim().toUpperCase();
+  return v.startsWith('W') ? v.replace(/\s/g,'') : v.replace(/\D/g,'');
+}
+function listenPrep(){
+  prepUnsubs.forEach(u=>u()); prepUnsubs=[];
+  prepUnsubs.push(db.collection('prepOrders').where('status','==','ready').onSnapshot(s=>{
+    READY = s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.readyAt?.toMillis?.()||0)-(b.readyAt?.toMillis?.()||0));
+    // لو طلب مختار انسحب من الجاهز (سلّمه جهاز ثاني مثلاً) نشيله من الفورم
+    [...SELECTED].forEach(id=>{ if(!READY.some(r=>r.id===id)){ SELECTED.delete(id); const row=document.querySelector(`.orow[data-prep-id="${id}"]`); if(row){ row.remove(); renumber(); } } });
+    renderReady();
+  }, e=>console.error(e)));
+  prepUnsubs.push(db.collection('prepOrders').where('status','==','preparing').onSnapshot(s=>{
+    PREPARING = s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.receivedAt?.toMillis?.()||0)-(b.receivedAt?.toMillis?.()||0));
+    renderPrepMonitor();
+  }, e=>console.error(e)));
+}
+function minsFrom(ts){ return ts&&ts.toDate ? Math.max(0,Math.round((Date.now()-ts.toDate())/60000)) : 0; }
+function renderReady(){
+  const box=document.getElementById('readyList'); if(!box) return;
+  document.getElementById('readyCountPill').textContent = READY.length ? `(${READY.length})` : '';
+  box.innerHTML = READY.length ? READY.map(o=>{
+    const w=minsFrom(o.readyAt), sel=SELECTED.has(o.id);
+    return `<label class="rcard ${sel?'sel':''}">
+      <input type="checkbox" ${sel?'checked':''} ${canWrite?'':'disabled'} onchange="toggleReady('${o.id}',this.checked)">
+      ${o.photo?`<img class="rthumb" src="${o.photo}" alt="">`:'<div class="rph">💐</div>'}
+      <div><div class="no">${esc(o.orderNo)}</div>
+        <div class="m">${esc(o.floristName)}${o.isWa?' · واتس':''}</div>
+        <div class="m ${w>=30?'late':''}">جاهز من ${w} د</div></div>
+    </label>`;
+  }).join('') : '<div class="muted">ما فيه طلبات جاهزة الحين.</div>';
+}
+function toggleReady(id,on){
+  const o=READY.find(x=>x.id===id); if(!o) return;
+  if(on){ SELECTED.add(id); addRow(o); }
+  else{ SELECTED.delete(id); const row=document.querySelector(`.orow[data-prep-id="${id}"]`); if(row){ row.remove(); renumber(); } }
+  renderReady();
+}
+function renderPrepMonitor(){
+  const box=document.getElementById('prepMonitor'); if(!box) return;
+  const byF={}; PREPARING.forEach(o=>(byF[o.floristName]=byF[o.floristName]||[]).push(o));
+  box.innerHTML = `<h3>عند المنسقين الحين: ${PREPARING.length} قيد التجهيز · ${READY.length} جاهز ينتظر مندوب</h3>` +
+    (PREPARING.length ? `<div class="scroll"><table><thead><tr><th>المنسق</th><th>الطلبات قيد التجهيز</th></tr></thead><tbody>${
+      Object.entries(byF).map(([f,l])=>`<tr><td><b>${esc(f)}</b></td><td>${l.map(o=>{const m=minsFrom(o.receivedAt);return `<span style="display:inline-block;margin:2px 8px 2px 0;direction:ltr" class="${m>=45?'late':''}">${esc(o.orderNo)} (${m}د)</span>`;}).join('')}</td></tr>`).join('')
+    }</tbody></table></div>` : '<div class="muted">ما فيه طلبات قيد التجهيز.</div>');
+}
+setInterval(()=>{ if(FLORIST_FLOW){ renderReady(); renderPrepMonitor(); } }, 30000);
+function renumber(){ document.querySelectorAll('.orow').forEach((r,i)=>r.querySelector('.num').textContent='طلب '+(i+1)); }
+function pickType(id,t){
+  const r=document.getElementById(id); r.dataset.type=t;
+  r.querySelectorAll('.seg button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
+  const inp=r.querySelector('.o-no'); if(!inp.readOnly) inp.placeholder = t==='wa' ? 'واتس: اتركه فاضي والرقم يطلع تلقائي' : 'رقم الطلب';
+}
+
+async function saveHandover(){
+  if(!canWrite) return;
+  const repId = document.getElementById('repSelect').value;
+  const rep = REPS.find(r=>r.id===repId);
+  if(!rep){ toast('اختر المندوب'); return; }
+  if(!document.querySelectorAll('.orow').length){ toast('أشّر على طلب جاهز أو أضف طلب يدوي'); return; }
+
+  const orders = [];
+  const seen = new Set();
+  for(const [i,r] of [...document.querySelectorAll('.orow')].entries()){
+    const no = normOrderNo(r.querySelector('.o-no').value);
+    const florist = r.querySelector('.o-florist').value;
+    const prep = r.dataset.prepId ? READY.find(x=>x.id===r.dataset.prepId) : null;
+    const areaId = r.querySelector('.o-area').value;
+    const n = i+1;
+    const typeNow = r.dataset.type||'doc';
+    if(!no && typeNow!=='wa'){ toast(`طلب ${n}: اكتب رقم الطلب`); return; }
+    if(no && !isWaCode(no) && (no.length<6 || no.length>12)){ toast(`طلب ${n}: رقم الطلب غير منطقي (${no})`); return; }
+    if(r.dataset.prepId && !prep){ toast(`الطلب ${no} ما عاد في قائمة الجاهز — شيله وحدّث`); return; }
+    if(no && seen.has(no)){ toast(`الطلب ${no} مكرر في نفس التسليم`); return; }
+    if(!florist){ toast(`طلب ${n}: اختر المنسق`); return; }
+    if(!areaId){ toast(`طلب ${n}: اختر المنطقة`); return; }
+    if(no) seen.add(no);
+    const area = AREAS.find(a=>a.id===areaId);
+    const type = r.dataset.type||'doc';
+    if(!repServes(rep,type)){ toast(`${rep.name} ما يوصّل طلبات ${TYPES[type].label} — طلب ${n}`); return; }
+    orders.push({orderNo:no, florist, areaId, areaName:area?area.name:'', type,
+      brand:TYPES[type].brand, source:TYPES[type].source,
+      notes:r.querySelector('.o-notes').value.trim(),
+      manual: FLORIST_FLOW && !prep, prepId: prep?prep.id:null,
+      floristReceivedAt: prep?prep.receivedAt:null, floristReadyAt: prep?prep.readyAt:null,
+      hasPhoto: !!(prep&&prep.photo)});
+  }
+
+  const btn=document.getElementById('saveBtn'); btn.disabled=true; btn.textContent='جاري الحفظ...';
+  try{
+    // تنبيه لو الطلب مسجّل قبل (مثلاً طلب رجع وانعاد تسليمه — مسموح بس بعد التأكيد)
+    const dups=[];
+    for(const o of orders.filter(x=>(FLORIST_FLOW ? x.manual : true) && x.orderNo)){
+      const s = await db.collection('dispatchOrders').where('orderNo','==',o.orderNo).limit(1).get();
+      if(!s.empty) dups.push(o.orderNo);
+    }
+    if(dups.length && !confirm(`هذي الطلبات مسجّلة قبل:\n${dups.join('\n')}\n\nتبي تسجلها مرة ثانية؟ (مثلاً لو رجعت وانعاد تسليمها)`)){
+      btn.disabled=false; btn.textContent='حفظ التسليم'; return;
+    }
+
+    const date = localDate();
+    // طلبات الواتس بدون رقم: نعطيها رقم يومي تلقائي (W + الشهر واليوم + تسلسل) — نفس صيغة شاشة المنسقين
+    const needCodes = orders.filter(o=>!o.orderNo);
+    if(needCodes.length){
+      const mmdd = date.slice(5,7)+date.slice(8,10), cRef = db.collection('counters').doc('wa-'+date);
+      const start = await db.runTransaction(async tx=>{
+        const c = await tx.get(cRef); const n0 = c.exists ? (c.data().n||0) : 0;
+        tx.set(cRef, {n: n0 + needCodes.length}); return n0;
+      });
+      needCodes.forEach((o,i)=>{ o.orderNo = `W${mmdd}-${String(start+i+1).padStart(2,'0')}`; });
+    }
+    const batchRef = db.collection('dispatchBatches').doc();
+    const wb = db.batch();
+    wb.set(batchRef, {
+      date, repPhone:rep.id, repName:rep.name, isAmmar:!!rep.isAmmar,
+      orderCount:orders.length, handedAt:TS(), departedAt:null,
+      createdBy:currentUser.uid, createdByName:myName, createdAt:TS()
+    });
+    orders.forEach(o=>{
+      if(o.prepId) wb.update(db.collection('prepOrders').doc(o.prepId), {status:'dispatched', dispatchedAt:TS(), batchId:batchRef.id, repName:rep.name});
+      wb.set(db.collection('dispatchOrders').doc(), {
+        ...o, date, batchId:batchRef.id, repPhone:rep.id, repName:rep.name, isAmmar:!!rep.isAmmar,
+        handedAt:TS(), departedAt:null, repConfirmed:false,
+        createdBy:currentUser.uid, createdAt:TS()
+      });
+    });
+    await wb.commit();
+    toast(`تم تسليم ${orders.length} طلب لـ ${rep.name} ✅` + (needCodes.length ? ` — أرقام الواتس: ${needCodes.map(o=>o.orderNo).join('، ')}` : ''));
+    resetForm();
+  }catch(e){ console.error(e); toast('ما انحفظ — تحقق من الاتصال أو الصلاحيات'); }
+  btn.disabled=false; btn.textContent='حفظ التسليم';
+}
+
+/* ---------------- DAY LOG ---------------- */
+let DAY_ORDERS = {};
+async function loadDay(){
+  const date = document.getElementById('dayDate').value || localDate();
+  const box = document.getElementById('dayBatches');
+  box.innerHTML='<div class="muted">جاري التحميل...</div>';
+  const [bSnap, oSnap] = await Promise.all([
+    db.collection('dispatchBatches').where('date','==',date).get(),
+    db.collection('dispatchOrders').where('date','==',date).get()
+  ]);
+  const batches = bSnap.docs.map(d=>({id:d.id,...d.data()}))
+    .sort((a,b)=>(b.handedAt?.toMillis?.()||0)-(a.handedAt?.toMillis?.()||0));
+  const byBatch = {}; DAY_ORDERS = {};
+  oSnap.docs.forEach(d=>{ const o={id:d.id,...d.data()}; DAY_ORDERS[o.id]=o; (byBatch[o.batchId]=byBatch[o.batchId]||[]).push(o); });
+
+  const all = Object.values(DAY_ORDERS);
+  const cnt = t=>all.filter(o=>o.type===t).length;
+  const waiting = batches.filter(b=>!b.departedAt).length;
+  document.getElementById('dayStats').innerHTML = `
+    <div class="stat"><div class="v">${all.length}</div><div class="l">إجمالي الطلبات</div></div>
+    <div class="stat"><div class="v">${cnt('doc')}</div><div class="l">${TYPES.doc.full}</div></div>
+    <div class="stat"><div class="v">${cnt('ward')}</div><div class="l">${TYPES.ward.full}</div></div>
+    <div class="stat"><div class="v">${cnt('wa')}</div><div class="l">${TYPES.wa.full}</div></div>
+    <div class="stat"><div class="v">${waiting}</div><div class="l">تسليمات ما خرجت</div></div>
+    ${FLORIST_FLOW?`<div class="stat"><div class="v">${all.filter(o=>o.manual).length}</div><div class="l">طلبات يدوية (ما مرت على منسق)</div></div>`:''}`;
+
+  if(!batches.length){ box.innerHTML='<div class="card muted">ما فيه تسليمات بهذا التاريخ.</div>'; return; }
+  box.innerHTML = batches.map(b=>{
+    const orders = (byBatch[b.id]||[]).sort((x,y)=>x.orderNo.localeCompare(y.orderNo));
+    const wait = minsBetween(b.handedAt,b.departedAt);
+    const status = b.departedAt
+      ? `<span class="pill p-out">خرج ${fmtTime(b.departedAt)} · انتظر ${wait} د</span>`
+      : `<span class="pill p-wait">بانتظار الخروج</span>`;
+    const departBtn = (!b.departedAt && canWrite) ? `<button class="green" onclick="markDeparted('${b.id}')">خرج المندوب الآن</button>` : '';
+    const delBatch = canWrite ? `<button class="danger" onclick="deleteBatch('${b.id}')">حذف التسليم</button>` : '';
+    return `<div class="card">
+      <div class="batch-head">
+        <div><div class="rep">${esc(b.repName)}</div>
+          <div class="meta">سُلّم ${fmtTime(b.handedAt)} · ${orders.length} طلب · بواسطة ${esc(b.createdByName||'')}</div></div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${status}${departBtn}</div>
+      </div>
+      <div class="scroll"><table>
+        <thead><tr><th>رقم الطلب</th><th>النوع</th><th>المنسق</th><th>المنطقة</th><th>ملاحظات</th><th></th></tr></thead>
+        <tbody>${orders.map(o=>`<tr>
+          <td><b style="direction:ltr;unicode-bidi:isolate">${esc(o.orderNo)}</b>${o.manual?' <span class="manual-tag">يدوي</span>':''}</td><td>${typeBadge(o.type)}</td><td>${esc(o.florist)}${o.floristReadyAt?`<div class="muted" style="font-size:11.5px">تجهيز ${minsBetween(o.floristReceivedAt,o.floristReadyAt)} د · انتظر ${minsBetween(o.floristReadyAt,o.handedAt)} د</div>`:''}</td>
+          <td>${esc(o.areaName)}</td><td>${esc(o.notes)}</td>
+          <td style="white-space:nowrap">${canWrite?`<button class="mini" onclick="openEdit('${o.id}')">تعديل</button> <button class="danger" onclick="deleteOrder('${o.id}','${b.id}')">حذف</button>`:''}</td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+      <div style="margin-top:10px;text-align:left">${delBatch}</div>
+    </div>`;
+  }).join('');
+}
+
+async function searchOrder(){
+  const no=normOrderNo(document.getElementById('searchNo').value);
+  const out=document.getElementById('searchOut');
+  if(!no){ out.innerHTML=''; return; }
+  const snap=await db.collection('dispatchOrders').where('orderNo','==',no).get();
+  if(snap.empty){ out.innerHTML=`<div class="card muted">الطلب ${esc(no)} ما انسجّل له تسليم.</div>`; return; }
+  const rows=snap.docs.map(d=>d.data()).sort((a,b)=>(b.handedAt?.toMillis?.()||0)-(a.handedAt?.toMillis?.()||0));
+  out.innerHTML=`<div class="card"><h3>نتيجة البحث: ${esc(no)}${rows.length>1?` <span class="new-tag">انسلّم ${rows.length} مرات</span>`:''}</h3><div class="scroll"><table>
+    <thead><tr><th>التاريخ</th><th>النوع</th><th>المندوب</th><th>المنسق</th><th>المنطقة</th>${FLORIST_FLOW?'<th>استلام المنسق</th><th>جاهز</th>':''}<th>التسليم</th><th>الخروج</th><th>ملاحظات</th></tr></thead>
+    <tbody>${rows.map(o=>`<tr><td>${o.date}</td><td>${typeBadge(o.type)}</td><td><b>${esc(o.repName)}</b></td><td>${esc(o.florist)}</td>
+      <td>${esc(o.areaName)}</td>
+      ${FLORIST_FLOW?`<td>${fmtTime(o.floristReceivedAt)}</td><td>${fmtTime(o.floristReadyAt)}</td>`:''}<td>${fmtTime(o.handedAt)}</td><td>${fmtTime(o.departedAt)}</td><td>${esc(o.notes)}${o.manual?' <span class="manual-tag">يدوي</span>':''}</td></tr>`).join('')}</tbody></table></div></div>`;
+}
+
+async function markDeparted(batchId){
+  try{
+    const oSnap = await db.collection('dispatchOrders').where('batchId','==',batchId).get();
+    const wb = db.batch();
+    wb.update(db.collection('dispatchBatches').doc(batchId), {departedAt:TS(), departedBy:currentUser.uid});
+    oSnap.docs.forEach(d=>wb.update(d.ref,{departedAt:TS()}));
+    await wb.commit(); toast('تم تسجيل خروج المندوب ✅'); loadDay();
+  }catch(e){ console.error(e); toast('ما انحفظ'); }
+}
+async function deleteOrder(orderId,batchId){
+  const o = DAY_ORDERS[orderId];
+  if(!confirm(`حذف الطلب ${o.orderNo}؟${o.prepId?'\n(يرجع لقائمة الجاهز عند المنسقين)':''}`)) return;
+  try{
+    const remaining = Object.values(DAY_ORDERS).filter(x=>x.batchId===batchId && x.id!==orderId).length;
+    const wb = db.batch();
+    wb.delete(db.collection('dispatchOrders').doc(orderId));
+    if(o.prepId) wb.update(db.collection('prepOrders').doc(o.prepId), {status:'ready', dispatchedAt:null, batchId:null, repName:null});
+    if(remaining===0) wb.delete(db.collection('dispatchBatches').doc(batchId));
+    else wb.update(db.collection('dispatchBatches').doc(batchId),{orderCount:remaining});
+    await wb.commit(); toast('انحذف'); loadDay();
+  }catch(e){ console.error(e); toast('ما انحذف'); }
+}
+async function deleteBatch(batchId){
+  if(!confirm('حذف التسليم كامل بكل طلباته؟')) return;
+  try{
+    const oSnap = await db.collection('dispatchOrders').where('batchId','==',batchId).get();
+    const wb = db.batch();
+    oSnap.docs.forEach(d=>{ wb.delete(d.ref); const pid=d.data().prepId;
+      if(pid) wb.update(db.collection('prepOrders').doc(pid), {status:'ready', dispatchedAt:null, batchId:null, repName:null}); });
+    wb.delete(db.collection('dispatchBatches').doc(batchId));
+    await wb.commit(); toast('انحذف التسليم'); loadDay();
+  }catch(e){ console.error(e); toast('ما انحذف'); }
+}
+
+/* edit */
+let editId=null, editType='doc';
+function openEdit(id){
+  const o = DAY_ORDERS[id]; editId=id;
+  document.getElementById('editOrderNo').textContent=o.orderNo;
+  document.getElementById('editFlorist').innerHTML=floristOptions(o.florist);
+  document.getElementById('editArea').innerHTML=areaOptions(o.areaId);
+  document.getElementById('editNotes').value=o.notes||'';
+  pickEditType(o.type);
+  document.getElementById('editModal').classList.add('show');
+}
+function pickEditType(t){ editType=t; document.querySelectorAll('#editSeg button').forEach(b=>b.classList.toggle('on',b.dataset.t===t)); }
+document.addEventListener('change',e=>{
+  if(e.target.id==='editArea' && e.target.value==='__new'){ e.target.value=''; openAreaModal(); }
+});
+function closeEdit(){ document.getElementById('editModal').classList.remove('show'); }
+async function saveEdit(){
+  const areaId=document.getElementById('editArea').value, florist=document.getElementById('editFlorist').value;
+  if(!areaId||!florist){ toast('المنسق والمنطقة مطلوبين'); return; }
+  const area=AREAS.find(a=>a.id===areaId);
+  try{
+    await db.collection('dispatchOrders').doc(editId).update({
+      florist, areaId, areaName:area?area.name:'', type:editType,
+      brand:TYPES[editType].brand, source:TYPES[editType].source,
+      notes:document.getElementById('editNotes').value.trim(),
+      editedBy:currentUser.uid, editedAt:TS()
+    });
+    closeEdit(); toast('تم التعديل ✅'); loadDay();
+  }catch(e){ console.error(e); toast('ما انحفظ'); }
+}
+
+/* ---------------- REPORTS ---------------- */
+function quickRange(k){
+  const today=localDate(), d=new Date(today+'T12:00:00');
+  const fmt=x=>x.toISOString().slice(0,10);
+  let from=today, to=today;
+  if(k==='yesterday'){ const y=new Date(d); y.setDate(d.getDate()-1); from=to=fmt(y); }
+  if(k==='week'){ const w=new Date(d); w.setDate(d.getDate()-6); from=fmt(w); }
+  if(k==='month'){ from=today.slice(0,8)+'01'; }
+  if(k==='lastMonth'){ const f=new Date(d.getFullYear(), d.getMonth()-1, 1, 12), l=new Date(d.getFullYear(), d.getMonth(), 0, 12); from=fmt(f); to=fmt(l); }
+  document.getElementById('repFrom').value=from; document.getElementById('repTo').value=to;
+  loadReports();
+}
+async function loadReports(){
+  const from=document.getElementById('repFrom').value, to=document.getElementById('repTo').value;
+  if(!from||!to||from>to){ toast('تحقق من الفترة'); return; }
+  const out=document.getElementById('reportOut'); out.innerHTML='<div class="muted">جاري الحساب...</div>';
+  const fromTxt = from===to ? from : `${from} ← ${to}`;
+  const [oSnap,bSnap] = await Promise.all([
+    db.collection('dispatchOrders').where('date','>=',from).where('date','<=',to).get(),
+    db.collection('dispatchBatches').where('date','>=',from).where('date','<=',to).get()
+  ]);
+  const orders = oSnap.docs.map(d=>({id:d.id,...d.data()}));
+  const batches = bSnap.docs.map(d=>d.data());
+  lastReportRows = orders;
+  if(!orders.length){ out.innerHTML='<div class="card muted">ما فيه طلبات بهذي الفترة.</div>'; return; }
+
+  const tkeys = Object.keys(TYPES);
+  const group = (keyFn)=>{ const m={}; orders.forEach(o=>{ const k=keyFn(o); m[k]=m[k]||{doc:0,ward:0,wa:0,total:0,amount:0,rep:o}; m[k][o.type]++; m[k].total++; }); return m; };
+
+  // المناديب + المستحق التقديري + متوسط الانتظار
+  const reps = group(o=>o.repPhone);
+  orders.forEach(o=>{
+    const area=AREAS.find(a=>a.id===o.areaId);
+    reps[o.repPhone].amount += rateFor(area,o.type,{isAmmar:o.isAmmar});
+    if(!isPriced(area)) reps[o.repPhone].unpriced = (reps[o.repPhone].unpriced||0)+1;
+  });
+  const unpricedTotal = Object.values(reps).reduce((s,r)=>s+(r.unpriced||0),0);
+  const waits={}; batches.forEach(b=>{ const w=minsBetween(b.handedAt,b.departedAt); if(w!==null&&w>=0){ (waits[b.repPhone]=waits[b.repPhone]||[]).push(w);} });
+  const avg=a=>a&&a.length?Math.round(a.reduce((x,y)=>x+y,0)/a.length):'—';
+  const allWaits=Object.values(waits).flat();
+
+  const areas = group(o=>o.areaName||'—');
+  const days = group(o=>o.date);
+  const dayCount = Object.keys(days).length;
+  const florists = group(o=>o.florist||'—');
+  const sum = k=>orders.filter(o=>o.type===k).length;
+  const totalAmount = Object.values(reps).reduce((s,r)=>s+r.amount,0);
+
+  const table = (title, firstCol, m, extraHead='', extraCell=()=> '', extraFoot='')=>{
+    const rows = Object.entries(m).sort((a,b)=>b[1].total-a[1].total);
+    return `<div class="card"><h3>${title}</h3><div class="scroll"><table>
+      <thead><tr><th>${firstCol}</th>${tkeys.map(t=>`<th>${TYPES[t].full}</th>`).join('')}<th>الإجمالي</th>${extraHead}</tr></thead>
+      <tbody>${rows.map(([k,v])=>`<tr><td><b>${esc(firstCol==='المندوب'?v.rep.repName:k)}</b></td>${tkeys.map(t=>`<td>${v[t]}</td>`).join('')}<td><b>${v.total}</b></td>${extraCell(k,v)}</tr>`).join('')}</tbody>
+      <tfoot><tr><td>المجموع</td>${tkeys.map(t=>`<td>${sum(t)}</td>`).join('')}<td>${orders.length}</td>${extraFoot}</tr></tfoot>
+    </table></div></div>`;
+  };
+
+  const dailyTable = (m)=>{
+    const rows = Object.entries(m).sort((a,b)=>b[0].localeCompare(a[0]));
+    const dn = ds => new Date(ds+'T12:00:00').toLocaleDateString('ar-SA',{weekday:'long'});
+    return `<div class="card"><h3>حسب اليوم</h3><div class="scroll"><table>
+      <thead><tr><th>التاريخ</th><th>اليوم</th>${tkeys.map(t=>`<th>${TYPES[t].full}</th>`).join('')}<th>الإجمالي</th></tr></thead>
+      <tbody>${rows.map(([k,v])=>`<tr><td>${k}</td><td>${dn(k)}</td>${tkeys.map(t=>`<td>${v[t]}</td>`).join('')}<td><b>${v.total}</b></td></tr>`).join('')}</tbody>
+      <tfoot><tr><td colspan="2">المجموع</td>${tkeys.map(t=>`<td>${sum(t)}</td>`).join('')}<td>${orders.length}</td></tr></tfoot>
+    </table></div></div>`;
+  };
+  out.innerHTML = `
+    <div class="muted" style="margin-bottom:10px">الفترة: <b>${fromTxt}</b> · الطلبات المُسلّمة للمناديب</div>
+    <div class="stats">
+      <div class="stat"><div class="v">${orders.length}</div><div class="l">إجمالي الطلبات</div></div>
+      <div class="stat"><div class="v">${sum('doc')}</div><div class="l">${TYPES.doc.full}</div></div>
+      <div class="stat"><div class="v">${sum('ward')}</div><div class="l">${TYPES.ward.full}</div></div>
+      <div class="stat"><div class="v">${sum('wa')}</div><div class="l">${TYPES.wa.full}</div></div>
+      <div class="stat"><div class="v">${dayCount?Math.round(orders.length/dayCount*10)/10:'—'}</div><div class="l">متوسط الطلبات باليوم</div></div>
+      <div class="stat"><div class="v">${avg(allWaits)}</div><div class="l">متوسط الانتظار قبل الخروج (دقيقة)</div></div>
+    </div>
+    ${table('المناديب','المندوب',reps,'<th>متوسط الانتظار (د)</th><th>المستحق التقديري</th>',
+      (k,v)=>`<td>${avg(waits[k])}</td><td><b>${v.amount} ر.س</b>${v.unpriced?`<br><span class="new-tag">+${v.unpriced} طلب بدون سعر</span>`:''}</td>`, `<td>${avg(allWaits)}</td><td>${totalAmount} ر.س</td>`)}
+    ${dayCount>1 ? dailyTable(days) : ''}
+    ${table('المناطق','المنطقة',areas)}
+    ${!FLORIST_FLOW ? table('المنسقين','المنسق',florists) : table('المنسقين','المنسق',florists,'<th>متوسط التجهيز (د)</th><th>متوسط انتظار الجاهز (د)</th><th>يدوي</th>',
+      (k)=>{ const l=orders.filter(o=>(o.florist||'—')===k);
+        const prepT=l.map(o=>minsBetween(o.floristReceivedAt,o.floristReadyAt)).filter(x=>x!==null&&x>=0);
+        const waitT=l.map(o=>minsBetween(o.floristReadyAt,o.handedAt)).filter(x=>x!==null&&x>=0);
+        return `<td>${avg(prepT)}</td><td>${avg(waitT)}</td><td>${l.filter(o=>o.manual).length}</td>`; },
+      (()=>{ const p=orders.map(o=>minsBetween(o.floristReceivedAt,o.floristReadyAt)).filter(x=>x!==null&&x>=0);
+        const w=orders.map(o=>minsBetween(o.floristReadyAt,o.handedAt)).filter(x=>x!==null&&x>=0);
+        return `<td>${avg(p)}</td><td>${avg(w)}</td><td>${orders.filter(o=>o.manual).length}</td>`; })())}
+    ${unpricedTotal?`<div class="note">فيه ${unpricedTotal} طلب على مناطق بانتظار السعر — ما انحسبت في المستحق.</div>`:''}
+    <div class="muted">المستحق التقديري = التوصيل فقط حسب أسعار المناطق (مع خصم عمار). فوارق التوصيل يرفعها المندوب من تطبيقه، والاعتماد النهائي من لوحة الإدارة.</div>`;
+}
+
+function exportCSV(){
+  if(!lastReportRows.length){ toast('اعرض التقرير أول'); return; }
+  const head = FLORIST_FLOW
+    ? ['التاريخ','رقم الطلب','النوع','المنسق','المنطقة','المندوب','استلام المنسق','جاهز من المنسق','وقت التسليم','وقت الخروج','يدوي','ملاحظات']
+    : ['التاريخ','رقم الطلب','النوع','المنسق','المنطقة','المندوب','وقت التسليم','وقت الخروج','ملاحظات'];
+  const rows = lastReportRows.sort((a,b)=>(a.handedAt?.toMillis?.()||0)-(b.handedAt?.toMillis?.()||0))
+    .map(o=>[o.date,o.orderNo,TYPES[o.type]?.full,o.florist,o.areaName,o.repName,...(FLORIST_FLOW?[fmtTime(o.floristReceivedAt),fmtTime(o.floristReadyAt)]:[]),fmtTime(o.handedAt),fmtTime(o.departedAt),...(FLORIST_FLOW?[o.manual?'نعم':'']:[]),o.notes||'']);
+  const csv = '\uFEFF'+[head,...rows].map(r=>r.map(c=>`"${String(c??'').replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+  a.download=`تسليم-المناديب_${document.getElementById('repFrom').value}_${document.getElementById('repTo').value}.csv`;
+  a.click();
+}
+
+/* ---------------- FLORISTS ---------------- */
+function renderFlorists(){
+  document.getElementById('floristChips').innerHTML = FLORISTS.map(f=>
+    `<span class="chip">${esc(f)}${canWrite?`<button onclick="removeFlorist('${esc(f)}')">✕</button>`:''}</span>`).join('');
+}
+async function addFlorist(){
+  const n=document.getElementById('newFlorist').value.trim();
+  if(!n) return; if(FLORISTS.includes(n)){ toast('الاسم موجود'); return; }
+  try{
+    await db.collection('settings').doc('florists').update({names:firebase.firestore.FieldValue.arrayUnion(n)});
+    FLORISTS.push(n); document.getElementById('newFlorist').value=''; renderFlorists(); toast('تمت الإضافة');
+  }catch(e){ toast('ما انحفظ'); }
+}
+async function removeFlorist(n){
+  if(!confirm(`حذف ${n} من القائمة؟ (طلباته السابقة ما تتأثر)`)) return;
+  try{
+    await db.collection('settings').doc('florists').update({names:firebase.firestore.FieldValue.arrayRemove(n)});
+    FLORISTS=FLORISTS.filter(x=>x!==n); renderFlorists();
+  }catch(e){ toast('ما انحذف'); }
+}
+</script>
+</body>
+</html>

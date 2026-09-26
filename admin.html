@@ -226,7 +226,8 @@
       <button class="navitem" onclick="showTab('diffs')">🔁 فوارق التوصيل <span class="nav-badge" id="navBadgeDiffs"></span></button>
       <button class="navitem" onclick="showTab('penalties')">⚠️ الجزاءات والهدايا</button>
       <button class="navitem" onclick="showTab('reps')">👤 المناديب</button>
-      <button class="navitem" onclick="showTab('areas')">📍 المناطق والأسعار</button>
+      <button class="navitem" id="navDispatch" style="display:none" onclick="showTab('dispatch')">🚚 تسليم الطلبات</button>
+      <button class="navitem" onclick="showTab('areas')">📍 المناطق والأسعار <span class="nav-badge" id="navBadgeAreas"></span></button>
       <button class="navitem" onclick="showTab('reports')">📄 التقارير</button>
       <button class="navitem" onclick="showTab('payouts')">💰 المستحقات والدفعات</button>
       <button class="navitem" onclick="openChangePasswordModal()">🔑 تغيير كلمة المرور</button>
@@ -259,7 +260,7 @@
         <div class="card">
           <h3>طلبات بانتظار الاعتماد</h3>
           <table>
-            <thead><tr><th>التاريخ</th><th>المندوب</th><th>المنطقة</th><th>دوكمنتيشن</th><th>دوكمنتيشن واتساب</th><th>وورد إكسبريس</th><th>إجمالي الصف</th><th>الحالة</th><th>الإجراءات</th></tr></thead>
+            <thead><tr><th>التاريخ</th><th>المندوب</th><th>المنطقة</th><th>دوكمنتيشن</th><th>دوكمنتيشن واتساب</th><th>ورد إكسبرس</th><th>إجمالي الصف</th><th>الحالة</th><th>الإجراءات</th></tr></thead>
             <tbody id="pendingEntriesBody"></tbody>
           </table>
           <div id="pendingEntriesEmpty" class="empty" style="display:none;">لا يوجد طلبات بانتظار الاعتماد</div>
@@ -268,7 +269,7 @@
         <div class="card">
           <h3>أحدث الإدخالات</h3>
           <table>
-            <thead><tr><th>التاريخ</th><th>المندوب</th><th>المنطقة</th><th>دوكمنتيشن</th><th>دوكمنتيشن واتساب</th><th>وورد إكسبريس</th><th>إجمالي الصف</th><th>الحالة</th><th>الإجراءات</th></tr></thead>
+            <thead><tr><th>التاريخ</th><th>المندوب</th><th>المنطقة</th><th>دوكمنتيشن</th><th>دوكمنتيشن واتساب</th><th>ورد إكسبرس</th><th>إجمالي الصف</th><th>الحالة</th><th>الإجراءات</th></tr></thead>
             <tbody id="recentEntriesBody"></tbody>
           </table>
           <div id="recentEmpty" class="empty" style="display:none;">لا يوجد إدخالات بعد</div>
@@ -331,9 +332,9 @@
             <div class="field"><label>رقم الجوال</label><input id="repPhone" placeholder="05xxxxxxxx"></div>
             <div class="field"><label>البراند</label>
               <select id="repBrand">
-                <option value="both">الكل (دوكمنتيشن + وورد إكسبريس)</option>
+                <option value="both">الكل (دوكمنتيشن + ورد إكسبرس)</option>
                 <option value="documentation">دوكمنتيشن فقط</option>
-                <option value="ward">وورد إكسبريس فقط</option>
+                <option value="ward">ورد إكسبرس فقط</option>
               </select>
             </div>
             <div class="field"><label>عمار الكثيري؟</label>
@@ -352,6 +353,13 @@
         </div>
       </div>
 
+      <!-- ===== DISPATCH (لوحة مشرف الإنتاج) ===== -->
+      <div id="tab-dispatch" class="tab-panel">
+        <h1>تسليم الطلبات للمناديب</h1>
+        <p class="page-sub">نفس لوحة مشرف الإنتاج — خاصة بمشرف الإنتاج والإدارة</p>
+        <iframe id="dispatchFrame" title="تسليم الطلبات" style="width:100%;height:calc(100vh - 140px);min-height:600px;border:1px solid var(--line);border-radius:12px;background:#fff;"></iframe>
+      </div>
+
       <!-- ===== AREAS ===== -->
       <div id="tab-areas" class="tab-panel">
         <h1>المناطق والأسعار</h1>
@@ -361,7 +369,7 @@
           <div class="toolbar">
             <div class="field"><label>اسم المنطقة</label><input id="areaName" placeholder="مثال: أبها"></div>
             <div class="field"><label>سعر دوكمنتيشن (ر.س)</label><input id="areaRateDoc" type="number" placeholder="0"></div>
-            <div class="field"><label>سعر وورد إكسبريس (ر.س)</label><input id="areaRateWard" type="number" placeholder="0"></div>
+            <div class="field"><label>سعر ورد إكسبرس (ر.س)</label><input id="areaRateWard" type="number" placeholder="0"></div>
             <div class="field"><label>الترتيب</label><input id="areaOrder" type="number" placeholder="1"></div>
           </div>
           <button class="primary" onclick="saveArea()">حفظ المنطقة</button>
@@ -369,7 +377,7 @@
         <div class="card">
           <h3>قائمة المناطق</h3>
           <table>
-            <thead><tr><th>المنطقة</th><th>دوكمنتيشن (عادي / عمار)</th><th>وورد إكسبريس (عادي / عمار)</th><th></th></tr></thead>
+            <thead><tr><th>المنطقة</th><th>دوكمنتيشن (عادي / عمار)</th><th>ورد إكسبرس (عادي / عمار)</th><th></th></tr></thead>
             <tbody id="areasBody"></tbody>
           </table>
           <div id="areasEmpty" class="empty" style="display:none;">لا يوجد مناطق مضافة بعد</div>
@@ -509,7 +517,7 @@
       <div class="field"><label>البراند</label>
         <select id="editEntryBrand" onchange="renderEditEntryGrid()">
           <option value="documentation">دوكمنتيشن</option>
-          <option value="ward">وورد إكسبريس</option>
+          <option value="ward">ورد إكسبرس</option>
         </select>
       </div>
     </div>
@@ -632,6 +640,9 @@ auth.onAuthStateChanged(async user=>{
       applyRoleRestrictions();
       showScreen('mainScreen');
       await loadAreas();
+      updateNavBadge('navBadgeAreas', AREAS.filter(a=>!(a.rateDoc>0 && a.rateWard>0)).length);
+      // لوحة تسليم الطلبات خاصة بمشرف الإنتاج والأدمن الكامل فقط — المشرف والمراجع ما يشوفونها
+      document.getElementById('navDispatch').style.display = myRole==='admin' ? '' : 'none';
       attachRealtimeListeners();
     } else {
       showScreen('deniedScreen');
@@ -668,6 +679,7 @@ function showTab(name){
   if(name==='penalties') { loadPenaltyRepSelect(); loadPenalties(); }
   if(name==='reps') loadReps();
   if(name==='areas') loadAreasTable();
+  if(name==='dispatch' && myRole==='admin'){ const f=document.getElementById('dispatchFrame'); if(!f.src) f.src='dispatch.html'; }
   if(name==='payouts') { loadPayoutRepSelect(); loadBalances(); loadPayoutHistory(); }
 }
 
@@ -714,13 +726,25 @@ async function loadAreasTable(){
   const empty = document.getElementById('areasEmpty');
   if(AREAS.length === 0){ body.innerHTML=''; empty.style.display='block'; return; }
   empty.style.display='none';
+  const priced = a => a.rateDoc>0 && a.rateWard>0;
   body.innerHTML = AREAS.map(a=>`
     <tr>
-      <td>${a.name}</td>
-      <td>${a.rateDoc} / ${Math.max(0,a.rateDoc-5)} ر.س</td>
-      <td>${a.rateWard} / ${Math.max(0,a.rateWard-5)} ر.س</td>
+      <td>${a.name}${a.addedByDispatcher?' <span style="font-size:11px;color:var(--amber)">(أضافها مشرف الإنتاج)</span>':''}</td>
+      ${priced(a) ? `<td>${a.rateDoc} / ${Math.max(0,a.rateDoc-5)} ر.س</td>
+      <td>${a.rateWard} / ${Math.max(0,a.rateWard-5)} ر.س</td>`
+      : `<td colspan="2"><span style="background:var(--amber-bg);color:var(--amber);padding:3px 10px;border-radius:10px;font-size:12px;font-weight:700">⏳ بانتظار السعر</span>
+         ${myRole==='admin' ? `<button class="ghost" style="margin-inline-start:8px" onclick="priceArea('${a.id}')">حط السعر</button>` : ''}</td>`}
       <td>${myRole==='admin' ? `<button class="small-danger" onclick="deleteArea('${a.id}')">حذف</button>` : ''}</td>
     </tr>`).join('');
+  updateNavBadge('navBadgeAreas', AREAS.filter(a=>!priced(a)).length);
+}
+
+function priceArea(id){
+  const a = AREAS.find(x=>x.id===id); if(!a) return;
+  document.getElementById('areaName').value = a.name;
+  document.getElementById('areaOrder').value = a.order||'';
+  document.getElementById('areaRateDoc').focus();
+  document.getElementById('addAreaCard').scrollIntoView({behavior:'smooth'});
 }
 
 async function deleteArea(id){
@@ -759,7 +783,7 @@ async function loadReps(){
   const empty = document.getElementById('repsEmpty');
   if(snap.empty){ body.innerHTML=''; empty.style.display='block'; return; }
   empty.style.display='none';
-  const brandLabel = {both:'الكل', documentation:'دوكمنتيشن', ward:'وورد إكسبريس'};
+  const brandLabel = {both:'الكل', documentation:'دوكمنتيشن', ward:'ورد إكسبرس'};
   body.innerHTML = snap.docs.map(d=>{
     const r = d.data();
     return `<tr>
@@ -781,7 +805,7 @@ async function deleteRep(id){
 }
 
 /* ---------------- DASHBOARD ---------------- */
-const brandLabel = {both:'الكل', documentation:'دوكمنتيشن', ward:'وورد إكسبريس'};
+const brandLabel = {both:'الكل', documentation:'دوكمنتيشن', ward:'ورد إكسبرس'};
 
 /* ---------------- REAL-TIME UPDATES ---------------- */
 // بدل ما نقرأ البيانات مرة وحدة، نستمع للتغييرات المباشرة على dailyEntries
@@ -1304,7 +1328,7 @@ async function deletePayout(id){
 }
 
 // يجمع كل مستندات dailyEntries حسب (المندوب + التاريخ) بمجموعة واحدة —
-// حتى لو المندوب سوى عدة عمليات "حفظ" بنفس اليوم (دوكمنتيشن ثم واتس ثم إكسبريس
+// حتى لو المندوب سوى عدة عمليات "حفظ" بنفس اليوم (دوكمنتيشن ثم واتس ثم إكسبرس
 // مثلاً)، تتجمع كلها بصف واحد بدل ما تتكرر.
 function groupEntriesByRepDate(docs){
   const groups = {};
@@ -1459,7 +1483,7 @@ function bulkDeleteEntries(idsCsv){
 }
 
 function channelLabel(brand, source){
-  if(brand === 'ward') return source === 'whatsapp' ? 'وورد إكسبريس (واتساب)' : 'وورد إكسبريس';
+  if(brand === 'ward') return source === 'whatsapp' ? 'ورد إكسبرس (واتساب)' : 'ورد إكسبرس';
   return source === 'whatsapp' ? 'دوكمنتيشن (واتساب)' : 'دوكمنتيشن';
 }
 

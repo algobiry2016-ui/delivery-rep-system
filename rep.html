@@ -244,7 +244,7 @@
     <div class="login-wrap">
       <div class="login-title">
         <div class="lg">مناديب التوصيل</div>
-        <div class="sm">دوكمنتيشن · وورد إكسبريس</div>
+        <div class="sm">دوكمنتيشن · ورد إكسبرس</div>
       </div>
       <div class="card">
         <label>رقم الجوال</label>
@@ -280,7 +280,7 @@
           <label>البراند</label>
           <select id="entryBrand" onchange="onBrandChange()">
             <option value="documentation">دوكمنتيشن</option>
-            <option value="ward">وورد إكسبريس</option>
+            <option value="ward">ورد إكسبرس</option>
           </select>
           <label>التاريخ</label>
           <input type="date" id="entryDate">
@@ -306,7 +306,7 @@
           <label>البراند</label>
           <select id="diffBrand" onchange="populateDiffAreaSelect()">
             <option value="documentation">دوكمنتيشن</option>
-            <option value="ward">وورد إكسبريس</option>
+            <option value="ward">ورد إكسبرس</option>
           </select>
           <label>رقم الطلب</label>
           <input id="diffOrderNo" type="text" placeholder="مثال: 10452">
@@ -510,7 +510,8 @@ async function loadRepProfile(){
 /* ---------------- LOAD AREAS ---------------- */
 async function loadAreas(){
   const snap = await db.collection('settings').doc('areas').collection('list').orderBy('order').get();
-  AREAS = snap.docs.map(d=>({id:d.id, ...d.data()}));
+  // المناطق اللي أضافها مشرف الإنتاج وما انحط لها سعر من الإدارة ما تظهر للمندوب
+  AREAS = snap.docs.map(d=>({id:d.id, ...d.data()})).filter(a=>a.rateDoc>0 && a.rateWard>0);
   if(AREAS.length === 0){
     // fallback محلي لو الإعدادات ما جُهزت بعد بلوحة الإدارة
     AREAS = [
@@ -564,7 +565,7 @@ function onBrandChange(){
 function buildAreaInputs(){
   const brand = currentBrand();
 
-  // وورد إكسبريس ما فيه قناة واتساب أصلاً — نخفي مفتاح التبديل ونثبت على "الموقع"
+  // ورد إكسبرس ما فيه قناة واتساب أصلاً — نخفي مفتاح التبديل ونثبت على "الموقع"
   const segEl = document.getElementById('entrySourceSeg');
   if(brand === 'ward'){
     segEl.style.display = 'none';
