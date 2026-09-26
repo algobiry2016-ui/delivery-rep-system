@@ -701,15 +701,20 @@ async function loadAreas(){
 async function saveArea(){
   if(myRole !== 'admin'){ noPermissionToast(); return; }
   const name = document.getElementById('areaName').value.trim();
-  const rateDoc = parseFloat(document.getElementById('areaRateDoc').value);
-  const rateWard = parseFloat(document.getElementById('areaRateWard').value);
-  const order = parseInt(document.getElementById('areaOrder').value) || 99;
+  // نقبل الأرقام العربية (٦) والإنجليزية (6)
+  const toEn = v => String(v||'').replace(/[٠-٩]/g,d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[۰-۹]/g,d=>'۰۱۲۳۴۵۶۷۸۹'.indexOf(d));
+  const rateDoc = parseFloat(toEn(document.getElementById('areaRateDoc').value));
+  const rateWard = parseFloat(toEn(document.getElementById('areaRateWard').value));
+  const order = parseInt(toEn(document.getElementById('areaOrder').value)) || 99;
   if(!name || !rateDoc || !rateWard){ toast('عبّي اسم المنطقة وسعري البراندين'); return; }
 
-  const id = name.replace(/\s+/g,'_');
-  await db.collection('settings').doc('areas').collection('list').doc(id).set({
-    name, rateDoc, rateWard, order
-  }, {merge:true});
+  // الـ ID ما يقبل "/" — نحولها لشرطة (مثال: الفرعاء/الوادين)
+  const id = name.replace(/[\/\s]+/g,'_');
+  try{
+    await db.collection('settings').doc('areas').collection('list').doc(id).set({
+      name, rateDoc, rateWard, order
+    }, {merge:true});
+  }catch(e){ console.error(e); toast('ما انحفظت المنطقة — تحقق من الاتصال أو الصلاحيات'); return; }
 
   toast('تم حفظ المنطقة ✅');
   document.getElementById('areaName').value='';
@@ -1006,7 +1011,7 @@ async function openEditEntry(id){
     if(repDoc.exists) isAmmar = !!repDoc.data().isAmmar;
   }
 
-  editState = { id, repUid: e.repUid, isAmmar, originalBrand: e.brand, prefill:{} };
+  editState = { id, repUid: e.repUid, isAmmar, originalBrand: e.brand, prefill:{}, entries: e.entries || [] };
   (e.entries || []).forEach(en=>{
     editState.prefill[en.areaId + '_' + en.source] = en.count;
   });
@@ -1029,12 +1034,26 @@ function editRateFor(area, brand){
   return editState.isAmmar ? Math.max(0, base - 5) : base;
 }
 
+// مناطق شاشة التعديل: المناطق المسعّرة + أي منطقة موجودة بالطلب الأصلي وما عادت بالقائمة
+// (بدونها كان تعديل طلب قديم يمسح مناطقه بصمت)
+function editAreas(){
+  const list = AREAS.filter(a=>a.rateDoc>0 && a.rateWard>0);
+  const ids = new Set(list.map(a=>a.id));
+  (editState.entries||[]).forEach(en=>{
+    if(ids.has(en.areaId)) return;
+    ids.add(en.areaId);
+    const base = (en.rate||0) + (editState.isAmmar ? 5 : 0);
+    list.push({id:en.areaId, name:(en.areaName||en.areaId)+' (قديمة)', rateDoc:base, rateWard:base});
+  });
+  return list;
+}
+
 function renderEditEntryGrid(){
   const brand = document.getElementById('editEntryBrand').value;
   const samebrand = brand === editState.originalBrand;
   const grid = document.getElementById('editEntryGrid');
 
-  grid.innerHTML = AREAS.map(a=>{
+  grid.innerHTML = editAreas().map(a=>{
     const rate = editRateFor(a, brand);
     const siteVal = samebrand ? (editState.prefill[a.id+'_site'] || 0) : 0;
     const waVal = samebrand ? (editState.prefill[a.id+'_whatsapp'] || 0) : 0;
@@ -1051,7 +1070,7 @@ function renderEditEntryGrid(){
 function updateEditEntryTotal(){
   const brand = document.getElementById('editEntryBrand').value;
   let total = 0;
-  AREAS.forEach(a=>{
+  editAreas().forEach(a=>{
     const rate = editRateFor(a, brand);
     const site = parseInt(document.getElementById('e_site_'+a.id).value) || 0;
     const wa = parseInt(document.getElementById('e_wa_'+a.id).value) || 0;
@@ -1067,7 +1086,7 @@ async function saveEditEntry(){
   if(!date){ toast('حدد التاريخ'); return; }
 
   let entries = [], totalAmount = 0, totalCount = 0;
-  AREAS.forEach(a=>{
+  editAreas().forEach(a=>{
     const rate = editRateFor(a, brand);
     const site = parseInt(document.getElementById('e_site_'+a.id).value) || 0;
     const wa = parseInt(document.getElementById('e_wa_'+a.id).value) || 0;
@@ -1075,9 +1094,11 @@ async function saveEditEntry(){
     if(wa > 0){ entries.push({areaId:a.id, areaName:a.name, source:'whatsapp', count:wa, rate, amount:wa*rate}); totalAmount += wa*rate; totalCount += wa; }
   });
 
-  await db.collection('dailyEntries').doc(editState.id).update({
-    brand, date, entries, totalAmount, totalCount
-  });
+  try{
+    await db.collection('dailyEntries').doc(editState.id).update({
+      brand, date, entries, totalAmount, totalCount
+    });
+  }catch(err){ console.error(err); toast('ما انحفظ التعديل — تحقق من الاتصال'); return; }
 
   toast('تم حفظ التعديل ✅');
   closeEditEntry();
@@ -1377,7 +1398,11 @@ function groupStatusInfo(statuses){
 // صف لكل منطقة (بعمود إجمالي الصف بالنهاية)، وصف أخير فيه إجمالي كل عمود + الإجمالي الكلي.
 function buildGroupMatrixRows(g, leadingCells, trailingCells){
   const areaIds = Object.keys(g.merged);
-  const areaOrder = AREAS.length ? AREAS.filter(a=>g.merged[a.id]) : areaIds.map(id=>({id, name:g.merged[id].name}));
+  // المناطق الحالية بترتيبها، وبعدها أي منطقة مسجّلة بالطلب وما عادت بالقائمة (قديمة/محذوفة/بمعرّف قديم)
+  // عشان ما تختفي من التفاصيل ويصير الإجمالي أكبر من مجموع الصفوف
+  const known = AREAS.filter(a=>g.merged[a.id]);
+  const knownIds = new Set(known.map(a=>a.id));
+  const areaOrder = [...known, ...areaIds.filter(id=>!knownIds.has(id)).map(id=>({id, name:g.merged[id].name}))];
 
   if(areaOrder.length === 0){
     const lead = leadingCells.map(h=>`<td>${h}</td>`).join('');

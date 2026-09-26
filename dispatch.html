@@ -462,7 +462,7 @@ async function saveArea(){
   const name=document.getElementById('newAreaName').value.trim();
   if(!name){ toast('اكتب اسم المنطقة'); return; }
   if(AREAS.some(a=>a.name===name)){ toast('المنطقة موجودة'); return; }
-  const id=name.replace(/\s+/g,'_'); // نفس طريقة لوحة الإدارة
+  const id=name.replace(/[\/\s]+/g,'_'); // نفس طريقة لوحة الإدارة ("/" ممنوعة في الـ ID)
   try{
     await db.collection('settings').doc('areas').collection('list').doc(id).set({name, rateDoc:null, rateWard:null,
       order:99, addedByDispatcher:true, addedBy:currentUser.uid, createdAt:TS()});
@@ -613,6 +613,7 @@ async function saveHandover(){
     if(!repServes(rep,type)){ toast(`${rep.name} ما يوصّل طلبات ${TYPES[type].label} — طلب ${n}`); return; }
     orders.push({orderNo:no, florist, areaId, areaName:area?area.name:'', type,
       brand:TYPES[type].brand, source:TYPES[type].source,
+      rate: isPriced(area) ? rateFor(area,type,rep) : null,   // السعر وقت التسليم — ما يتغير لو تغيّرت الأسعار بعدين
       notes:r.querySelector('.o-notes').value.trim(),
       manual: FLORIST_FLOW && !prep, prepId: prep?prep.id:null,
       floristReceivedAt: prep?prep.receivedAt:null, floristReadyAt: prep?prep.readyAt:null,
@@ -790,6 +791,7 @@ async function saveEdit(){
     await db.collection('dispatchOrders').doc(editId).update({
       florist, areaId, areaName:area?area.name:'', type:editType,
       brand:TYPES[editType].brand, source:TYPES[editType].source,
+      rate: isPriced(area) ? rateFor(area,editType,{isAmmar:DAY_ORDERS[editId].isAmmar}) : null,
       notes:document.getElementById('editNotes').value.trim(),
       editedBy:currentUser.uid, editedAt:TS()
     });
@@ -830,8 +832,10 @@ async function loadReports(){
   const reps = group(o=>o.repPhone);
   orders.forEach(o=>{
     const area=AREAS.find(a=>a.id===o.areaId);
-    reps[o.repPhone].amount += rateFor(area,o.type,{isAmmar:o.isAmmar});
-    if(!isPriced(area)) reps[o.repPhone].unpriced = (reps[o.repPhone].unpriced||0)+1;
+    // نعتمد السعر المحفوظ وقت التسليم، ولو ما كان للمنطقة سعر وقتها ناخذ سعرها الحالي
+    const r = (typeof o.rate==='number' && o.rate>0) ? o.rate : (isPriced(area) ? rateFor(area,o.type,{isAmmar:o.isAmmar}) : 0);
+    reps[o.repPhone].amount += r;
+    if(!r) reps[o.repPhone].unpriced = (reps[o.repPhone].unpriced||0)+1;
   });
   const unpricedTotal = Object.values(reps).reduce((s,r)=>s+(r.unpriced||0),0);
   const waits={}; batches.forEach(b=>{ const w=minsBetween(b.handedAt,b.departedAt); if(w!==null&&w>=0){ (waits[b.repPhone]=waits[b.repPhone]||[]).push(w);} });
