@@ -738,6 +738,7 @@ async function submitDiff(){
 
     toast('تم إرسال الفارق للمراجعة ✅');
     document.getElementById('diffOrderNo').value = '';
+    document.getElementById('diffAreaRegistered').value = '';
     document.getElementById('diffArea').value = '';
     document.getElementById('diffAmount').value = '';
     document.getElementById('diffPreview').style.display = 'none';
@@ -825,8 +826,8 @@ async function loadLog(){
     let html = '';
     diffDocs.forEach(d=>{
       const e = d.data();
-      const badgeClass = e.status === 'approved' ? 'approved' : 'pending';
-      const badgeText = e.status === 'approved' ? 'تم الاعتماد' : 'قيد المراجعة';
+      const badgeClass = e.status==='approved' ? 'approved' : (e.status==='rejected' ? 'rejected' : 'pending');
+      const badgeText = e.status==='approved' ? 'تم الاعتماد' : (e.status==='rejected' ? 'مرفوض' : 'قيد المراجعة');
       html += `<div class="log-item">
         <div><div class="date">طلب #${e.orderNo} — ${e.registeredAreaName || '—'} ← ${e.areaName}</div>
           <div class="desc">${e.amount} ر.س <span class="badge ${badgeClass}">${badgeText}</span></div>
@@ -839,15 +840,19 @@ async function loadLog(){
 
 /* ---------------- PENALTIES (view only) ---------------- */
 async function loadPenalties(){
-  const snap = await db.collection('penalties')
-    .where('repUid','==',myPhone())
-    .orderBy('createdAt','desc').get();
+  // بدون orderBy مع where على حقل مختلف — يتجنب الحاجة لفهرس مركّب، ونرتب بجافاسكربت.
+  const rawSnap = await db.collection('penalties').where('repUid','==',myPhone()).get();
+  const docs = rawSnap.docs.sort((a,b)=>{
+    const ta = a.data().createdAt ? a.data().createdAt.toMillis() : 0;
+    const tb = b.data().createdAt ? b.data().createdAt.toMillis() : 0;
+    return tb - ta;
+  });
 
   const list = document.getElementById('penaltyList');
-  if(snap.empty){ list.innerHTML = '<div class="empty">لا يوجد جزاءات، أحسنت 👍</div>'; return; }
+  if(docs.length === 0){ list.innerHTML = '<div class="empty">لا يوجد جزاءات، أحسنت 👍</div>'; return; }
 
   let html = '';
-  snap.forEach(d=>{
+  docs.forEach(d=>{
     const p = d.data();
     const isDeduction = p.amount && p.amount > 0;
     html += `<div class="penalty-item ${isDeduction ? 'warn' : ''}">

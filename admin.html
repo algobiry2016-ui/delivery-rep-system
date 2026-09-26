@@ -301,7 +301,7 @@
         <div class="card">
           <h3>السجل</h3>
           <table>
-            <thead><tr><th>التاريخ</th><th>المندوب</th><th>النوع</th><th>الوصف</th><th>المبلغ</th><th></th></tr></thead>
+            <thead><tr><th>التاريخ</th><th>المندوب</th><th>الجوال</th><th>النوع</th><th>الوصف</th><th>المبلغ</th><th></th></tr></thead>
             <tbody id="penaltiesBody"></tbody>
           </table>
           <div id="penaltiesEmpty" class="empty" style="display:none;">لا يوجد سجلات</div>
@@ -1109,7 +1109,8 @@ async function loadPenaltyRepSelect(){
   const snap = await db.collection('reps').get();
   const sel = document.getElementById('penRep');
   if(!sel) return;
-  sel.innerHTML = snap.docs.map(d=>`<option value="${d.id}">${d.data().name}</option>`).join('');
+  // نعرض رقم الجوال جنب الاسم — يمنع اختيار مندوب غلط لو فيه تشابه أسماء
+  sel.innerHTML = snap.docs.map(d=>`<option value="${d.id}">${d.data().name} — ${d.id}</option>`).join('');
 }
 
 async function addPenalty(){
@@ -1145,7 +1146,7 @@ async function loadPenalties(){
   body.innerHTML = snap.docs.map(d=>{
     const p = d.data();
     return `<tr>
-      <td>${p.date}</td><td>${p.repName||'—'}</td><td>${p.type}</td><td>${p.description||'—'}</td>
+      <td>${p.date}</td><td>${p.repName||'—'}</td><td style="color:var(--ink-soft);font-size:12px;">${p.repUid||'—'}</td><td>${p.type}</td><td>${p.description||'—'}</td>
       <td>${p.amount ? p.amount+' ر.س' : '—'}</td>
       <td>${myRole==='admin' ? `<button class="small-danger" onclick="deletePenalty('${d.id}')">حذف</button>` : ''}</td>
     </tr>`;
