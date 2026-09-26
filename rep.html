@@ -217,6 +217,30 @@
   .screen{display:none;}
   .screen.active{display:block;}
 
+  /* ---------- طلباتي من مشرف الإنتاج ---------- */
+  .batch{border:1px solid var(--line);border-radius:12px;margin-top:12px;overflow:hidden;}
+  .batch-head{display:flex;justify-content:space-between;align-items:center;gap:8px;background:var(--cream);padding:10px 12px;}
+  .batch-head .bt{font-size:13px;font-weight:700;}
+  .batch-head .bs{font-size:11.5px;color:var(--ink-soft);}
+  .btn-ok{background:var(--green);color:#fff;border:none;border-radius:8px;padding:8px 12px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap;}
+  .btn-ok:disabled{opacity:.5;}
+  .btn-no{background:#FBEAEA;color:#B23A3A;border:none;border-radius:8px;padding:7px 10px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer;}
+  .ord{display:flex;align-items:center;gap:10px;padding:10px 12px;border-top:1px solid var(--line);}
+  .ord .grow{flex:1;min-width:0;}
+  .ord .no{font-weight:900;font-size:15px;direction:ltr;unicode-bidi:isolate;}
+  .ord .meta{font-size:12.5px;color:var(--ink-soft);margin-top:2px;}
+  .ord .st{font-size:12px;font-weight:700;margin-top:4px;}
+  .st.pending{color:var(--amber);} .st.confirmed{color:var(--green);} .st.disputed{color:#B23A3A;}
+  .ord .note{font-size:12px;background:var(--amber-bg);color:var(--amber);border-radius:8px;padding:6px 8px;margin-top:6px;}
+  .tbadge{display:inline-block;font-size:11px;font-weight:700;padding:1px 7px;border-radius:8px;background:var(--cream);color:var(--ink);}
+  .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:flex-end;justify-content:center;z-index:60;}
+  .modal-bg.show{display:flex;}
+  .modal{background:#fff;border-radius:18px 18px 0 0;padding:20px 18px calc(20px + env(safe-area-inset-bottom,0px));width:100%;max-width:480px;max-height:90vh;overflow-y:auto;}
+  .modal h3{margin:0 0 6px;font-size:17px;}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;}
+  .chip{border:1.5px solid var(--line);background:#fff;border-radius:18px;padding:8px 12px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;color:var(--ink);}
+  .chip.on{background:var(--rose);color:#fff;border-color:var(--rose);}
+
   .toast{
     position:fixed;bottom:80px;left:50%;transform:translateX(-50%);
     background:var(--ink);color:#fff;
@@ -275,7 +299,19 @@
         </div>
         <div id="pendingNotice" class="source-label" style="display:none;margin-bottom:14px;"></div>
 
-        <div class="card">
+        <div class="card" id="myOrdersCard">
+          <h3>طلباتي من مشرف الإنتاج</h3>
+          <div class="muted">كل طلب يسلّمه لك مشرف الإنتاج يظهر هنا مباشرة بمنطقته وسعره. راجعها واضغط <b>تأكيد</b>، أو <b>اعتراض</b> لو فيه غلط.</div>
+          <label>التاريخ</label>
+          <input type="date" id="ordersDate" onchange="listenMyOrders()">
+          <div id="ordersSummary" class="source-label" style="display:none"></div>
+          <div id="myOrdersList"><div class="empty">جاري التحميل...</div></div>
+          <button class="secondary" onclick="openMissing()">+ وصّلت طلب وما هو موجود في القائمة</button>
+          <div id="myMissingList"></div>
+        </div>
+
+        <!-- الإدخال اليدوي القديم: مخفي — الأعداد صارت تجي من سجل مشرف الإنتاج (MANUAL_ENTRY) -->
+        <div class="card" id="manualEntryCard" style="display:none">
           <h3>إدخال طلبات اليوم</h3>
           <label>البراند</label>
           <select id="entryBrand" onchange="onBrandChange()">
@@ -375,14 +411,57 @@
   </div>
 
   <div class="navbar" id="navbar" style="display:none;">
-    <button class="navbtn active" onclick="showTab('home')"><span class="ic">🏠</span>الرئيسية</button>
+    <button class="navbtn active" onclick="showTab('home')"><span class="ic">🏠</span>الرئيسية<span class="nav-badge" id="navBadgeHome"></span></button>
     <button class="navbtn" onclick="showTab('diff')"><span class="ic">🔁</span>فارق توصيل</button>
     <button class="navbtn" onclick="showTab('log')"><span class="ic">📋</span>سجلي<span class="nav-badge" id="navBadgeLog"></span></button>
     <button class="navbtn" onclick="showTab('penalties')"><span class="ic">⚠️</span>الجزاءات<span class="nav-badge" id="navBadgePenalties"></span></button>
     <button class="navbtn" onclick="showTab('account')"><span class="ic">⚙️</span>حسابي</button>
   </div>
 
-  <div class="toast" id="toast"></div>
+  <!-- اعتراض -->
+<div class="modal-bg" id="disputeModal" onclick="if(event.target===this)closeModal('disputeModal')">
+  <div class="modal">
+    <h3>اعتراض على الطلب <span id="dispNo" style="direction:ltr;unicode-bidi:isolate"></span></h3>
+    <div class="muted">يوصل اعتراضك لمشرف الإنتاج، وما ينحسب الطلب لين يتعدّل أو تأكده.</div>
+    <label>السبب</label>
+    <div class="chips" id="dispReasons">
+      <button type="button" class="chip" data-r="ما استلمت الطلب">ما استلمت الطلب</button>
+      <button type="button" class="chip" data-r="المنطقة غلط">المنطقة غلط</button>
+      <button type="button" class="chip" data-r="نوع الطلب غلط">نوع الطلب غلط</button>
+      <button type="button" class="chip" data-r="رقم الطلب غلط">رقم الطلب غلط</button>
+      <button type="button" class="chip" data-r="سبب آخر">سبب آخر</button>
+    </div>
+    <label>توضيح (اختياري)</label>
+    <input id="dispNote" placeholder="مثال: الطلب راح لأحد رفيدة مو أبها">
+    <button class="primary" id="dispBtn" onclick="submitDispute()">إرسال الاعتراض</button>
+    <button class="ghost" style="width:100%;margin-top:6px" onclick="closeModal('disputeModal')">إلغاء</button>
+  </div>
+</div>
+
+<!-- طلب ناقص -->
+<div class="modal-bg" id="missingModal" onclick="if(event.target===this)closeModal('missingModal')">
+  <div class="modal">
+    <h3>طلب وصّلته وما هو في القائمة</h3>
+    <div class="muted">يوصل بلاغك لمشرف الإنتاج، ولما يسجّله يظهر عندك في القائمة وتأكده.</div>
+    <label>رقم الطلب</label>
+    <input id="missNo" inputmode="numeric" placeholder="رقم سلة، أو اتركه فاضي لطلب واتس/محل بدون رقم">
+    <label>النوع</label>
+    <select id="missType">
+      <option value="doc">دوكمنتيشن</option>
+      <option value="ward">ورد إكسبرس</option>
+      <option value="wa">واتس دوكمنتيشن</option>
+      <option value="shop">طلبات المحل</option>
+    </select>
+    <label>المنطقة</label>
+    <select id="missArea"></select>
+    <label>توضيح (اختياري)</label>
+    <input id="missNote" placeholder="مثال: استلمته من المشغل الساعة 4">
+    <button class="primary" id="missBtn" onclick="submitMissing()">إرسال البلاغ</button>
+    <button class="ghost" style="width:100%;margin-top:6px" onclick="closeModal('missingModal')">إلغاء</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
 </div>
 
 <!-- Firebase SDK -->
@@ -482,6 +561,10 @@ auth.onAuthStateChanged(async user=>{
     loadPenalties();
     loadTodaySummary();
     attachNotificationListeners();
+    document.getElementById('ordersDate').value = riyadhDate();
+    populateMissingAreas();
+    listenMyOrders();
+    listenPendingBadge();
   } else {
     currentUser = null;
     document.getElementById('mainScreen').classList.remove('active');
@@ -764,7 +847,7 @@ async function submitDiff(){
 
 /* ---------------- TODAY SUMMARY ---------------- */
 async function loadTodaySummary(){
-  const today = new Date().toISOString().slice(0,10);
+  const today = riyadhDate();
   const snap = await db.collection('dailyEntries')
     .where('repUid','==',myPhone())
     .where('date','==',today).get();
@@ -780,7 +863,7 @@ async function loadTodaySummary(){
   const diffSnap = await db.collection('deliveryDiffs').where('repUid','==',myPhone()).get();
   diffSnap.forEach(d=>{
     const e = d.data();
-    const dDate = e.createdAt && e.createdAt.toDate ? e.createdAt.toDate().toISOString().slice(0,10) : null;
+    const dDate = e.createdAt && e.createdAt.toDate ? riyadhDate(e.createdAt.toDate()) : null;
     if(dDate !== today) return;
     if(e.status === 'approved'){ count += 1; amount += e.amount; }
     else if(e.status !== 'rejected'){ pendingCount += 1; pendingAmount += e.amount; }
@@ -961,6 +1044,203 @@ function attachNotificationListeners(){
     cachedPenaltiesForBadge = snap.docs.map(d=>d.data());
     recomputePenaltiesBadge();
   });
+}
+
+/* ================================================================
+   طلباتي من مشرف الإنتاج — تأكيد / اعتراض / بلاغ طلب ناقص
+   ================================================================ */
+const TS = () => firebase.firestore.FieldValue.serverTimestamp();
+const OTYPES = {
+  doc:  {label:'دوكمنتيشن',       brand:'documentation', source:'site'},
+  ward: {label:'ورد إكسبرس',      brand:'ward',          source:'site'},
+  wa:   {label:'واتس دوكمنتيشن',  brand:'documentation', source:'whatsapp'},
+  shop: {label:'طلبات المحل',     brand:'documentation', source:'shop'}
+};
+function riyadhDate(d=new Date()){ return d.toLocaleDateString('en-CA',{timeZone:'Asia/Riyadh'}); }
+function fmtT(ts){ return ts&&ts.toDate ? ts.toDate().toLocaleTimeString('ar-SA',{hour:'numeric',minute:'2-digit',timeZone:'Asia/Riyadh'}) : '—'; }
+function escH(s){ return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function closeModal(id){ document.getElementById(id).classList.remove('show'); }
+function repStatusOf(o){ return o.repStatus || 'pending'; }
+// السعر: المحفوظ وقت التسليم، ولو كانت المنطقة بدون سعر وقتها ناخذ سعرها الحالي
+function orderRate(o){
+  if(typeof o.rate==='number' && o.rate>0) return o.rate;
+  const a = AREAS.find(x=>x.id===o.areaId);
+  return a ? rateForRep(a, o.brand) : 0;
+}
+
+let MY_ORDERS = [], myOrdersUnsub = null, myMissingUnsub = null;
+function listenMyOrders(){
+  const date = document.getElementById('ordersDate').value || riyadhDate();
+  if(myOrdersUnsub) myOrdersUnsub();
+  if(myMissingUnsub) myMissingUnsub();
+  myOrdersUnsub = db.collection('dispatchOrders').where('repPhone','==',myPhone()).where('date','==',date)
+    .onSnapshot(s=>{ MY_ORDERS = s.docs.map(d=>({id:d.id,...d.data()})); renderMyOrders(); },
+      e=>{ console.error(e); document.getElementById('myOrdersList').innerHTML='<div class="empty">تعذّر تحميل الطلبات — حدّث الصفحة</div>'; });
+  myMissingUnsub = db.collection('missingReports').where('repPhone','==',myPhone()).where('date','==',date)
+    .onSnapshot(s=>renderMyMissing(s.docs.map(d=>({id:d.id,...d.data()}))), e=>console.error(e));
+}
+
+function renderMyOrders(){
+  const box = document.getElementById('myOrdersList');
+  const sum = document.getElementById('ordersSummary');
+  if(!MY_ORDERS.length){
+    box.innerHTML = '<div class="empty">ما فيه طلبات مسجّلة لك بهذا التاريخ.</div>';
+    sum.style.display='none'; return;
+  }
+  const batches = {};
+  MY_ORDERS.forEach(o=>(batches[o.batchId]=batches[o.batchId]||[]).push(o));
+  const list = Object.values(batches).sort((a,b)=>(b[0].handedAt?.toMillis?.()||0)-(a[0].handedAt?.toMillis?.()||0));
+
+  let nPend=0, nConf=0, nDisp=0, amtConf=0, amtPend=0;
+  MY_ORDERS.forEach(o=>{ const st=repStatusOf(o), r=orderRate(o);
+    if(st==='confirmed'){ nConf++; amtConf+=r; } else if(st==='disputed'){ nDisp++; } else { nPend++; amtPend+=r; } });
+  sum.style.display='block';
+  sum.innerHTML = `${MY_ORDERS.length} طلب · ✓ مؤكد ${nConf} (${amtConf} ر.س)` + (nPend?` · ⏳ بانتظار تأكيدك ${nPend} (${amtPend} ر.س)`:'') + (nDisp?` · ⚠️ معترض ${nDisp}`:'');
+
+  box.innerHTML = list.map(orders=>{
+    orders.sort((a,b)=>a.orderNo.localeCompare(b.orderNo));
+    const pend = orders.filter(o=>repStatusOf(o)==='pending' && orderRate(o)>0);
+    const bAmt = orders.reduce((s,o)=>s+orderRate(o),0);
+    return `<div class="batch">
+      <div class="batch-head">
+        <div><div class="bt">استلمت ${fmtT(orders[0].handedAt)} · ${orders.length} طلب</div>
+          <div class="bs">${orders[0].departedAt?'خرجت '+fmtT(orders[0].departedAt)+' · ':''}${bAmt} ر.س</div></div>
+        ${pend.length?`<button class="btn-ok" onclick="confirmOrders(['${pend.map(o=>o.id).join("','")}'])">✓ تأكيد الكل (${pend.length})</button>`:''}
+      </div>
+      ${orders.map(o=>{
+        const st=repStatusOf(o), r=orderRate(o);
+        const stTxt = st==='confirmed' ? '✓ مؤكد — أُرسل للاعتماد'
+          : st==='disputed' ? `⚠️ اعترضت: ${escH(o.disputeReason||'')} — بانتظار مشرف الإنتاج`
+          : (r>0 ? '⏳ بانتظار تأكيدك' : '⏳ المنطقة بانتظار التسعير من الإدارة');
+        const btns = st==='confirmed' ? '' :
+          `<div style="display:flex;flex-direction:column;gap:6px">
+             ${st==='pending' && r>0 ? `<button class="btn-ok" onclick="confirmOrders(['${o.id}'])">✓ تأكيد</button>` : ''}
+             ${st==='pending' ? `<button class="btn-no" onclick="openDispute('${o.id}')">اعتراض</button>` : ''}
+           </div>`;
+        return `<div class="ord">
+          <div class="grow">
+            <div class="no">${escH(o.orderNo)}</div>
+            <div class="meta"><span class="tbadge">${OTYPES[o.type]?.label||''}</span> · ${escH(o.areaName)} · <b>${r?r+' ر.س':'—'}</b></div>
+            ${o.redeliveryOf?'<div class="st" style="color:#3A6EA5">🔁 توصيل ثاني — مشوار مستقل ينحسب لك</div>':''}
+            ${o.transferredFrom?`<div class="st" style="color:var(--ink-soft)">محوّل لك من ${escH(o.transferredFrom)}</div>`:''}
+            ${o.returned?`<div class="st" style="color:#B23A3A">↩︎ رجع للمحل: ${escH(o.returnReason||'')} — المشوار ينحسب لك</div>`:''}
+            <div class="st ${st}">${stTxt}</div>
+            ${o.ibrahimNote && st!=='confirmed' ? `<div class="note">ملاحظة مشرف الإنتاج: ${escH(o.ibrahimNote)}</div>` : ''}
+          </div>${btns}
+        </div>`;
+      }).join('')}
+    </div>`;
+  }).join('');
+}
+
+// التأكيد: يحوّل الطلبات المؤكدة لقيد يومي (dailyEntries) بنفس الشكل القديم، فيوصل للإدارة
+// للاعتماد مثل ما كان، وكل طلب ينربط بقيده (entryId) عشان ما ينحسب مرتين.
+let confirming=false;
+async function confirmOrders(ids){
+  if(confirming) return;
+  const orders = MY_ORDERS.filter(o=>ids.includes(o.id) && repStatusOf(o)==='pending' && orderRate(o)>0);
+  if(!orders.length) return;
+  confirming=true;
+  try{
+    const byBrand = {};
+    orders.forEach(o=>(byBrand[o.brand]=byBrand[o.brand]||[]).push(o));
+    const wb = db.batch();
+    Object.entries(byBrand).forEach(([brand,list])=>{
+      const agg = {};
+      list.forEach(o=>{
+        const r=orderRate(o), k=o.areaId+'|'+o.source+'|'+r;
+        agg[k]=agg[k]||{areaId:o.areaId, areaName:o.areaName, source:o.source, count:0, rate:r, amount:0};
+        agg[k].count++; agg[k].amount+=r;
+      });
+      const entries=Object.values(agg);
+      const entryRef = db.collection('dailyEntries').doc();
+      wb.set(entryRef, {
+        repUid: myPhone(), repName: repDoc ? repDoc.name : '', brand, date: list[0].date,
+        entries, totalAmount: entries.reduce((s,e)=>s+e.amount,0), totalCount: list.length,
+        status:'pending', fromDispatch:true, orderIds:list.map(o=>o.id), orderNos:list.map(o=>o.orderNo),
+        createdAt: TS()
+      });
+      list.forEach(o=>wb.update(db.collection('dispatchOrders').doc(o.id), {repStatus:'confirmed', repActionAt:TS(), entryId:entryRef.id}));
+    });
+    await wb.commit();
+    toast(`تم تأكيد ${orders.length} طلب ✅ — بانتظار اعتماد الإدارة`);
+    loadTodaySummary();
+  }catch(e){ console.error(e); toast('ما انحفظ التأكيد — تحقق من الإنترنت'); }
+  confirming=false;
+}
+
+let disputeId=null, disputeReason='';
+document.addEventListener('click',e=>{
+  const c=e.target.closest('#dispReasons .chip'); if(!c) return;
+  disputeReason=c.dataset.r;
+  document.querySelectorAll('#dispReasons .chip').forEach(x=>x.classList.toggle('on',x===c));
+});
+function openDispute(id){
+  const o=MY_ORDERS.find(x=>x.id===id); if(!o) return;
+  disputeId=id; disputeReason='';
+  document.getElementById('dispNo').textContent=o.orderNo;
+  document.getElementById('dispNote').value='';
+  document.querySelectorAll('#dispReasons .chip').forEach(x=>x.classList.remove('on'));
+  document.getElementById('disputeModal').classList.add('show');
+}
+async function submitDispute(){
+  if(!disputeReason){ toast('اختر سبب الاعتراض'); return; }
+  const o=MY_ORDERS.find(x=>x.id===disputeId); if(!o) return;
+  const btn=document.getElementById('dispBtn'); btn.disabled=true;
+  try{
+    await db.collection('dispatchOrders').doc(disputeId).update({
+      repStatus:'disputed', disputeReason, disputeNote:document.getElementById('dispNote').value.trim(),
+      disputeCount:(o.disputeCount||0)+1, repActionAt:TS()
+    });
+    closeModal('disputeModal'); toast('وصل اعتراضك لمشرف الإنتاج');
+  }catch(e){ console.error(e); toast('ما انرسل — تحقق من الإنترنت'); }
+  btn.disabled=false;
+}
+
+function populateMissingAreas(){
+  document.getElementById('missArea').innerHTML = '<option value="">اختر المنطقة...</option>' +
+    AREAS.map(a=>`<option value="${escH(a.id)}">${escH(a.name)}</option>`).join('');
+}
+function openMissing(){
+  ['missNo','missNote'].forEach(i=>document.getElementById(i).value='');
+  document.getElementById('missType').value='doc'; document.getElementById('missArea').value='';
+  document.getElementById('missingModal').classList.add('show');
+}
+async function submitMissing(){
+  const no = String(document.getElementById('missNo').value||'').replace(/[٠-٩]/g,d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/\D/g,'');
+  const type = document.getElementById('missType').value;
+  const areaId = document.getElementById('missArea').value;
+  if(!no && type!=='wa' && type!=='shop'){ toast('اكتب رقم الطلب'); return; }
+  if(no && (no.length<3 || no.length>12)){ toast('رقم الطلب غير صحيح'); return; }
+  if(!areaId){ toast('اختر المنطقة'); return; }
+  const area = AREAS.find(a=>a.id===areaId);
+  const btn=document.getElementById('missBtn'); btn.disabled=true;
+  try{
+    await db.collection('missingReports').add({
+      repPhone: myPhone(), repName: repDoc ? repDoc.name : '', date: document.getElementById('ordersDate').value || riyadhDate(),
+      orderNo: no, type, areaId, areaName: area?area.name:'', note: document.getElementById('missNote').value.trim(),
+      status:'open', createdAt: TS()
+    });
+    closeModal('missingModal'); toast('وصل بلاغك لمشرف الإنتاج');
+  }catch(e){ console.error(e); toast('ما انرسل — تحقق من الإنترنت'); }
+  btn.disabled=false;
+}
+function renderMyMissing(list){
+  const box=document.getElementById('myMissingList');
+  if(!list.length){ box.innerHTML=''; return; }
+  box.innerHTML = '<label style="margin-top:14px">بلاغاتي عن طلبات ناقصة</label>' + list.map(m=>{
+    const st = m.status==='resolved' ? '<span class="badge approved">انضاف للقائمة</span>'
+      : m.status==='rejected' ? `<span class="badge rejected">مرفوض</span>${m.resolveNote?` <span class="muted">${escH(m.resolveNote)}</span>`:''}`
+      : '<span class="badge pending">عند مشرف الإنتاج</span>';
+    return `<div class="log-item"><div><div class="desc" style="direction:ltr;unicode-bidi:isolate;text-align:right">${escH(m.orderNo||'بدون رقم')}</div>
+      <div class="date">${OTYPES[m.type]?.label||''} · ${escH(m.areaName)}</div></div><div>${st}</div></div>`;
+  }).join('');
+}
+
+// رقم أحمر على "الرئيسية" بعدد الطلبات اللي تنتظر تأكيد المندوب (كل التواريخ)
+function listenPendingBadge(){
+  db.collection('dispatchOrders').where('repPhone','==',myPhone()).where('repStatus','==','pending')
+    .onSnapshot(s=>updateNavBadgeRep('navBadgeHome', s.size), e=>console.error(e));
 }
 
 /* ---------------- MY BALANCE ---------------- */

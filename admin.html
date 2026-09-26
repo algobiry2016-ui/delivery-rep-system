@@ -260,7 +260,7 @@
         <div class="card">
           <h3>طلبات بانتظار الاعتماد</h3>
           <table>
-            <thead><tr><th>التاريخ</th><th>المندوب</th><th>المنطقة</th><th>دوكمنتيشن</th><th>دوكمنتيشن واتساب</th><th>ورد إكسبرس</th><th>إجمالي الصف</th><th>الحالة</th><th>الإجراءات</th></tr></thead>
+            <thead><tr><th>التاريخ</th><th>المندوب</th><th>المنطقة</th><th>دوكمنتيشن (موقع + محل)</th><th>دوكمنتيشن واتساب</th><th>ورد إكسبرس</th><th>إجمالي الصف</th><th>الحالة</th><th>الإجراءات</th></tr></thead>
             <tbody id="pendingEntriesBody"></tbody>
           </table>
           <div id="pendingEntriesEmpty" class="empty" style="display:none;">لا يوجد طلبات بانتظار الاعتماد</div>
@@ -269,7 +269,7 @@
         <div class="card">
           <h3>أحدث الإدخالات</h3>
           <table>
-            <thead><tr><th>التاريخ</th><th>المندوب</th><th>المنطقة</th><th>دوكمنتيشن</th><th>دوكمنتيشن واتساب</th><th>ورد إكسبرس</th><th>إجمالي الصف</th><th>الحالة</th><th>الإجراءات</th></tr></thead>
+            <thead><tr><th>التاريخ</th><th>المندوب</th><th>المنطقة</th><th>دوكمنتيشن (موقع + محل)</th><th>دوكمنتيشن واتساب</th><th>ورد إكسبرس</th><th>إجمالي الصف</th><th>الحالة</th><th>الإجراءات</th></tr></thead>
             <tbody id="recentEntriesBody"></tbody>
           </table>
           <div id="recentEmpty" class="empty" style="display:none;">لا يوجد إدخالات بعد</div>
@@ -1127,6 +1127,27 @@ async function loadDiffs(){
   const empty = document.getElementById('diffsEmpty');
   if(snap.empty){ body.innerHTML=''; empty.style.display='block'; return; }
   empty.style.display='none';
+
+  // مطابقة الفارق مع سجل مشرف الإنتاج: هل الطلب فعلاً انسلّم لنفس المندوب؟ (للأدمن فقط)
+  const checks = {};
+  if(myRole==='admin'){
+    const nos = [...new Set(snap.docs.map(d=>String(d.data().orderNo||'').replace(/[٠-٩]/g,x=>'٠١٢٣٤٥٦٧٨٩'.indexOf(x)).replace(/\D/g,'')).filter(Boolean))];
+    await Promise.all(nos.map(async no=>{
+      try{ const r = await db.collection('dispatchOrders').where('orderNo','==',no).get(); checks[no] = r.docs.map(x=>x.data()); }catch(err){}
+    }));
+  }
+  const checkTag = e=>{
+    if(myRole!=='admin') return '';
+    const no = String(e.orderNo||'').replace(/[٠-٩]/g,x=>'٠١٢٣٤٥٦٧٨٩'.indexOf(x)).replace(/\D/g,'');
+    const list = checks[no];
+    if(!list) return '';
+    const mine = list.find(o=>o.repPhone===e.repUid);
+    const tag = (bg,c,t)=>`<div style="margin-top:4px;font-size:11px;font-weight:700;background:${bg};color:${c};padding:2px 7px;border-radius:8px;display:inline-block">${t}</div>`;
+    if(mine) return tag('var(--green-bg)','var(--green)',`✓ مسلّم له · ${mine.areaName}`);
+    if(list.length) return tag('#FBEAEA','#B23A3A',`⚠️ مسلّم لـ ${list[0].repName}`);
+    return tag('var(--amber-bg)','var(--amber)','غير موجود بسجل التسليم');
+  };
+
   body.innerHTML = snap.docs.map(d=>{
     const e = d.data();
     const dateStr = e.createdAt && e.createdAt.toDate ? e.createdAt.toDate().toLocaleDateString('ar-SA') : '—';
@@ -1137,7 +1158,7 @@ async function loadDiffs(){
       : '';
     const diffDeleteBtn = myRole==='admin' ? `<button class="small-danger" onclick="deleteDiff('${d.id}')">حذف</button>` : '';
     return `<tr>
-      <td>${dateStr}</td><td>${e.repName||'—'}</td><td>#${e.orderNo}</td>
+      <td>${dateStr}</td><td>${e.repName||'—'}</td><td>#${e.orderNo}${checkTag(e)}</td>
       <td>${e.registeredAreaName || '—'}</td><td>${e.areaName}</td><td>${e.amount} ر.س</td>
       <td>${e.proofImage ? `<img class="thumb" src="${e.proofImage}" onclick="openImgModal('${e.proofImage.replace(/'/g,"")}')">` : '—'}</td>
       <td><span class="badge ${badgeClass}">${badgeText}</span></td>
