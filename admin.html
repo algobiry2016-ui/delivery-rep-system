@@ -90,6 +90,17 @@
   .badge.reviewed{background:#E6EEF5;color:#3A6EA5;}
   .badge.ammar{background:var(--gold);color:#fff;}
 
+  .nav-badge{
+    display:none;
+    background:#E23B3B;color:#fff;
+    font-size:11px;font-weight:900;
+    min-width:18px;height:18px;border-radius:9px;
+    align-items:center;justify-content:center;
+    padding:0 5px;margin-inline-start:4px;
+    vertical-align:middle;
+  }
+  .nav-badge.show{display:inline-flex;}
+
   .tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px;}
   .tile{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px;text-align:center;}
   .tile .num{font-size:24px;font-weight:900;color:var(--rose);}
@@ -211,8 +222,8 @@
     <div class="sidebar" id="sidebar">
       <div class="logo">لوحة الإدارة</div>
       <div class="sub">مناديب التوصيل</div>
-      <button class="navitem active" onclick="showTab('dashboard')">📊 نظرة عامة</button>
-      <button class="navitem" onclick="showTab('diffs')">🔁 فوارق التوصيل</button>
+      <button class="navitem active" onclick="showTab('dashboard')">📊 نظرة عامة <span class="nav-badge" id="navBadgeEntries"></span></button>
+      <button class="navitem" onclick="showTab('diffs')">🔁 فوارق التوصيل <span class="nav-badge" id="navBadgeDiffs"></span></button>
       <button class="navitem" onclick="showTab('penalties')">⚠️ الجزاءات والهدايا</button>
       <button class="navitem" onclick="showTab('reps')">👤 المناديب</button>
       <button class="navitem" onclick="showTab('areas')">📍 المناطق والأسعار</button>
@@ -572,6 +583,17 @@ function noPermissionToast(){
   toast(msg);
 }
 
+function updateNavBadge(id, count){
+  const el = document.getElementById(id);
+  if(!el) return;
+  if(count > 0){
+    el.textContent = count > 99 ? '99+' : count;
+    el.classList.add('show');
+  } else {
+    el.classList.remove('show');
+  }
+}
+
 function toast(msg){
   const t = document.getElementById('toast');
   t.textContent = msg; t.classList.add('show');
@@ -853,6 +875,7 @@ async function loadDashboard(){
 
   const diffSnap = await db.collection('deliveryDiffs').where('status','==','pending').get();
   document.getElementById('dashPendingDiffs').textContent = diffSnap.size;
+  updateNavBadge('navBadgeDiffs', diffSnap.size);
 
   // ملاحظة: تفادينا orderBy مع where على حقل مختلف حتى لا يحتاج الاستعلام
   // فهرس مركّب (composite index) لسا ما انبنى بـ Firestore — نرتب بجافاسكربت بدلاً منه.
@@ -870,6 +893,7 @@ async function loadDashboard(){
   const pEmpty = document.getElementById('pendingEntriesEmpty');
   const pendingGroups = groupEntriesByRepDate(pendingDocs);
   const pendingKeys = Object.keys(pendingGroups);
+  updateNavBadge('navBadgeEntries', pendingKeys.length);
   if(pendingKeys.length === 0){ pBody.innerHTML=''; pEmpty.style.display='block'; }
   else{
     pEmpty.style.display='none';
@@ -1038,7 +1062,7 @@ async function saveEditEntry(){
 
 async function setEntryStatus(id, status){
   if(myRole !== 'admin'){ noPermissionToast(); return; }
-  await db.collection('dailyEntries').doc(id).update({status});
+  await db.collection('dailyEntries').doc(id).update({status, statusUpdatedAt: firebase.firestore.FieldValue.serverTimestamp()});
   toast(status==='approved' ? 'تم الاعتماد ✅' : 'تم الرفض');
   loadDashboard();
 }
@@ -1079,7 +1103,7 @@ async function loadDiffs(){
 
 async function setDiffStatus(id, status){
   if(myRole !== 'admin'){ noPermissionToast(); return; }
-  await db.collection('deliveryDiffs').doc(id).update({status});
+  await db.collection('deliveryDiffs').doc(id).update({status, statusUpdatedAt: firebase.firestore.FieldValue.serverTimestamp()});
   toast(status==='approved' ? 'تم الاعتماد ✅' : 'تم الرفض');
   loadDiffs();
   loadDashboard();
@@ -1395,7 +1419,7 @@ function subDocsActionsHtml(g, includeStatusBtns){
 // ما يقدر يعتمد ولا يرفض ولا يحذف ولا يعدّل أي شي. الاعتماد النهائي للأدمن فقط.
 async function markReviewed(id){
   if(myRole !== 'admin' && myRole !== 'supervisor'){ noPermissionToast(); return; }
-  await db.collection('dailyEntries').doc(id).update({status:'reviewed'});
+  await db.collection('dailyEntries').doc(id).update({status:'reviewed', statusUpdatedAt: firebase.firestore.FieldValue.serverTimestamp()});
   toast('تم تحديدها "تمت المراجعة" ✅ — بانتظار اعتماد الإدارة');
   loadDashboard();
 }
@@ -1404,7 +1428,7 @@ function bulkMarkReviewed(idsCsv){
   if(myRole !== 'admin' && myRole !== 'supervisor'){ noPermissionToast(); return; }
   const ids = idsCsv.split(',');
   const batch = db.batch();
-  ids.forEach(id => batch.update(db.collection('dailyEntries').doc(id), {status:'reviewed'}));
+  ids.forEach(id => batch.update(db.collection('dailyEntries').doc(id), {status:'reviewed', statusUpdatedAt: firebase.firestore.FieldValue.serverTimestamp()}));
   batch.commit().then(()=>{
     toast('تم تحديدها "تمت المراجعة" ✅ — بانتظار اعتماد الإدارة');
     loadDashboard();
@@ -1415,7 +1439,7 @@ function bulkSetEntryStatus(idsCsv, status){
   if(myRole !== 'admin'){ noPermissionToast(); return; }
   const ids = idsCsv.split(',');
   const batch = db.batch();
-  ids.forEach(id => batch.update(db.collection('dailyEntries').doc(id), {status}));
+  ids.forEach(id => batch.update(db.collection('dailyEntries').doc(id), {status, statusUpdatedAt: firebase.firestore.FieldValue.serverTimestamp()}));
   batch.commit().then(()=>{
     toast(status==='approved' ? 'تم اعتماد كل طلبات اليوم ✅' : 'تم الرفض');
     loadDashboard();
