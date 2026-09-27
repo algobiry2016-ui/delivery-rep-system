@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>لوحة المشرف — مناديب التوصيل</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --black:#000; --ink:#2B2420; --ink-soft:#6B615A; --cream:#F7F3EE; --line:#E8E0D8; --card:#fff;
+    --gold:#B8935F; --green:#4C7A5C; --green-bg:#EAF2EC; --amber:#A9762F; --amber-bg:#FBF1E2;
+    --red:#B23A3A; --red-bg:#FBEAEA; --blue:#3A6EA5; --blue-bg:#E6EEF5;
+  }
+  *{box-sizing:border-box;}
+  html,body{background:var(--cream);}
+  body{margin:0;font-family:'Tajawal',system-ui,sans-serif;color:var(--ink);padding-bottom:env(safe-area-inset-bottom,0px);}
+  .screen{display:none;} .screen.active{display:block;}
+  .login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}
+  .login-card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:28px;width:100%;max-width:380px;}
+  .login-card h2{margin:0 0 4px;font-size:21px;} .login-card p{margin:0 0 18px;color:var(--ink-soft);font-size:13px;}
+  .err{background:var(--red-bg);color:var(--red);padding:10px;border-radius:8px;font-size:13px;margin-bottom:12px;display:none;}
+  label.l{display:block;font-size:12px;font-weight:700;color:var(--ink-soft);margin:0 0 4px;}
+  input,select{padding:10px 12px;border:1.5px solid var(--line);border-radius:8px;font-family:inherit;font-size:14.5px;background:#fff;color:var(--ink);width:100%;}
+  input:focus,select:focus{outline:none;border-color:var(--black);}
+  .btn{border:none;border-radius:8px;padding:10px 14px;font-family:inherit;font-weight:700;font-size:13.5px;cursor:pointer;}
+  .btn-black{background:var(--black);color:#fff;} .btn-green{background:var(--green);color:#fff;} .btn-ghost{background:#fff;border:1.5px solid var(--line);color:var(--ink);}
+  .btn:disabled{opacity:.45;cursor:not-allowed;} .w100{width:100%;}
+
+  .topbar{background:var(--black);color:#fff;padding:14px 18px;padding-top:calc(14px + env(safe-area-inset-top,0px));display:flex;justify-content:space-between;align-items:center;}
+  .topbar .t{font-weight:900;font-size:17px;} .topbar .s{font-size:11.5px;opacity:.75;}
+  .topbar button{background:rgba(255,255,255,.14);border:none;color:#fff;padding:8px 12px;border-radius:8px;font-family:inherit;font-size:12px;cursor:pointer;}
+  .tabs{display:flex;gap:6px;padding:10px 14px;background:#fff;border-bottom:1px solid var(--line);overflow-x:auto;position:sticky;top:0;z-index:19;}
+  .tab{background:none;border:1.5px solid var(--line);padding:8px 14px;border-radius:20px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap;color:var(--ink);}
+  .tab.active{background:var(--black);color:#fff;border-color:var(--black);}
+  .tab .tb{display:none;background:var(--red);color:#fff;font-size:10.5px;border-radius:8px;padding:0 6px;margin-inline-start:5px;}
+  .tab .tb.show{display:inline-block;}
+  .main{padding:16px;max-width:1300px;margin:0 auto;}
+  .pane{display:none;} .pane.active{display:block;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px;}
+  .card h3{margin:0 0 10px;font-size:15px;}
+  .muted{color:var(--ink-soft);font-size:13px;}
+  .note{background:var(--blue-bg);color:var(--blue);padding:10px 12px;border-radius:8px;font-size:13px;margin-bottom:12px;}
+
+  .qbtns{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;}
+  .qbtn{background:#fff;border:1.5px solid var(--line);border-radius:18px;padding:6px 12px;font-family:inherit;font-size:12.5px;font-weight:700;cursor:pointer;color:var(--ink);}
+  .qbtn.on{background:var(--black);color:#fff;border-color:var(--black);}
+  .filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:10px;align-items:end;}
+  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px;}
+  .tile{background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px;cursor:pointer;}
+  .tile:hover{border-color:var(--black);}
+  .tile .n{font-size:22px;font-weight:900;} .tile .a{font-size:12.5px;font-weight:700;color:var(--ink-soft);} .tile .lb{font-size:12px;color:var(--ink-soft);margin-top:2px;}
+  .tile.hl{border:2px solid var(--amber);background:#FFFBF4;}
+  .bulk{position:sticky;top:52px;z-index:5;display:flex;gap:8px;flex-wrap:wrap;align-items:center;background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:12px;}
+  .bulk .sel{font-weight:900;margin-inline-end:auto;}
+  .scroll{overflow-x:auto;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  table.wide{min-width:1000px;}
+  th{background:#FCFAF7;text-align:right;font-size:12px;color:var(--ink-soft);padding:9px 8px;border-bottom:2px solid var(--line);white-space:nowrap;}
+  td{padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:middle;}
+  tfoot td{font-weight:900;background:#FCFAF7;border-top:2px solid var(--line);}
+  tr.selrow td{background:#F4F8F5;}
+  .no{font-weight:900;direction:ltr;unicode-bidi:isolate;white-space:nowrap;}
+  .dim{font-size:11.5px;color:var(--ink-soft);}
+  td input[type=checkbox],th input[type=checkbox]{width:17px;height:17px;}
+  .st{display:inline-block;font-size:11.5px;font-weight:700;padding:2px 8px;border-radius:8px;white-space:nowrap;}
+  .st-await{background:var(--amber-bg);color:var(--amber);} .st-appr{background:var(--green-bg);color:var(--green);}
+  .st-rev{background:var(--blue-bg);color:var(--blue);} .st-rej{background:var(--red-bg);color:var(--red);} .st-gray{background:var(--cream);color:var(--ink-soft);}
+  .tp{display:inline-block;font-size:11.5px;font-weight:700;padding:2px 8px;border-radius:8px;color:#fff;white-space:nowrap;}
+  .tp-doc{background:#262626;} .tp-ward{background:#B8935F;} .tp-wa{background:#4C7A5C;} .tp-shop{background:#7A5C8A;}
+  .fl{display:inline-block;font-size:10.5px;font-weight:700;padding:1px 6px;border-radius:7px;margin:1px 2px 0 0;}
+  .fl-ret{background:var(--red-bg);color:var(--red);} .fl-re{background:var(--blue-bg);color:var(--blue);} .fl-tr{background:var(--cream);color:var(--ink);}
+  .thumb{width:44px;height:44px;border-radius:8px;object-fit:cover;cursor:zoom-in;border:1px solid var(--line);}
+  .empty{text-align:center;color:var(--ink-soft);padding:20px;font-size:13.5px;}
+  .toast{position:fixed;bottom:calc(20px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);background:var(--black);color:#fff;padding:12px 20px;border-radius:10px;font-size:14px;z-index:100;display:none;max-width:90%;}
+  .imgview{position:fixed;inset:0;background:rgba(0,0,0,.8);display:none;align-items:center;justify-content:center;z-index:90;padding:16px;}
+  .imgview.show{display:flex;} .imgview img{max-width:100%;max-height:90vh;border-radius:10px;}
+</style>
+</head>
+<body>
+
+<div id="loginScreen" class="screen">
+  <div class="login-wrap"><div class="login-card">
+    <h2>لوحة المشرف</h2>
+    <p>مشرف المناديب — مراجعة الطلبات والمتابعة</p>
+    <div id="loginError" class="err"></div>
+    <div style="margin-bottom:12px"><label class="l">البريد</label><input id="loginEmail" type="email" dir="ltr" autocomplete="username"></div>
+    <div style="margin-bottom:14px"><label class="l">كلمة المرور</label><input id="loginPass" type="password" dir="ltr" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <button class="btn btn-black w100" onclick="doLogin()">دخول</button>
+  </div></div>
+</div>
+
+<div id="deniedScreen" class="screen">
+  <div class="login-wrap"><div class="login-card">
+    <h2>ما عندك صلاحية</h2><p>هذي اللوحة لمشرف المناديب والإدارة فقط.</p>
+    <button class="btn btn-ghost w100" onclick="auth.signOut()">تسجيل خروج</button>
+  </div></div>
+</div>
+
+<div id="mainScreen" class="screen">
+  <div class="topbar" id="topbar">
+    <div><div class="t">لوحة المشرف</div><div class="s" id="whoami"></div></div>
+    <button onclick="auth.signOut()">خروج</button>
+  </div>
+  <div class="tabs">
+    <button class="tab active" data-pane="orders" onclick="showPane('orders')">🧾 الطلبات والمراجعة<span class="tb" id="tbOrders"></span></button>
+    <button class="tab" data-pane="issues" onclick="showPane('issues')">⚠️ الاعتراضات والبلاغات<span class="tb" id="tbIssues"></span></button>
+    <button class="tab" data-pane="reps" onclick="showPane('reps')">👥 ملخص المناديب</button>
+    <button class="tab" data-pane="diffs" onclick="showPane('diffs')">🔁 فوارق التوصيل</button>
+  </div>
+
+  <div class="main">
+    <!-- الفترة والفلاتر (مشتركة لكل التبويبات) -->
+    <div class="card">
+      <div class="qbtns" id="qbtns">
+        <button class="qbtn" data-q="today" onclick="quick('today')">اليوم</button>
+        <button class="qbtn" data-q="yesterday" onclick="quick('yesterday')">أمس</button>
+        <button class="qbtn" data-q="week" onclick="quick('week')">آخر ٧ أيام</button>
+        <button class="qbtn" data-q="month" onclick="quick('month')">هذا الشهر</button>
+        <button class="qbtn" data-q="lastMonth" onclick="quick('lastMonth')">الشهر الماضي</button>
+      </div>
+      <div class="filters">
+        <div><label class="l">من</label><input type="date" id="fFrom"></div>
+        <div><label class="l">إلى</label><input type="date" id="fTo"></div>
+        <div><label class="l">المندوب</label><select id="fRep" onchange="renderAll()"></select></div>
+        <div><button class="btn btn-black w100" onclick="loadAll()">عرض</button></div>
+      </div>
+    </div>
+
+    <!-- الطلبات والمراجعة -->
+    <div id="pane-orders" class="pane active">
+      <div class="note">راجع الطلبات اللي أكدها المناديب وحدد <b>تمت المراجعة</b> — بعدها تروح للإدارة للاعتماد النهائي.</div>
+      <div class="tiles" id="oTiles"></div>
+      <div class="card">
+        <div class="filters">
+          <div><label class="l">الحالة</label><select id="fStatus" onchange="renderOrders()">
+            <option value="">الكل</option>
+            <option value="toReview">تحتاج مراجعتك</option>
+            <option value="reviewed">تمت المراجعة</option>
+            <option value="approved">معتمد</option>
+            <option value="unconfirmed">ما أكدها المندوب</option>
+            <option value="disputed">اعتراض المندوب</option>
+            <option value="rejected">مرفوض</option>
+            <option value="pickup">استلام من المتجر</option>
+          </select></div>
+          <div><label class="l">النوع</label><select id="fType" onchange="renderOrders()">
+            <option value="">الكل</option><option value="doc">دوكمنتيشن</option><option value="ward">ورد إكسبرس</option><option value="wa">واتس دوكمنتيشن</option><option value="shop">طلبات المحل</option>
+          </select></div>
+          <div><label class="l">المنطقة</label><select id="fArea" onchange="renderOrders()"></select></div>
+          <div><label class="l">بحث</label><input id="fSearch" placeholder="رقم الطلب أو جوال" oninput="renderOrders()"></div>
+        </div>
+      </div>
+      <div class="bulk" id="oBulk"></div>
+      <div class="card" style="padding:0;overflow:hidden">
+        <div class="scroll"><table class="wide">
+          <thead><tr>
+            <th><input type="checkbox" id="oAll" onchange="toggleAll(this.checked)"></th>
+            <th>التاريخ</th><th>المندوب</th><th>رقم الطلب</th><th>النوع</th><th>المنطقة</th><th>السعر</th><th>فارق التوصيل</th>
+            <th>التسليم ← الخروج</th><th>المندوب أكد؟</th><th>المراجعة والاعتماد</th><th>ملاحظات</th>
+          </tr></thead>
+          <tbody id="oBody"></tbody>
+        </table></div>
+        <div id="oEmpty" class="empty" style="display:none">ما فيه طلبات بهذي الفلاتر</div>
+      </div>
+    </div>
+
+    <!-- الاعتراضات والبلاغات -->
+    <div id="pane-issues" class="pane">
+      <div class="note">الاعتراضات والبلاغات يعالجها مشرف الإنتاج من لوحته. هنا تتابعها وتتواصل مع المندوب لو احتاج.</div>
+      <div class="card"><h3>اعتراضات المناديب المفتوحة <span id="cntDisp" class="muted"></span></h3><div id="dispBox"></div></div>
+      <div class="card"><h3>بلاغات طلبات وصّلوها وما انسجلت <span id="cntMiss" class="muted"></span></h3><div id="missBox"></div></div>
+      <div class="card"><h3>طلبات ما أكدها المندوب من أيام سابقة</h3><div id="staleBox"></div></div>
+    </div>
+
+    <!-- ملخص المناديب -->
+    <div id="pane-reps" class="pane">
+      <div class="card"><h3>ملخص كل مندوب للفترة</h3><div class="scroll"><table style="min-width:900px">
+        <thead><tr><th>المندوب</th><th>مشاوير</th><th>دوكمنتيشن</th><th>ورد إكسبرس</th><th>واتس</th><th>محل</th><th>أكد</th><th>ما أكد</th><th>اعتراض</th><th>رجعت</th><th>فوارق</th><th>معتمد</th><th>بانتظار</th><th>الإجمالي</th></tr></thead>
+        <tbody id="repsBody"></tbody><tfoot id="repsFoot"></tfoot>
+      </table></div></div>
+      <div class="card"><h3>المناديب × المناطق (عدد المشاوير)</h3><div class="scroll" id="matrixBox"></div></div>
+      <div class="card"><h3>حسب اليوم</h3><div class="scroll" id="dailyBox"></div></div>
+    </div>
+
+    <!-- فوارق التوصيل -->
+    <div id="pane-diffs" class="pane">
+      <div class="card"><h3>فوارق التوصيل للفترة</h3>
+        <div class="muted" style="margin-bottom:10px">كل فارق مطابق مع سجل التسليم: هل الطلب فعلاً انسلّم لنفس المندوب؟ الاعتماد من الإدارة.</div>
+        <div class="scroll"><table style="min-width:900px">
+          <thead><tr><th>التاريخ</th><th>المندوب</th><th>رقم الطلب</th><th>المطابقة</th><th>المسجّلة</th><th>الفعلية</th><th>المبلغ</th><th>الإثبات</th><th>الحالة</th></tr></thead>
+          <tbody id="diffsBody"></tbody>
+        </table></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="imgview" id="imgview" onclick="this.classList.remove('show')"><img id="imgviewImg" alt=""></div>
+<div class="toast" id="toast"></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyAIKJSzGuRIYeCAnxq2M-qAxOcoed5XiOo",
+  authDomain: "dmflower-delivery-reps.firebaseapp.com",
+  projectId: "dmflower-delivery-reps",
+  storageBucket: "dmflower-delivery-reps.firebasestorage.app",
+  messagingSenderId: "220060385556",
+  appId: "1:220060385556:web:c32e212be0cf32b6cc8201"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+const TS = firebase.firestore.FieldValue.serverTimestamp;
+
+const TYPES = {doc:'دوكمنتيشن', ward:'ورد إكسبرس', wa:'واتس دوكمنتيشن', shop:'طلبات المحل'};
+let myRole=null, AREAS=[], ORDERS=[], ENTRIES={}, DIFFS=[], DIFFMAP={}, DISPUTES=[], MISSING=[], STALE=[], SEL=new Set(), VIEW=[];
+
+/* ---------- helpers ---------- */
+function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.style.display='block'; clearTimeout(t._h); t._h=setTimeout(()=>t.style.display='none',3200); }
+function esc(s){ return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function riyadh(d=new Date()){ return d.toLocaleDateString('en-CA',{timeZone:'Asia/Riyadh'}); }
+function tm(ts){ return ts&&ts.toDate ? ts.toDate().toLocaleTimeString('ar-SA',{hour:'numeric',minute:'2-digit',timeZone:'Asia/Riyadh'}) : '—'; }
+function norm(v){ return String(v||'').replace(/[٠-٩]/g,d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/\s/g,'').replace(/^#/,''); }
+function showPane(p){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.pane===p));
+  document.querySelectorAll('.pane').forEach(x=>x.classList.toggle('active',x.id==='pane-'+p));
+}
+function viewImg(src){ document.getElementById('imgviewImg').src=src; document.getElementById('imgview').classList.add('show'); }
+
+/* ---------- auth ---------- */
+function doLogin(){
+  const e=document.getElementById('loginEmail').value.trim(), p=document.getElementById('loginPass').value, err=document.getElementById('loginError');
+  err.style.display='none';
+  if(!e||!p){ err.textContent='عبّي البريد وكلمة المرور'; err.style.display='block'; return; }
+  auth.signInWithEmailAndPassword(e,p).catch(()=>{ err.textContent='بيانات الدخول غير صحيحة'; err.style.display='block'; });
+}
+function showScreen(id){ ['loginScreen','deniedScreen','mainScreen'].forEach(s=>document.getElementById(s).classList.toggle('active',s===id)); }
+auth.onAuthStateChanged(async user=>{
+  if(!user){ showScreen('loginScreen'); return; }
+  try{
+    const a = await db.collection('admins').doc(user.uid).get();
+    myRole = a.exists ? (a.data().role||'reviewer') : null;
+    // المشرف + الإدارة (والمراجع عرض فقط)
+    if(!myRole){ showScreen('deniedScreen'); return; }
+    document.getElementById('whoami').textContent = ({supervisor:'مشرف المناديب', admin:'الإدارة', reviewer:'مراجع — عرض فقط'})[myRole] + ' · ' + (a.data().name||user.email);
+    if(window.self!==window.top) document.getElementById('topbar').style.display='none';   // داخل لوحة الإدارة
+    showScreen('mainScreen');
+    const s = await db.collection('settings').doc('areas').collection('list').orderBy('order').get();
+    AREAS = s.docs.map(d=>({id:d.id,...d.data()}));
+    quick('today');
+  }catch(e){ console.error(e); showScreen('deniedScreen'); }
+});
+
+/* ---------- period ---------- */
+function quick(k){
+  const t=riyadh(), d=new Date(t+'T12:00:00'), f=x=>x.toISOString().slice(0,10);
+  let from=t, to=t;
+  if(k==='yesterday'){ const y=new Date(d); y.setDate(d.getDate()-1); from=to=f(y); }
+  if(k==='week'){ const w=new Date(d); w.setDate(d.getDate()-6); from=f(w); }
+  if(k==='month'){ from=t.slice(0,8)+'01'; }
+  if(k==='lastMonth'){ from=f(new Date(d.getFullYear(),d.getMonth()-1,1,12)); to=f(new Date(d.getFullYear(),d.getMonth(),0,12)); }
+  document.getElementById('fFrom').value=from; document.getElementById('fTo').value=to;
+  document.querySelectorAll('.qbtn').forEach(b=>b.classList.toggle('on',b.dataset.q===k));
+  loadAll();
+}
+
+/* ---------- data ---------- */
+async function loadAll(){
+  const from=document.getElementById('fFrom').value, to=document.getElementById('fTo').value;
+  if(!from||!to||from>to){ toast('تحقق من الفترة'); return; }
+  document.getElementById('oBody').innerHTML='<tr><td colspan="12" class="empty">جاري التحميل...</td></tr>';
+  try{
+    const f=new Date(from+'T00:00:00+03:00'), t=new Date(to+'T00:00:00+03:00'); t.setDate(t.getDate()+4);
+    const [o,e,df,ds,ms,pend] = await Promise.all([
+      db.collection('dispatchOrders').where('date','>=',from).where('date','<=',to).get(),
+      db.collection('dailyEntries').where('date','>=',from).where('date','<=',to).get(),
+      db.collection('deliveryDiffs').where('createdAt','>=',f).where('createdAt','<',t).get(),
+      db.collection('dispatchOrders').where('repStatus','==','disputed').get(),
+      db.collection('missingReports').where('status','==','open').get(),
+      db.collection('dispatchOrders').where('repStatus','==','pending').get()
+    ]);
+    ORDERS = o.docs.map(d=>({id:d.id,...d.data()}));
+    ENTRIES = Object.fromEntries(e.docs.map(d=>[d.id,{id:d.id,...d.data()}]));
+    DIFFS = df.docs.map(d=>({id:d.id,...d.data()}));
+    DIFFMAP = {};
+    DIFFS.filter(x=>x.status!=='rejected').forEach(x=>{ const k=(x.repUid||'')+'|'+norm(x.orderNo); DIFFMAP[k]=DIFFMAP[k]?{...DIFFMAP[k],amount:DIFFMAP[k].amount+(x.amount||0)}:{amount:x.amount||0,status:x.status,area:x.areaName}; });
+    DISPUTES = ds.docs.map(d=>d.data()); MISSING = ms.docs.map(d=>d.data());
+    const today=riyadh(); STALE = pend.docs.map(d=>d.data()).filter(x=>x.date<today);
+  }catch(err){ console.error(err); toast('تعذّر التحميل — تأكد من الصلاحيات'); return; }
+  SEL.clear();
+  const keep=(id,opts)=>{ const el=document.getElementById(id), v=el.value; el.innerHTML=opts; el.value=v; if(el.value!==v) el.value=''; };
+  const reps=[...new Map(ORDERS.filter(x=>x.repPhone).map(x=>[x.repPhone,x.repName])).entries()].sort((a,b)=>(a[1]||'').localeCompare(b[1]||'','ar'));
+  keep('fRep','<option value="">كل المناديب</option>'+reps.map(([p,n])=>`<option value="${p}">${esc(n)}</option>`).join(''));
+  const areas=[...new Map(ORDERS.filter(x=>x.areaId).map(x=>[x.areaId,x.areaName])).entries()];
+  keep('fArea','<option value="">الكل</option>'+areas.map(([i,n])=>`<option value="${esc(i)}">${esc(n)}</option>`).join(''));
+  renderAll();
+}
+function rate(o){
+  if(o.fulfillment==='pickup') return 0;
+  if(typeof o.rate==='number' && o.rate>0) return o.rate;
+  const a=AREAS.find(x=>x.id===o.areaId); if(!a||!(a.rateDoc>0)) return 0;
+  const b=o.brand==='ward'?a.rateWard:a.rateDoc; return o.isAmmar?Math.max(0,b-5):b;
+}
+function diffOf(o){ return DIFFMAP[(o.repPhone||'')+'|'+norm(o.orderNo)]||null; }
+// مراحل الطلب من منظور المشرف
+function stage(o){
+  if(o.fulfillment==='pickup') return 'pickup';
+  const st=o.repStatus||'pending';
+  if(st==='disputed') return 'disputed';
+  if(st!=='confirmed') return 'unconfirmed';
+  const e=ENTRIES[o.entryId];
+  if(!e) return 'orphan';
+  if(e.status==='approved') return 'approved';
+  if(e.status==='rejected') return 'rejected';
+  if(e.status==='reviewed') return 'reviewed';
+  return 'toReview';
+}
+const STAGE_UI = {
+  toReview:'<span class="st st-await">تحتاج مراجعتك</span>',
+  reviewed:'<span class="st st-rev">✓ تمت المراجعة · عند الإدارة</span>',
+  approved:'<span class="st st-appr">✓ معتمد</span>',
+  rejected:'<span class="st st-rej">مرفوض</span>',
+  unconfirmed:'<span class="st st-gray">—</span>', disputed:'<span class="st st-gray">—</span>',
+  pickup:'<span class="st st-gray">لا يحتاج</span>', orphan:'<span class="st st-rej">القيد محذوف — عند الإدارة</span>'
+};
+function repCell(o){
+  if(o.fulfillment==='pickup') return o.pickedUpAt?`<span class="st st-appr">استلمه العميل</span>`:'<span class="st st-await">ما استلمه</span>';
+  const st=o.repStatus||'pending';
+  if(st==='confirmed') return `<span class="st st-appr">✓ أكد</span><div class="dim">${tm(o.repActionAt)}</div>`;
+  if(st==='disputed') return `<span class="st st-rej">⚠️ اعترض</span><div class="dim">${esc(o.disputeReason||'')}</div>`;
+  return '<span class="st st-await">⏳ ما أكد</span>';
+}
+function repFiltered(){ const r=document.getElementById('fRep').value; return ORDERS.filter(o=>!r||o.repPhone===r); }
+function renderAll(){ renderOrders(); renderIssues(); renderReps(); renderDiffs(); }
+
+/* ---------- orders ---------- */
+function renderOrders(){
+  const base=repFiltered();
+  const st=document.getElementById('fStatus').value, tp=document.getElementById('fType').value, ar=document.getElementById('fArea').value;
+  const q=norm(document.getElementById('fSearch').value).toUpperCase();
+  const list = base.filter(o=>(!st||stage(o)===st)&&(!tp||o.type===tp)&&(!ar||o.areaId===ar)&&(!q||String(o.orderNo).toUpperCase().includes(q)))
+    .sort((a,b)=>b.date.localeCompare(a.date)||(a.repName||'').localeCompare(b.repName||'','ar')||(a.handedAt?.toMillis?.()||0)-(b.handedAt?.toMillis?.()||0));
+  VIEW=list;
+  const c=k=>base.filter(o=>stage(o)===k), amt=l=>l.reduce((s,o)=>s+rate(o),0);
+  const tr=c('toReview');
+  const tile=(k,n,a,lb,hl)=>`<div class="tile ${hl?'hl':''}" onclick="document.getElementById('fStatus').value='${k}';renderOrders()"><div class="n">${n}</div>${a!==null?`<div class="a">${a} ر.س</div>`:''}<div class="lb">${lb}</div></div>`;
+  document.getElementById('oTiles').innerHTML =
+    `<div class="tile" onclick="document.getElementById('fStatus').value='';renderOrders()"><div class="n">${new Set(base.map(o=>o.orderNo)).size}</div><div class="a">${base.filter(o=>o.fulfillment!=='pickup').length} مشوار · ${amt(base)} ر.س</div><div class="lb">طلبات (بدون تكرار)</div></div>`+
+    tile('toReview',tr.length,amt(tr),'تحتاج مراجعتك',tr.length>0)+
+    tile('reviewed',c('reviewed').length,amt(c('reviewed')),'تمت المراجعة')+
+    tile('approved',c('approved').length,amt(c('approved')),'معتمد')+
+    tile('unconfirmed',c('unconfirmed').length,null,'ما أكدها المندوب')+
+    tile('disputed',c('disputed').length,null,'اعتراضات')+
+    tile('pickup',c('pickup').length,null,'استلام من المتجر');
+  const tb=document.getElementById('tbOrders'); tb.textContent=tr.length; tb.classList.toggle('show',tr.length>0);
+
+  document.getElementById('oEmpty').style.display = list.length?'none':'block';
+  const canRev = myRole==='supervisor'||myRole==='admin';
+  const diffShown=new Set();
+  document.getElementById('oBody').innerHTML = list.slice(0,500).map(o=>{
+    const s=stage(o), r=rate(o), sel=SEL.has(o.id), can=canRev && s==='toReview';
+    let df=diffOf(o); if(df){ const k=o.repPhone+'|'+o.orderNo; if(diffShown.has(k)) df=null; else diffShown.add(k); }
+    const orig=o.redeliveryOf?ORDERS.find(x=>x.id===o.redeliveryOf):null;
+    const flags=[o.redeliveryOf?`<span class="fl fl-re">🔁 توصيل ثاني${orig?' · الأول مع '+esc(orig.repName):''}</span>`:'',
+      o.multiDelivery?'<span class="fl fl-re">➕ توصيل إضافي لنفس الطلب</span>':'',
+      o.returned?`<span class="fl fl-ret">رجع: ${esc(o.returnReason||'')}</span>`:'',
+      o.transferredFrom?`<span class="fl fl-tr">محوّل من ${esc(o.transferredFrom)}</span>`:''].join('');
+    return `<tr class="${sel?'selrow':''}">
+      <td>${can?`<input type="checkbox" ${sel?'checked':''} onchange="toggle('${o.id}',this.checked)">`:''}</td>
+      <td class="dim">${o.date}</td><td><b>${esc(o.repName||'استلام من المتجر')}</b></td>
+      <td class="no">${esc(o.orderNo)}</td><td><span class="tp tp-${o.type}">${TYPES[o.type]||o.type}</span></td>
+      <td>${o.fulfillment==='pickup'?'—':esc(o.areaName)}</td>
+      <td style="font-weight:900;white-space:nowrap">${o.fulfillment==='pickup'?'—':(r?r+' ر.س':'<span class="st st-await">بدون سعر</span>')}</td>
+      <td style="white-space:nowrap">${df?`<b>+${df.amount} ر.س</b><div class="dim">${df.status==='approved'?'معتمد':'بانتظار'}${df.area?' · '+esc(df.area):''}</div>`:'<span class="dim">—</span>'}</td>
+      <td class="dim">${tm(o.handedAt)}${o.departedAt?' ← '+tm(o.departedAt):''}</td>
+      <td>${repCell(o)}</td><td>${STAGE_UI[s]}</td>
+      <td>${flags}${o.notes?`<div class="dim">${esc(o.notes)}</div>`:''}</td></tr>`;
+  }).join('');
+  renderBulk();
+}
+function toggle(id,on){
+  const o=ORDERS.find(x=>x.id===id); if(!o) return;
+  // المراجعة على دفعة التأكيد كاملة (نفس القيد)
+  ORDERS.filter(x=>x.entryId===o.entryId && stage(x)==='toReview').forEach(x=>on?SEL.add(x.id):SEL.delete(x.id));
+  renderOrders();
+}
+function toggleAll(on){ SEL.clear(); if(on) VIEW.filter(o=>stage(o)==='toReview').forEach(o=>ORDERS.filter(x=>x.entryId===o.entryId).forEach(x=>SEL.add(x.id))); renderOrders(); }
+function renderBulk(){
+  const sel=[...SEL].map(id=>ORDERS.find(o=>o.id===id)).filter(Boolean);
+  const amt=sel.reduce((s,o)=>s+rate(o),0);
+  const canRev = myRole==='supervisor'||myRole==='admin';
+  const tr=VIEW.filter(o=>stage(o)==='toReview');
+  document.getElementById('oAll').style.display = canRev?'':'none';
+  document.getElementById('oAll').checked = tr.length>0 && tr.every(o=>SEL.has(o.id));
+  document.getElementById('oBulk').innerHTML = `
+    <span class="sel">${sel.length?`محدد: ${sel.length} طلب · ${amt} ر.س`:`${VIEW.length} طلب معروض`}</span>
+    ${canRev?`<button class="btn btn-green" ${sel.length?'':'disabled'} onclick="markReviewed()">✓ تمت المراجعة${sel.length?` (${sel.length})`:''}</button>`:''}
+    <button class="btn btn-ghost" onclick="exportCSV()">⬇︎ تصدير Excel</button>
+    <button class="btn btn-ghost" onclick="loadAll()">↻ تحديث</button>`;
+}
+async function markReviewed(){
+  const ids=[...new Set([...SEL].map(id=>ORDERS.find(o=>o.id===id)).filter(o=>o&&stage(o)==='toReview').map(o=>o.entryId))];
+  if(!ids.length) return;
+  try{
+    const wb=db.batch();
+    ids.forEach(id=>wb.update(db.collection('dailyEntries').doc(id), {status:'reviewed', statusUpdatedAt:TS()}));
+    await wb.commit(); toast(`تمت مراجعة ${SEL.size} طلب ✅ — صارت عند الإدارة للاعتماد`); await loadAll();
+  }catch(e){ console.error(e); toast('ما انحفظ — تحقق من الاتصال أو الصلاحيات'); }
+}
+function exportCSV(){
+  const list=VIEW; if(!list.length){ toast('ما فيه بيانات'); return; }
+  const stT={toReview:'تحتاج مراجعة',reviewed:'تمت المراجعة',approved:'معتمد',rejected:'مرفوض',unconfirmed:'ما أكدها المندوب',disputed:'اعتراض',pickup:'استلام',orphan:'قيد محذوف'};
+  const head=['التاريخ','المندوب','رقم الطلب','النوع','المنطقة','السعر','فارق التوصيل','وقت التسليم','وقت الخروج','حالة المندوب','المراجعة/الاعتماد','ملاحظات'];
+  const rows=list.map(o=>[o.date,o.repName||'استلام',o.orderNo,TYPES[o.type]||'',o.fulfillment==='pickup'?'':o.areaName,rate(o)||'',diffOf(o)?.amount||'',tm(o.handedAt),tm(o.departedAt),
+    ({confirmed:'أكد',disputed:'اعترض',na:'—'})[o.repStatus]||'ما أكد', stT[stage(o)], [o.notes,o.returned?'رجع: '+(o.returnReason||''):'',o.redeliveryOf?'توصيل ثاني':'',o.multiDelivery?'توصيل إضافي':''].filter(Boolean).join(' · ')]);
+  const csv='\uFEFF'+[head,...rows].map(r=>r.map(c=>`"${String(c??'').replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+  a.download=`مراجعة_الطلبات_${document.getElementById('fFrom').value}_${document.getElementById('fTo').value}.csv`; a.click();
+}
+
+/* ---------- issues ---------- */
+function renderIssues(){
+  const r=document.getElementById('fRep').value;
+  const ds=DISPUTES.filter(o=>!r||o.repPhone===r), ms=MISSING.filter(m=>!r||m.repPhone===r), sl=STALE.filter(o=>!r||o.repPhone===r);
+  const n=ds.length+ms.length; const tb=document.getElementById('tbIssues'); tb.textContent=n; tb.classList.toggle('show',n>0);
+  document.getElementById('cntDisp').textContent=ds.length?`(${ds.length})`:'';
+  document.getElementById('cntMiss').textContent=ms.length?`(${ms.length})`:'';
+  document.getElementById('dispBox').innerHTML = ds.length ? `<div class="scroll"><table style="min-width:720px"><thead><tr><th>التاريخ</th><th>المندوب</th><th>رقم الطلب</th><th>النوع</th><th>المنطقة</th><th>السبب</th><th>من متى</th></tr></thead><tbody>
+    ${ds.map(o=>`<tr><td class="dim">${o.date}</td><td><b>${esc(o.repName)}</b></td><td class="no">${esc(o.orderNo)}</td><td><span class="tp tp-${o.type}">${TYPES[o.type]}</span></td><td>${esc(o.areaName)}</td>
+      <td><b style="color:var(--red)">${esc(o.disputeReason||'')}</b>${o.disputeNote?`<div class="dim">${esc(o.disputeNote)}</div>`:''}${(o.disputeCount||0)>=2?' <span class="st st-rej">متكرر</span>':''}</td><td class="dim">${tm(o.repActionAt)}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">ما فيه اعتراضات 👍</div>';
+  document.getElementById('missBox').innerHTML = ms.length ? `<div class="scroll"><table style="min-width:640px"><thead><tr><th>التاريخ</th><th>المندوب</th><th>رقم الطلب / الجوال</th><th>النوع</th><th>المنطقة</th><th>ملاحظة</th></tr></thead><tbody>
+    ${ms.map(m=>`<tr><td class="dim">${m.date}</td><td><b>${esc(m.repName)}</b></td><td class="no">${esc(m.orderNo||'—')}</td><td>${TYPES[m.type]||''}</td><td>${esc(m.areaName)}</td><td>${esc(m.note)}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">ما فيه بلاغات 👍</div>';
+  const by={}; sl.forEach(o=>(by[o.repName]=by[o.repName]||[]).push(o));
+  document.getElementById('staleBox').innerHTML = sl.length ? `<div class="scroll"><table><thead><tr><th>المندوب</th><th>عدد الطلبات</th><th>أقدم تاريخ</th></tr></thead><tbody>
+    ${Object.entries(by).map(([n,l])=>`<tr><td><b>${esc(n)}</b></td><td>${l.length}</td><td>${l.map(o=>o.date).sort()[0]}</td></tr>`).join('')}</tbody></table></div><div class="muted" style="margin-top:6px">ذكّرهم يدخلون ويأكدون — الطلب ما ينحسب قبل التأكيد.</div>` : '<div class="empty">كل الطلبات السابقة مؤكدة 👍</div>';
+}
+
+/* ---------- reps summary ---------- */
+function renderReps(){
+  const list=repFiltered().filter(o=>o.fulfillment!=='pickup');
+  const by={}, tot={n:0,doc:0,ward:0,wa:0,shop:0,c:0,u:0,d:0,ret:0,df:0,ap:0,aw:0,all:0};
+  list.forEach(o=>{
+    const k=o.repPhone; by[k]=by[k]||{name:o.repName,n:0,doc:0,ward:0,wa:0,shop:0,c:0,u:0,d:0,ret:0,df:0,ap:0,aw:0,all:0,seen:new Set()};
+    const b=by[k], s=stage(o), r=rate(o);
+    b.n++; b[o.type]=(b[o.type]||0)+1; b.all+=r;
+    if(o.repStatus==='confirmed') b.c++; else if(o.repStatus==='disputed') b.d++; else b.u++;
+    if(o.returned) b.ret++;
+    if(s==='approved') b.ap+=r; if(s==='toReview'||s==='reviewed') b.aw+=r;
+    const df=diffOf(o); if(df && !b.seen.has(o.orderNo)){ b.df+=df.amount; b.all+=df.amount; b.seen.add(o.orderNo); }
+  });
+  const rows=Object.values(by).sort((a,b)=>b.n-a.n);
+  rows.forEach(b=>Object.keys(tot).forEach(k=>tot[k]+=b[k]||0));
+  document.getElementById('repsBody').innerHTML = rows.length ? rows.map(b=>`<tr><td><b>${esc(b.name)}</b></td><td><b>${b.n}</b></td><td>${b.doc}</td><td>${b.ward}</td><td>${b.wa}</td><td>${b.shop}</td>
+    <td>${b.c}</td><td>${b.u||'—'}</td><td>${b.d||'—'}</td><td>${b.ret||'—'}</td><td>${b.df?b.df+' ر.س':'—'}</td>
+    <td style="color:var(--green);font-weight:700">${b.ap} ر.س</td><td style="color:var(--amber);font-weight:700">${b.aw} ر.س</td><td style="font-weight:900">${b.all} ر.س</td></tr>`).join('') : '<tr><td colspan="14" class="empty">—</td></tr>';
+  document.getElementById('repsFoot').innerHTML = rows.length ? `<tr><td>المجموع</td><td>${tot.n}</td><td>${tot.doc}</td><td>${tot.ward}</td><td>${tot.wa}</td><td>${tot.shop}</td><td>${tot.c}</td><td>${tot.u}</td><td>${tot.d}</td><td>${tot.ret}</td><td>${tot.df} ر.س</td><td>${tot.ap} ر.س</td><td>${tot.aw} ر.س</td><td>${tot.all} ر.س</td></tr>` : '';
+
+  // المناديب × المناطق
+  const areas=[...new Map(list.map(o=>[o.areaId,o.areaName])).entries()];
+  const reps=Object.entries(by);
+  document.getElementById('matrixBox').innerHTML = reps.length ? `<table style="min-width:${300+areas.length*90}px"><thead><tr><th>المندوب</th>${areas.map(([,n])=>`<th>${esc(n)}</th>`).join('')}<th>المجموع</th></tr></thead><tbody>
+    ${reps.map(([p,b])=>`<tr><td><b>${esc(b.name)}</b></td>${areas.map(([id])=>{ const n=list.filter(o=>o.repPhone===p&&o.areaId===id).length; return `<td>${n||'<span class="dim">—</span>'}</td>`; }).join('')}<td><b>${b.n}</b></td></tr>`).join('')}</tbody>
+    <tfoot><tr><td>المجموع</td>${areas.map(([id])=>`<td>${list.filter(o=>o.areaId===id).length}</td>`).join('')}<td>${list.length}</td></tr></tfoot></table>` : '<div class="empty">—</div>';
+
+  // حسب اليوم
+  const days=[...new Set(repFiltered().map(o=>o.date))].sort().reverse();
+  const all=repFiltered();
+  document.getElementById('dailyBox').innerHTML = days.length ? `<table style="min-width:640px"><thead><tr><th>التاريخ</th><th>اليوم</th>${Object.values(TYPES).map(t=>`<th>${t}</th>`).join('')}<th>استلام</th><th>المشاوير</th></tr></thead><tbody>
+    ${days.map(d=>{ const l=all.filter(o=>o.date===d); return `<tr><td>${d}</td><td>${new Date(d+'T12:00:00').toLocaleDateString('ar-SA',{weekday:'long'})}</td>${Object.keys(TYPES).map(t=>`<td>${l.filter(o=>o.type===t&&o.fulfillment!=='pickup').length}</td>`).join('')}<td>${l.filter(o=>o.fulfillment==='pickup').length}</td><td><b>${l.filter(o=>o.fulfillment!=='pickup').length}</b></td></tr>`; }).join('')}</tbody></table>` : '<div class="empty">—</div>';
+}
+
+/* ---------- diffs ---------- */
+function renderDiffs(){
+  const r=document.getElementById('fRep').value;
+  const list=DIFFS.filter(x=>!r||x.repUid===r).sort((a,b)=>(b.createdAt?.toMillis?.()||0)-(a.createdAt?.toMillis?.()||0));
+  document.getElementById('diffsBody').innerHTML = list.length ? list.map(x=>{
+    const no=norm(x.orderNo), mine=ORDERS.find(o=>norm(o.orderNo)===no && o.repPhone===x.repUid), other=ORDERS.find(o=>norm(o.orderNo)===no);
+    const match = mine ? '<span class="st st-appr">✓ مسلّم له</span>' : other ? `<span class="st st-rej">⚠️ مسلّم لـ ${esc(other.repName)}</span>` : '<span class="st st-await">مو بسجل التسليم</span>';
+    const st = x.status==='approved'?'<span class="st st-appr">معتمد</span>':x.status==='rejected'?'<span class="st st-rej">مرفوض</span>':'<span class="st st-await">بانتظار الإدارة</span>';
+    return `<tr><td class="dim">${x.createdAt?.toDate?riyadh(x.createdAt.toDate()):'—'}</td><td><b>${esc(x.repName)}</b></td><td class="no">${esc(x.orderNo)}</td><td>${match}</td>
+      <td>${esc(x.registeredAreaName||'')}</td><td>${esc(x.areaName||'')}</td><td style="font-weight:900">${x.amount} ر.س</td>
+      <td>${x.proofImage?`<img class="thumb" src="${x.proofImage}" onclick="viewImg(this.src)" alt="">`:'—'}</td><td>${st}</td></tr>`;
+  }).join('') : '<tr><td colspan="9" class="empty">ما فيه فوارق بهذي الفترة</td></tr>';
+}
+</script>
+</body>
+</html>

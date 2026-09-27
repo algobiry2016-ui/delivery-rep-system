@@ -362,8 +362,9 @@
             <option value="documentation">دوكمنتيشن</option>
             <option value="ward">ورد إكسبرس</option>
           </select>
-          <label>رقم الطلب</label>
-          <input id="diffOrderNo" type="text" placeholder="مثال: 10452">
+          <label>الطلب</label>
+          <select id="diffOrderPick" onchange="onDiffOrderPick()"><option value="">اختر من طلباتك (آخر ٧ أيام)...</option></select>
+          <input id="diffOrderNo" type="text" placeholder="رقم الطلب" style="display:none;margin-top:8px">
           <label>المنطقة المسجّلة بالطلب (بالموقع)</label>
           <select id="diffAreaRegistered"></select>
           <label>المنطقة الفعلية (اللي وصل لها فعلياً)</label>
@@ -583,6 +584,7 @@ auth.onAuthStateChanged(async user=>{
     populateMissingAreas();
     listenMyOrders();
     listenPendingBadge();
+    loadDiffOrders();
   } else {
     currentUser = null;
     document.getElementById('mainScreen').classList.remove('active');
@@ -820,14 +822,43 @@ async function previewDiffPhoto(e){
   }
 }
 
+// الفارق يرتبط بطلب من طلبات المندوب نفسه — عشان يلتصق بنفس الطلب في التقارير وما يطلع كطلب مكرر
+let DIFF_ORDERS = [];
+async function loadDiffOrders(){
+  const sel=document.getElementById('diffOrderPick'); if(!sel) return;
+  const days=[...Array(7)].map((_,i)=>riyadhDate(new Date(Date.now()-i*864e5)));
+  try{
+    const snaps = await Promise.all(days.map(d=>db.collection('dispatchOrders').where('repPhone','==',myPhone()).where('date','==',d).get()));
+    DIFF_ORDERS = snaps.flatMap(s=>s.docs.map(d=>({id:d.id,...d.data()}))).filter(o=>o.fulfillment!=='pickup');
+  }catch(e){ DIFF_ORDERS=[]; }
+  sel.innerHTML = '<option value="">اختر من طلباتك (آخر ٧ أيام)...</option>' +
+    DIFF_ORDERS.sort((a,b)=>b.date.localeCompare(a.date)).map(o=>`<option value="${o.id}">${o.orderNo} · ${escH(o.areaName)} · ${o.date.slice(5)}</option>`).join('') +
+    '<option value="__manual">✎ طلب مو موجود بالقائمة (أكتب الرقم)</option>';
+}
+function onDiffOrderPick(){
+  const v=document.getElementById('diffOrderPick').value, inp=document.getElementById('diffOrderNo');
+  if(v==='__manual'){ inp.style.display=''; inp.value=''; inp.readOnly=false; inp.focus(); return; }
+  inp.style.display='none';
+  const o=DIFF_ORDERS.find(x=>x.id===v); if(!o){ inp.value=''; return; }
+  inp.value=o.orderNo;
+  const b=document.getElementById('diffBrand'); b.value = o.brand==='ward'?'ward':'documentation'; populateDiffAreaSelect();
+  const ar=document.getElementById('diffAreaRegistered'); if([...ar.options].some(x=>x.value===o.areaId)) ar.value=o.areaId;
+}
 async function submitDiff(){
-  const orderNo = document.getElementById('diffOrderNo').value.trim();
+  const orderNo = String(document.getElementById('diffOrderNo').value||'').trim().replace(/[٠-٩]/g,d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d));
+  const pickedId = document.getElementById('diffOrderPick').value;
+  const linked = DIFF_ORDERS.find(x=>x.id===pickedId) || null;
   const brand = document.getElementById('diffBrand').value;
   const registeredAreaId = document.getElementById('diffAreaRegistered').value;
   const actualAreaText = document.getElementById('diffArea').value.trim();
   const amount = parseFloat(document.getElementById('diffAmount').value);
 
-  if(!orderNo){ toast('أدخل رقم الطلب'); return; }
+  if(!orderNo){ toast('اختر الطلب'); return; }
+  // منع فارقين لنفس الطلب
+  try{
+    const ex = await db.collection('deliveryDiffs').where('repUid','==',myPhone()).where('orderNo','==',orderNo).get();
+    if(ex.docs.some(d=>d.data().status!=='rejected')){ toast('فيه فارق مرفوع قبل لنفس الطلب'); return; }
+  }catch(e){}
   if(!registeredAreaId){ toast('اختر المنطقة المسجّلة بالطلب'); return; }
   if(!actualAreaText){ toast('اكتب المنطقة الفعلية'); return; }
   if(!amount || amount <= 0){ toast('أدخل المبلغ'); return; }
@@ -841,6 +872,7 @@ async function submitDiff(){
       repName: repDoc ? repDoc.name : '',
       brand: brand,
       orderNo,
+      dispatchOrderId: linked ? linked.id : null,
       registeredAreaId,
       registeredAreaName: registeredArea ? registeredArea.name : registeredAreaId,
       areaName: actualAreaText,
@@ -852,6 +884,7 @@ async function submitDiff(){
 
     toast('تم إرسال الفارق للمراجعة ✅');
     document.getElementById('diffOrderNo').value = '';
+    document.getElementById('diffOrderPick').value = ''; document.getElementById('diffOrderNo').style.display='none';
     document.getElementById('diffAreaRegistered').value = '';
     document.getElementById('diffArea').value = '';
     document.getElementById('diffAmount').value = '';
@@ -1007,6 +1040,7 @@ function showTab(name){
   if(name==='log') { loadLog(); markSeen('log'); recomputeLogBadge(); }
   if(name==='penalties') { loadPenalties(); markSeen('penalties'); recomputePenaltiesBadge(); }
   if(name==='account') loadMyBalance();
+  if(name==='diff') loadDiffOrders();
 }
 
 /* ---------------- NOTIFICATION BADGES (تحديثات جديدة لم يشوفها المندوب بعد) ---------------- */
@@ -1156,6 +1190,7 @@ function renderMyOrders(){
           const r=orderRate(o), stg=orderStage(o);
           const sub = [
             o.redeliveryOf ? '<div class="sub" style="color:#3A6EA5">🔁 توصيل ثاني</div>' : '',
+            o.multiDelivery ? '<div class="sub" style="color:#3A6EA5">➕ توصيل إضافي لنفس الطلب — مشوار مستقل</div>' : '',
             o.transferredFrom ? `<div class="sub" style="color:var(--ink-soft)">محوّل من ${escH(o.transferredFrom)}</div>` : '',
             o.returned ? `<div class="sub" style="color:#B23A3A">↩︎ رجع: ${escH(o.returnReason||'')}</div>` : '',
             (o.ibrahimNote && stg.k==='pend') ? `<div class="sub" style="color:var(--amber)">المشرف: ${escH(o.ibrahimNote)}</div>` : ''

@@ -599,7 +599,8 @@ function addRow(prep, redel){
       <div class="field"><select class="o-florist" ${prep?'disabled':''}>${floristOptions(prep?prep.floristName:(redel?redel.florist:''))}</select></div>
       <div class="field o-area-field" style="${MODE==='pickup'?'display:none':''}"><select class="o-area" onchange="onAreaSelect(this)">${areaOptions(redel?redel.areaId:prevArea)}</select></div>
     </div>
-    <div class="field" style="margin:0"><input class="o-notes" placeholder="ملاحظات (اختياري)" value="${redel?esc('توصيل ثاني — '+(redel.returnReason||'')):''}"></div>`;
+    <div class="field" style="margin:0"><input class="o-notes" placeholder="ملاحظات (اختياري)" value="${redel?esc('توصيل ثاني — '+(redel.returnReason||'')):''}"></div>
+    ${(redel||prep)?'':`<label class="chk" style="font-size:12.5px"><input type="checkbox" class="o-multi"> توصيل إضافي لنفس رقم الطلب (منطقة توصيل ثانية) — اختر منطقته فوق</label>`}`;
   document.getElementById('orderRows').appendChild(div);
   renumber();
   if(prep||redel) div.querySelector('.seg').style.pointerEvents = redel?'none':'';
@@ -695,6 +696,7 @@ async function saveHandover(){
     const n = i+1;
     const type = r.dataset.type||'doc';
     const isRedel = !!r.dataset.redeliveryOf;
+    const multi = !!r.querySelector('.o-multi')?.checked;
     if(PHONE_TYPES.includes(type) && !isRedel){
       if(!/^05\d{8}$/.test(no)){ toast(`طلب ${n}: ${TYPES[type].full} — اكتب جوال العميل 05xxxxxxxx`); return; }
     } else if(!isRedel){
@@ -703,7 +705,7 @@ async function saveHandover(){
       if(no.length<6 || no.length>12){ toast(`طلب ${n}: رقم الطلب غير منطقي (${no})`); return; }
     }
     if(r.dataset.prepId && !prep){ toast(`الطلب ${no} ما عاد في قائمة الجاهز — شيله وحدّث`); return; }
-    if(no && seen.has(no)){ toast(`الطلب ${no} مكرر في نفس التسليم`); return; }
+    if(no && seen.has(no) && !multi){ toast(`الطلب ${no} مكرر في نفس التسليم — لو له منطقة توصيل ثانية فعّل "توصيل إضافي لنفس رقم الطلب"`); return; }
     if(!florist){ toast(`طلب ${n}: اختر المنسق`); return; }
     if(!pickup && !areaId){ toast(`طلب ${n}: اختر المنطقة`); return; }
     if(no) seen.add(no);
@@ -715,6 +717,7 @@ async function saveHandover(){
       rate: (!pickup && isPriced(area)) ? rateFor(area,type,rep) : null,   // السعر وقت التسليم — ما يتغير لو تغيّرت الأسعار بعدين
       notes:r.querySelector('.o-notes').value.trim(),
       redeliveryOf: r.dataset.redeliveryOf || null,
+      multiDelivery: multi,
       manual: FLORIST_FLOW && !prep, prepId: prep?prep.id:null,
       floristReceivedAt: prep?prep.receivedAt:null, floristReadyAt: prep?prep.readyAt:null,
       hasPhoto: !!(prep&&prep.photo)});
@@ -725,7 +728,7 @@ async function saveHandover(){
     // منع التكرار: نفس رقم الطلب ما ينسجل مرتين. التوصيل الثاني لطلب رجع يتم فقط من زر "رجع" بسجل اليوم
     const dups=[], samePhone=[];
     const today = localDate();
-    for(const o of orders.filter(x=>x.orderNo && !x.redeliveryOf && !x.prepId)){
+    for(const o of orders.filter(x=>x.orderNo && !x.redeliveryOf && !x.prepId && !x.multiDelivery)){
       const s = await db.collection('dispatchOrders').where('orderNo','==',o.orderNo).get();
       if(s.empty) continue;
       if(PHONE_TYPES.includes(o.type)){
@@ -738,7 +741,7 @@ async function saveHandover(){
     }
     samePhone.forEach(o=>o.samePhoneSameDay=true);
     if(dups.length){
-      alert(`هذي الطلبات مسجّلة قبل:\n${dups.join('\n')}\n\nإذا الطلب رجع والعميل طلب توصيل ثاني: افتح "سجل اليوم" واضغط زر "رجع" على الطلب الأصلي.`);
+      alert(`هذي الطلبات مسجّلة قبل:\n${dups.join('\n')}\n\n• لو الطلب رجع والعميل طلب يعاد توصيله: افتح "سجل اليوم" واضغط "رجع" على الطلب الأصلي.\n• لو نفس الطلب له أكثر من منطقة توصيل (مثلاً باقتين لمكانين): فعّل "توصيل إضافي لنفس رقم الطلب" واختر منطقته.`);
       btn.disabled=false; btn.textContent=btnTxt; return;
     }
 
@@ -774,6 +777,7 @@ async function saveHandover(){
         handedAt:TS(), departedAt:null, repStatus: pickup?'na':'pending',
         createdBy:currentUser.uid, createdAt:TS()
       });
+      if(o.multiDelivery) wb.set(db.collection('auditLog').doc(), auditRow('multi', {id:ref.id, orderNo:o.orderNo}, `توصيل إضافي لنفس الطلب · ${pickup?'استلام':rep.name} · ${o.areaName}`));
       if(o.samePhoneSameDay) wb.set(db.collection('auditLog').doc(), auditRow('samePhone', {id:ref.id, orderNo:o.orderNo}, `طلب ثاني لنفس العميل بنفس اليوم · ${pickup?'استلام':rep.name}`));
       if(o.redeliveryOf){
         wb.update(db.collection('dispatchOrders').doc(o.redeliveryOf), {redeliveryId: ref.id});
@@ -870,7 +874,7 @@ async function loadAudit(){
   const box=document.getElementById('auditBox'); if(!box) return;
   try{
     const snap=await db.collection('auditLog').orderBy('at','desc').limit(100).get();
-    const names={samePhone:'طلب ثاني لنفس الجوال',edit:'تعديل',delete:'حذف طلب',deleteBatch:'حذف تسليم',transfer:'تحويل لمندوب',return:'رجوع للمحل',redelivery:'توصيل ثاني',keep:'رفض اعتراض (الطلب صحيح)',rejectMissing:'رفض بلاغ'};
+    const names={multi:'توصيل إضافي لنفس الطلب',adminDelete:'حذف من الإدارة',samePhone:'طلب ثاني لنفس الجوال',edit:'تعديل',delete:'حذف طلب',deleteBatch:'حذف تسليم',transfer:'تحويل لمندوب',return:'رجوع للمحل',redelivery:'توصيل ثاني',keep:'رفض اعتراض (الطلب صحيح)',rejectMissing:'رفض بلاغ'};
     box.innerHTML = snap.empty ? '<div class="muted">ما فيه تعديلات.</div>' : `<div class="scroll"><table>
       <thead><tr><th>الوقت</th><th>بواسطة</th><th>الإجراء</th><th>رقم الطلب</th><th>التفاصيل</th></tr></thead>
       <tbody>${snap.docs.map(d=>{const a=d.data(); return `<tr><td style="white-space:nowrap">${a.date||''} ${fmtTime(a.at)}</td><td>${esc(a.byName)}</td><td><b>${names[a.action]||a.action}</b></td><td style="direction:ltr;unicode-bidi:isolate">${esc(a.orderNo||'')}</td><td>${esc(a.details)}</td></tr>`;}).join('')}</tbody></table></div>`;
@@ -991,6 +995,7 @@ async function deleteBatch(batchId){
 function orderFlags(o){
   let f='';
   if(o.redeliveryOf) f+=' <span class="flag f-re">🔁 توصيل ثاني</span>';
+  if(o.multiDelivery) f+=' <span class="flag f-re">➕ توصيل إضافي</span>';
   if(o.returned) f+=` <span class="flag f-ret">↩︎ رجع: ${esc(o.returnReason||'')}</span>`;
   if(o.redeliveryId) f+=' <span class="flag f-re">أُعيد توصيله</span>';
   if(o.transferredFrom) f+=` <span class="flag f-tr">محوّل من ${esc(o.transferredFrom)}</span>`;
@@ -1211,8 +1216,8 @@ async function loadReports(){
   out.innerHTML = `
     <div class="muted" style="margin-bottom:10px">الفترة: <b>${fromTxt}</b></div>
     <div class="stats">
-      <div class="stat"><div class="v">${orders.length}</div><div class="l">إجمالي الطلبات</div></div>
-      <div class="stat"><div class="v">${deliv.length}</div><div class="l">توصيل</div></div>
+      <div class="stat"><div class="v">${new Set(orders.map(o=>o.orderNo)).size}</div><div class="l">طلبات فريدة (بدون تكرار الرقم)</div></div>
+      <div class="stat"><div class="v">${deliv.length}</div><div class="l">مشاوير توصيل</div></div>
       <div class="stat"><div class="v">${pick.length}</div><div class="l">استلام من المتجر</div></div>
       ${tkeys.map(t=>`<div class="stat"><div class="v">${sumOf(orders,t)}</div><div class="l">${TYPES[t].full}</div></div>`).join('')}
       <div class="stat"><div class="v">${returned.length}</div><div class="l">رجعت للمحل</div></div>
