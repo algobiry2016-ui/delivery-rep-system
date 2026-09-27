@@ -203,7 +203,7 @@
     <!-- DAY LOG -->
     <div id="pane-day" class="pane">
       <div class="searchbox">
-         <input id="searchNo" placeholder="ابحث برقم الطلب (كل التواريخ)" onkeydown="if(event.key==='Enter')searchOrder()">
+         <input id="searchNo" placeholder="ابحث برقم الطلب أو جوال العميل (كل التواريخ)" onkeydown="if(event.key==='Enter')searchOrder()">
         <button class="primary" onclick="searchOrder()">بحث</button>
       </div>
       <div id="searchOut"></div>
@@ -368,8 +368,9 @@ const TYPES = {
   shop: {label:'محل',        full:'طلبات المحل',          brand:'documentation', source:'shop'}
 };
 const AMMAR_DISCOUNT = 5;
-// أنواع بدون رقم سلة: الرقم يطلع تلقائي (W للواتس، M للمحل) + تاريخ اليوم + تسلسل
-const AUTO_PREFIX = {wa:'W', shop:'M'};
+// طلبات الواتس والمحل ما لها رقم سلة: رقم الطلب = جوال العميل (05xxxxxxxx)
+const PHONE_TYPES = ['wa','shop'];
+const AUTO_PREFIX = {};   // الأرقام التلقائية (W/M) موقفة — صار المعتمد جوال العميل
 const RETURN_REASONS = ['العميل ما رد','العميل مو موجود','العنوان غلط','العميل أجّل الاستلام','سبب آخر'];
 // ربط شاشة المنسقين (florist.html): مطفي حالياً — الدورة تبدأ من مشرف الإنتاج.
 // لما نفعّل المنسقين نغيرها إلى true وكل شي يشتغل بدون تعديل ثاني.
@@ -593,7 +594,7 @@ function addRow(prep, redel){
     <div class="seg" style="margin-top:8px">
       ${Object.keys(TYPES).map(t=>`<button data-t="${t}" class="${t===prevType?'on':''}" onclick="pickType('${id}','${t}')">${TYPES[t].label}</button>`).join('')}
     </div>
-    <div class="field"><input class="o-no" inputmode="numeric" placeholder="${noPlaceholder(prevType)}" ${(prep||redel)?`value="${esc((prep||redel).orderNo)}" readonly style="background:#fff;font-weight:900;direction:ltr;text-align:right"`:''}></div>
+    <div class="field"><input class="o-no" inputmode="tel" placeholder="${noPlaceholder(prevType)}" ${(prep||redel)?`value="${esc((prep||redel).orderNo)}" readonly style="background:#fff;font-weight:900;direction:ltr;text-align:right"`:''}></div>
     <div class="row2">
       <div class="field"><select class="o-florist" ${prep?'disabled':''}>${floristOptions(prep?prep.floristName:(redel?redel.florist:''))}</select></div>
       <div class="field o-area-field" style="${MODE==='pickup'?'display:none':''}"><select class="o-area" onchange="onAreaSelect(this)">${areaOptions(redel?redel.areaId:prevArea)}</select></div>
@@ -614,11 +615,15 @@ function removeRow(id){
 let READY = [], PREPARING = [], SELECTED = new Set(), prepUnsubs = [];
 function isWaCode(no){ return /^W\d{4}-\d{2,3}$/.test(no); }
 function isAutoCode(no){ return /^[WM]\d{4}-\d{2,3}$/.test(no); }
-function noPlaceholder(t){ return t==='wa' ? 'واتس: اتركه فاضي والرقم يطلع تلقائي' : t==='shop' ? 'محل: رقم الفاتورة أو اتركه فاضي والرقم يطلع تلقائي' : 'رقم الطلب'; }
+function noPlaceholder(t){ return PHONE_TYPES.includes(t) ? 'جوال العميل 05xxxxxxxx' : 'رقم الطلب (سلة)'; }
 function isPickup(o){ return o && o.fulfillment==='pickup'; }
 function normOrderNo(v){
   v = String(v||'').replace(/[٠-٩]/g,d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[۰-۹]/g,d=>'۰۱۲۳۴۵۶۷۸۹'.indexOf(d)).trim().toUpperCase();
-  return /^[WM]/.test(v) ? v.replace(/\s/g,'') : v.replace(/\D/g,'');
+  if(/^[WM]\d/.test(v)) return v.replace(/\s/g,'');
+  v = v.replace(/\D/g,'');
+  if(/^9665\d{8}$/.test(v)) v = '0'+v.slice(3);   // 9665xxxxxxxx أو +9665... ← 05xxxxxxxx
+  if(/^5\d{8}$/.test(v)) v = '0'+v;
+  return v;
 }
 function listenPrep(){
   prepUnsubs.forEach(u=>u()); prepUnsubs=[];
@@ -689,9 +694,14 @@ async function saveHandover(){
     const areaId = pickup ? '' : r.querySelector('.o-area').value;
     const n = i+1;
     const type = r.dataset.type||'doc';
-    if(!no && !AUTO_PREFIX[type]){ toast(`طلب ${n}: اكتب رقم الطلب`); return; }
-    if(no && !isAutoCode(no) && (no.length<3 || no.length>12)){ toast(`طلب ${n}: رقم الطلب غير منطقي (${no})`); return; }
-    if(no && !isAutoCode(no) && type!=='shop' && no.length<6){ toast(`طلب ${n}: رقم الطلب غير منطقي (${no})`); return; }
+    const isRedel = !!r.dataset.redeliveryOf;
+    if(PHONE_TYPES.includes(type) && !isRedel){
+      if(!/^05\d{8}$/.test(no)){ toast(`طلب ${n}: ${TYPES[type].full} — اكتب جوال العميل 05xxxxxxxx`); return; }
+    } else if(!isRedel){
+      if(!no){ toast(`طلب ${n}: اكتب رقم الطلب`); return; }
+      if(/^05\d{8}$/.test(no)){ toast(`طلب ${n}: هذا رقم جوال — لو الطلب واتس أو محل اختر النوع الصحيح`); return; }
+      if(no.length<6 || no.length>12){ toast(`طلب ${n}: رقم الطلب غير منطقي (${no})`); return; }
+    }
     if(r.dataset.prepId && !prep){ toast(`الطلب ${no} ما عاد في قائمة الجاهز — شيله وحدّث`); return; }
     if(no && seen.has(no)){ toast(`الطلب ${no} مكرر في نفس التسليم`); return; }
     if(!florist){ toast(`طلب ${n}: اختر المنسق`); return; }
@@ -713,11 +723,20 @@ async function saveHandover(){
   const btn=document.getElementById('saveBtn'), btnTxt=btn.textContent; btn.disabled=true; btn.textContent='جاري الحفظ...';
   try{
     // منع التكرار: نفس رقم الطلب ما ينسجل مرتين. التوصيل الثاني لطلب رجع يتم فقط من زر "رجع" بسجل اليوم
-    const dups=[];
+    const dups=[], samePhone=[];
+    const today = localDate();
     for(const o of orders.filter(x=>x.orderNo && !x.redeliveryOf && !x.prepId)){
-      const s = await db.collection('dispatchOrders').where('orderNo','==',o.orderNo).limit(1).get();
-      if(!s.empty) dups.push(o.orderNo);
+      const s = await db.collection('dispatchOrders').where('orderNo','==',o.orderNo).get();
+      if(s.empty) continue;
+      if(PHONE_TYPES.includes(o.type)){
+        // نفس العميل ممكن يطلب أكثر من مرة — نمنع التكرار بنفس اليوم إلا بتأكيد، وينسجل في سجل التعديلات
+        if(s.docs.some(d=>d.data().date===today)) samePhone.push(o);
+      } else dups.push(o.orderNo);
     }
+    if(samePhone.length && !confirm(`فيه طلب مسجّل اليوم لنفس جوال العميل:\n${samePhone.map(o=>o.orderNo).join('\n')}\n\nهل هذا طلب جديد ثاني لنفس العميل؟ (ينسجل في سجل التعديلات)\nلو الطلب رجع ويبي توصيل ثاني استخدم زر "رجع" بدل هذا.`)){
+      btn.disabled=false; btn.textContent=btnTxt; return;
+    }
+    samePhone.forEach(o=>o.samePhoneSameDay=true);
     if(dups.length){
       alert(`هذي الطلبات مسجّلة قبل:\n${dups.join('\n')}\n\nإذا الطلب رجع والعميل طلب توصيل ثاني: افتح "سجل اليوم" واضغط زر "رجع" على الطلب الأصلي.`);
       btn.disabled=false; btn.textContent=btnTxt; return;
@@ -755,6 +774,7 @@ async function saveHandover(){
         handedAt:TS(), departedAt:null, repStatus: pickup?'na':'pending',
         createdBy:currentUser.uid, createdAt:TS()
       });
+      if(o.samePhoneSameDay) wb.set(db.collection('auditLog').doc(), auditRow('samePhone', {id:ref.id, orderNo:o.orderNo}, `طلب ثاني لنفس العميل بنفس اليوم · ${pickup?'استلام':rep.name}`));
       if(o.redeliveryOf){
         wb.update(db.collection('dispatchOrders').doc(o.redeliveryOf), {redeliveryId: ref.id});
         wb.set(db.collection('auditLog').doc(), auditRow('redelivery', {id:ref.id, orderNo:o.orderNo}, `توصيل ثاني مع ${rep.name}`));
@@ -763,7 +783,7 @@ async function saveHandover(){
     if(pendingMissingId){ wb.update(db.collection('missingReports').doc(pendingMissingId), {status:'resolved', resolvedAt:TS(), resolvedBy:currentUser.uid, resolvedOrderNo:orders[0].orderNo}); }
     await wb.commit();
     pendingMissingId = null;
-    const codes = needCodes.length ? ` — الأرقام التلقائية: ${needCodes.map(o=>o.orderNo).join('، ')}` : '';
+    const codes = '';
     toast(pickup ? `تم تسجيل ${orders.length} طلب استلام ✅${codes}` : `تم تسليم ${orders.length} طلب لـ ${rep.name} ✅${codes}`);
     resetForm();
   }catch(e){ console.error(e); toast('ما انحفظ — تحقق من الاتصال أو الصلاحيات'); }
@@ -850,7 +870,7 @@ async function loadAudit(){
   const box=document.getElementById('auditBox'); if(!box) return;
   try{
     const snap=await db.collection('auditLog').orderBy('at','desc').limit(100).get();
-    const names={edit:'تعديل',delete:'حذف طلب',deleteBatch:'حذف تسليم',transfer:'تحويل لمندوب',return:'رجوع للمحل',redelivery:'توصيل ثاني',keep:'رفض اعتراض (الطلب صحيح)',rejectMissing:'رفض بلاغ'};
+    const names={samePhone:'طلب ثاني لنفس الجوال',edit:'تعديل',delete:'حذف طلب',deleteBatch:'حذف تسليم',transfer:'تحويل لمندوب',return:'رجوع للمحل',redelivery:'توصيل ثاني',keep:'رفض اعتراض (الطلب صحيح)',rejectMissing:'رفض بلاغ'};
     box.innerHTML = snap.empty ? '<div class="muted">ما فيه تعديلات.</div>' : `<div class="scroll"><table>
       <thead><tr><th>الوقت</th><th>بواسطة</th><th>الإجراء</th><th>رقم الطلب</th><th>التفاصيل</th></tr></thead>
       <tbody>${snap.docs.map(d=>{const a=d.data(); return `<tr><td style="white-space:nowrap">${a.date||''} ${fmtTime(a.at)}</td><td>${esc(a.byName)}</td><td><b>${names[a.action]||a.action}</b></td><td style="direction:ltr;unicode-bidi:isolate">${esc(a.orderNo||'')}</td><td>${esc(a.details)}</td></tr>`;}).join('')}</tbody></table></div>`;

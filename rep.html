@@ -233,6 +233,24 @@
   .st.pending{color:var(--amber);} .st.confirmed{color:var(--green);} .st.disputed{color:#B23A3A;}
   .ord .note{font-size:12px;background:var(--amber-bg);color:var(--amber);border-radius:8px;padding:6px 8px;margin-top:6px;}
   .tbadge{display:inline-block;font-size:11px;font-weight:700;padding:1px 7px;border-radius:8px;background:var(--cream);color:var(--ink);}
+  .otbl-wrap{overflow-x:auto;}
+  table.otbl{width:100%;border-collapse:collapse;font-size:13px;}
+  .otbl th{background:#FCFAF7;color:var(--ink-soft);font-weight:700;font-size:11.5px;text-align:right;padding:8px 6px;border-bottom:1px solid var(--line);white-space:nowrap;}
+  .otbl td{padding:9px 6px;border-bottom:1px solid var(--line);vertical-align:middle;}
+  .otbl tr:last-child td{border-bottom:none;}
+  .otbl tfoot td{font-weight:900;background:#FCFAF7;border-top:1.5px solid var(--line);}
+  .otbl .no{font-weight:900;font-size:13.5px;direction:ltr;unicode-bidi:isolate;white-space:nowrap;}
+  .otbl .sub{font-size:10.5px;font-weight:700;margin-top:2px;}
+  .otbl .price{font-weight:900;white-space:nowrap;}
+  .sp{display:inline-block;font-size:11px;font-weight:700;padding:2px 7px;border-radius:8px;white-space:nowrap;}
+  .sp.wait{background:var(--amber-bg);color:var(--amber);}
+  .sp.appr{background:var(--green-bg);color:var(--green);}
+  .sp.sent{background:#E6EEF5;color:#3A6EA5;}
+  .sp.rej{background:#FBEAEA;color:#B23A3A;}
+  .sp.gray{background:var(--cream);color:var(--ink-soft);}
+  .ibtn{border:none;border-radius:7px;width:30px;height:30px;font-size:15px;font-weight:900;cursor:pointer;font-family:inherit;}
+  .ibtn.ok{background:var(--green);color:#fff;} .ibtn.no{background:#FBEAEA;color:#B23A3A;}
+  .legend{font-size:11.5px;color:var(--ink-soft);margin-top:8px;line-height:1.8;}
   .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:flex-end;justify-content:center;z-index:60;}
   .modal-bg.show{display:flex;}
   .modal{background:#fff;border-radius:18px 18px 0 0;padding:20px 18px calc(20px + env(safe-area-inset-bottom,0px));width:100%;max-width:480px;max-height:90vh;overflow-y:auto;}
@@ -443,8 +461,8 @@
   <div class="modal">
     <h3>طلب وصّلته وما هو في القائمة</h3>
     <div class="muted">يوصل بلاغك لمشرف الإنتاج، ولما يسجّله يظهر عندك في القائمة وتأكده.</div>
-    <label>رقم الطلب</label>
-    <input id="missNo" inputmode="numeric" placeholder="رقم سلة، أو اتركه فاضي لطلب واتس/محل بدون رقم">
+    <label>رقم الطلب (أو جوال العميل لطلبات الواتس والمحل)</label>
+    <input id="missNo" inputmode="numeric" placeholder="رقم سلة، أو جوال العميل 05xxxxxxxx">
     <label>النوع</label>
     <select id="missType">
       <option value="doc">دوكمنتيشن</option>
@@ -1034,7 +1052,9 @@ function recomputePenaltiesBadge(){
 function attachNotificationListeners(){
   db.collection('dailyEntries').where('repUid','==',myPhone()).onSnapshot(snap=>{
     cachedEntriesForBadge = snap.docs.map(d=>d.data());
+    ENTRY_STATUS = Object.fromEntries(snap.docs.map(d=>[d.id, d.data().status||'pending']));
     recomputeLogBadge();
+    if(typeof renderMyOrders==='function') renderMyOrders();
   });
   db.collection('deliveryDiffs').where('repUid','==',myPhone()).onSnapshot(snap=>{
     cachedDiffsForBadge = snap.docs.map(d=>d.data());
@@ -1080,9 +1100,25 @@ function listenMyOrders(){
     .onSnapshot(s=>renderMyMissing(s.docs.map(d=>({id:d.id,...d.data()}))), e=>console.error(e));
 }
 
+let ENTRY_STATUS = {};
+// حالة الطلب عند المندوب: تأكيده ← ثم اعتماد الإدارة لقيده اليومي
+function orderStage(o){
+  const st=repStatusOf(o);
+  if(st==='disputed') return {k:'disp', html:'<span class="sp rej">اعترضت — عند المشرف</span>'};
+  if(st==='confirmed'){
+    const es = ENTRY_STATUS[o.entryId];
+    if(es==='approved') return {k:'appr', html:'<span class="sp appr">✓ تم الاعتماد</span>'};
+    if(es==='rejected') return {k:'rej', html:'<span class="sp rej">رفضته الإدارة</span>'};
+    if(es==='reviewed') return {k:'sent', html:'<span class="sp sent">تمت المراجعة</span>'};
+    return {k:'sent', html:'<span class="sp sent">بانتظار الاعتماد</span>'};
+  }
+  if(orderRate(o)<=0) return {k:'nop', html:'<span class="sp gray">المنطقة بانتظار التسعير</span>'};
+  return {k:'pend', html:''};
+}
 function renderMyOrders(){
   const box = document.getElementById('myOrdersList');
   const sum = document.getElementById('ordersSummary');
+  if(!box) return;
   if(!MY_ORDERS.length){
     box.innerHTML = '<div class="empty">ما فيه طلبات مسجّلة لك بهذا التاريخ.</div>';
     sum.style.display='none'; return;
@@ -1091,46 +1127,53 @@ function renderMyOrders(){
   MY_ORDERS.forEach(o=>(batches[o.batchId]=batches[o.batchId]||[]).push(o));
   const list = Object.values(batches).sort((a,b)=>(b[0].handedAt?.toMillis?.()||0)-(a[0].handedAt?.toMillis?.()||0));
 
-  let nPend=0, nConf=0, nDisp=0, amtConf=0, amtPend=0;
-  MY_ORDERS.forEach(o=>{ const st=repStatusOf(o), r=orderRate(o);
-    if(st==='confirmed'){ nConf++; amtConf+=r; } else if(st==='disputed'){ nDisp++; } else { nPend++; amtPend+=r; } });
+  let n={pend:0,sent:0,appr:0,disp:0,rej:0,nop:0}, a={pend:0,sent:0,appr:0};
+  MY_ORDERS.forEach(o=>{ const k=orderStage(o).k; n[k]=(n[k]||0)+1; if(a[k]!==undefined) a[k]+=orderRate(o); });
   sum.style.display='block';
-  sum.innerHTML = `${MY_ORDERS.length} طلب · ✓ مؤكد ${nConf} (${amtConf} ر.س)` + (nPend?` · ⏳ بانتظار تأكيدك ${nPend} (${amtPend} ر.س)`:'') + (nDisp?` · ⚠️ معترض ${nDisp}`:'');
+  sum.innerHTML = [
+    `${MY_ORDERS.length} طلب`,
+    n.appr ? `✓ معتمد ${n.appr} (${a.appr} ر.س)` : '',
+    n.sent ? `بانتظار الاعتماد ${n.sent} (${a.sent} ر.س)` : '',
+    n.pend ? `⏳ تحتاج تأكيدك ${n.pend} (${a.pend} ر.س)` : '',
+    n.disp ? `⚠️ معترض ${n.disp}` : '',
+    n.rej ? `مرفوض ${n.rej}` : ''
+  ].filter(Boolean).join(' · ');
 
   box.innerHTML = list.map(orders=>{
-    orders.sort((a,b)=>a.orderNo.localeCompare(b.orderNo));
-    const pend = orders.filter(o=>repStatusOf(o)==='pending' && orderRate(o)>0);
+    orders.sort((x,y)=>x.orderNo.localeCompare(y.orderNo));
+    const pend = orders.filter(o=>orderStage(o).k==='pend');
     const bAmt = orders.reduce((s,o)=>s+orderRate(o),0);
     return `<div class="batch">
       <div class="batch-head">
         <div><div class="bt">استلمت ${fmtT(orders[0].handedAt)} · ${orders.length} طلب</div>
-          <div class="bs">${orders[0].departedAt?'خرجت '+fmtT(orders[0].departedAt)+' · ':''}${bAmt} ر.س</div></div>
+          <div class="bs">${orders[0].departedAt?'خرجت '+fmtT(orders[0].departedAt):'لسا ما خرجت'}</div></div>
         ${pend.length?`<button class="btn-ok" onclick="confirmOrders(['${pend.map(o=>o.id).join("','")}'])">✓ تأكيد الكل (${pend.length})</button>`:''}
       </div>
-      ${orders.map(o=>{
-        const st=repStatusOf(o), r=orderRate(o);
-        const stTxt = st==='confirmed' ? '✓ مؤكد — أُرسل للاعتماد'
-          : st==='disputed' ? `⚠️ اعترضت: ${escH(o.disputeReason||'')} — بانتظار مشرف الإنتاج`
-          : (r>0 ? '⏳ بانتظار تأكيدك' : '⏳ المنطقة بانتظار التسعير من الإدارة');
-        const btns = st==='confirmed' ? '' :
-          `<div style="display:flex;flex-direction:column;gap:6px">
-             ${st==='pending' && r>0 ? `<button class="btn-ok" onclick="confirmOrders(['${o.id}'])">✓ تأكيد</button>` : ''}
-             ${st==='pending' ? `<button class="btn-no" onclick="openDispute('${o.id}')">اعتراض</button>` : ''}
-           </div>`;
-        return `<div class="ord">
-          <div class="grow">
-            <div class="no">${escH(o.orderNo)}</div>
-            <div class="meta"><span class="tbadge">${OTYPES[o.type]?.label||''}</span> · ${escH(o.areaName)} · <b>${r?r+' ر.س':'—'}</b></div>
-            ${o.redeliveryOf?'<div class="st" style="color:#3A6EA5">🔁 توصيل ثاني — مشوار مستقل ينحسب لك</div>':''}
-            ${o.transferredFrom?`<div class="st" style="color:var(--ink-soft)">محوّل لك من ${escH(o.transferredFrom)}</div>`:''}
-            ${o.returned?`<div class="st" style="color:#B23A3A">↩︎ رجع للمحل: ${escH(o.returnReason||'')} — المشوار ينحسب لك</div>`:''}
-            <div class="st ${st}">${stTxt}</div>
-            ${o.ibrahimNote && st!=='confirmed' ? `<div class="note">ملاحظة مشرف الإنتاج: ${escH(o.ibrahimNote)}</div>` : ''}
-          </div>${btns}
-        </div>`;
-      }).join('')}
+      <div class="otbl-wrap"><table class="otbl">
+        <thead><tr><th>رقم الطلب</th><th>النوع</th><th>المنطقة</th><th>التوصيل</th><th>الحالة</th></tr></thead>
+        <tbody>${orders.map(o=>{
+          const r=orderRate(o), stg=orderStage(o);
+          const sub = [
+            o.redeliveryOf ? '<div class="sub" style="color:#3A6EA5">🔁 توصيل ثاني</div>' : '',
+            o.transferredFrom ? `<div class="sub" style="color:var(--ink-soft)">محوّل من ${escH(o.transferredFrom)}</div>` : '',
+            o.returned ? `<div class="sub" style="color:#B23A3A">↩︎ رجع: ${escH(o.returnReason||'')}</div>` : '',
+            (o.ibrahimNote && stg.k==='pend') ? `<div class="sub" style="color:var(--amber)">المشرف: ${escH(o.ibrahimNote)}</div>` : ''
+          ].join('');
+          const act = stg.k==='pend'
+            ? `<div style="display:flex;gap:5px"><button class="ibtn ok" title="تأكيد" onclick="confirmOrders(['${o.id}'])">✓</button><button class="ibtn no" title="اعتراض" onclick="openDispute('${o.id}')">✕</button></div>`
+            : stg.html;
+          return `<tr>
+            <td><div class="no">${escH(o.orderNo)}</div>${sub}</td>
+            <td style="white-space:nowrap">${OTYPES[o.type]?.label||''}</td>
+            <td>${escH(o.areaName)}</td>
+            <td class="price">${r?r+' ر.س':'—'}</td>
+            <td>${act}</td>
+          </tr>`;
+        }).join('')}</tbody>
+        <tfoot><tr><td colspan="3">المجموع</td><td class="price">${bAmt} ر.س</td><td></td></tr></tfoot>
+      </table></div>
     </div>`;
-  }).join('');
+  }).join('') + `<div class="legend">✓ = تأكيد إنك استلمت الطلب والبيانات صحيحة · ✕ = اعتراض لو فيه غلط.<br>بعد التأكيد يروح للإدارة، ولما تعتمده يتغير لـ <b>تم الاعتماد</b> وينضاف لرصيدك.</div>`;
 }
 
 // التأكيد: يحوّل الطلبات المؤكدة لقيد يومي (dailyEntries) بنفس الشكل القديم، فيوصل للإدارة
@@ -1207,11 +1250,12 @@ function openMissing(){
   document.getElementById('missingModal').classList.add('show');
 }
 async function submitMissing(){
-  const no = String(document.getElementById('missNo').value||'').replace(/[٠-٩]/g,d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/\D/g,'');
+  let no = String(document.getElementById('missNo').value||'').replace(/[٠-٩]/g,d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/\D/g,'');
+  if(/^9665\d{8}$/.test(no)) no='0'+no.slice(3);
   const type = document.getElementById('missType').value;
   const areaId = document.getElementById('missArea').value;
-  if(!no && type!=='wa' && type!=='shop'){ toast('اكتب رقم الطلب'); return; }
-  if(no && (no.length<3 || no.length>12)){ toast('رقم الطلب غير صحيح'); return; }
+  if(type==='wa' || type==='shop'){ if(!/^05\d{8}$/.test(no)){ toast('طلبات الواتس والمحل: اكتب جوال العميل 05xxxxxxxx'); return; } }
+  else if(no.length<6 || no.length>12){ toast('اكتب رقم الطلب من سلة'); return; }
   if(!areaId){ toast('اختر المنطقة'); return; }
   const area = AREAS.find(a=>a.id===areaId);
   const btn=document.getElementById('missBtn'); btn.disabled=true;
@@ -1232,7 +1276,7 @@ function renderMyMissing(list){
     const st = m.status==='resolved' ? '<span class="badge approved">انضاف للقائمة</span>'
       : m.status==='rejected' ? `<span class="badge rejected">مرفوض</span>${m.resolveNote?` <span class="muted">${escH(m.resolveNote)}</span>`:''}`
       : '<span class="badge pending">عند مشرف الإنتاج</span>';
-    return `<div class="log-item"><div><div class="desc" style="direction:ltr;unicode-bidi:isolate;text-align:right">${escH(m.orderNo||'بدون رقم')}</div>
+    return `<div class="log-item"><div><div class="desc" style="direction:ltr;unicode-bidi:isolate;text-align:right">${escH(m.orderNo||'—')}</div>
       <div class="date">${OTYPES[m.type]?.label||''} · ${escH(m.areaName)}</div></div><div>${st}</div></div>`;
   }).join('');
 }
