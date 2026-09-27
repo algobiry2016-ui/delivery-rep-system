@@ -1053,6 +1053,7 @@ function attachNotificationListeners(){
   db.collection('dailyEntries').where('repUid','==',myPhone()).onSnapshot(snap=>{
     cachedEntriesForBadge = snap.docs.map(d=>d.data());
     ENTRY_STATUS = Object.fromEntries(snap.docs.map(d=>[d.id, d.data().status||'pending']));
+    ENTRY_REASON = Object.fromEntries(snap.docs.map(d=>[d.id, d.data().rejectReason||'']));
     recomputeLogBadge();
     if(typeof renderMyOrders==='function') renderMyOrders();
   });
@@ -1100,7 +1101,7 @@ function listenMyOrders(){
     .onSnapshot(s=>renderMyMissing(s.docs.map(d=>({id:d.id,...d.data()}))), e=>console.error(e));
 }
 
-let ENTRY_STATUS = {};
+let ENTRY_STATUS = {}, ENTRY_REASON = {};
 // حالة الطلب عند المندوب: تأكيده ← ثم اعتماد الإدارة لقيده اليومي
 function orderStage(o){
   const st=repStatusOf(o);
@@ -1108,7 +1109,7 @@ function orderStage(o){
   if(st==='confirmed'){
     const es = ENTRY_STATUS[o.entryId];
     if(es==='approved') return {k:'appr', html:'<span class="sp appr">✓ تم الاعتماد</span>'};
-    if(es==='rejected') return {k:'rej', html:'<span class="sp rej">رفضته الإدارة</span>'};
+    if(es==='rejected') return {k:'rej', html:`<span class="sp rej">رفضته الإدارة</span>${ENTRY_REASON[o.entryId]?`<div class="sub" style="color:#B23A3A">${escH(ENTRY_REASON[o.entryId])}</div>`:''}`};
     if(es==='reviewed') return {k:'sent', html:'<span class="sp sent">تمت المراجعة</span>'};
     return {k:'sent', html:'<span class="sp sent">بانتظار الاعتماد</span>'};
   }

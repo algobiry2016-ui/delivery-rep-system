@@ -180,6 +180,40 @@
     .card{padding:14px;}
     h1{font-size:17px;}
   }
+
+  /* ===== الطلبات والاعتماد ===== */
+  .qbtns{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 12px;}
+  .qbtn{background:#fff;border:1.5px solid var(--line);border-radius:18px;padding:6px 12px;font-family:inherit;font-size:12.5px;font-weight:700;cursor:pointer;color:var(--ink);}
+  .qbtn:hover{border-color:var(--rose);}
+  .ofilters{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;align-items:end;}
+  .ofilters label{display:block;font-size:12px;font-weight:700;color:var(--ink-soft);margin-bottom:4px;}
+  .ofilters input,.ofilters select{width:100%;padding:9px 10px;border:1.5px solid var(--line);border-radius:8px;font-family:inherit;font-size:14px;background:#fff;}
+  .otiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px;}
+  .otile{background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px;cursor:pointer;transition:border-color .15s;}
+  .otile:hover{border-color:var(--rose);}
+  .otile .n{font-size:22px;font-weight:900;} .otile .a{font-size:12.5px;font-weight:700;color:var(--ink-soft);} .otile .l{font-size:12px;color:var(--ink-soft);margin-top:2px;}
+  .otile.hl{border:2px solid var(--amber);background:#FFFBF4;}
+  .bulkbar{position:sticky;top:0;z-index:5;display:flex;gap:8px;flex-wrap:wrap;align-items:center;background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:12px;box-shadow:0 2px 8px rgba(0,0,0,.04);}
+  .bulkbar .sel{font-weight:900;margin-inline-end:auto;}
+  .btn-a{border:none;border-radius:8px;padding:9px 14px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer;}
+  .btn-a.g{background:var(--green);color:#fff;} .btn-a.r{background:#FBEAEA;color:#B23A3A;} .btn-a.y{background:var(--amber-bg);color:var(--amber);} .btn-a.b{background:#fff;border:1.5px solid var(--line);color:var(--ink);}
+  .btn-a:disabled{opacity:.45;cursor:not-allowed;}
+  .otable-wrap{overflow-x:auto;}
+  table.otable{width:100%;border-collapse:collapse;font-size:13px;min-width:980px;}
+  .otable th{position:sticky;top:0;background:#FCFAF7;text-align:right;font-size:12px;color:var(--ink-soft);padding:9px 8px;border-bottom:2px solid var(--line);white-space:nowrap;cursor:default;}
+  .otable td{padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:middle;}
+  .otable tr.selrow td{background:#F4F8F5;}
+  .otable tr.sib td{background:#FAFCFA;}
+  .otable .no{font-weight:900;direction:ltr;unicode-bidi:isolate;white-space:nowrap;}
+  .otable .dim{font-size:11.5px;color:var(--ink-soft);white-space:nowrap;}
+  .otable input[type=checkbox]{width:17px;height:17px;}
+  .st{display:inline-block;font-size:11.5px;font-weight:700;padding:2px 8px;border-radius:8px;white-space:nowrap;}
+  .st-await{background:var(--amber-bg);color:var(--amber);} .st-appr{background:var(--green-bg);color:var(--green);}
+  .st-rev{background:#E6EEF5;color:#3A6EA5;} .st-rej{background:#FBEAEA;color:#B23A3A;} .st-gray{background:var(--cream);color:var(--ink-soft);}
+  .tp{display:inline-block;font-size:11.5px;font-weight:700;padding:2px 8px;border-radius:8px;color:#fff;white-space:nowrap;}
+  .tp-doc{background:#262626;} .tp-ward{background:#B8935F;} .tp-wa{background:#4C7A5C;} .tp-shop{background:#7A5C8A;}
+  .fl{display:inline-block;font-size:10.5px;font-weight:700;padding:1px 6px;border-radius:7px;margin:1px 2px 0 0;}
+  .fl-ret{background:#FBEAEA;color:#B23A3A;} .fl-re{background:#E6EEF5;color:#3A6EA5;} .fl-tr{background:var(--cream);color:var(--ink);}
 </style>
 </head>
 <body>
@@ -222,7 +256,8 @@
     <div class="sidebar" id="sidebar">
       <div class="logo">لوحة الإدارة</div>
       <div class="sub">مناديب التوصيل</div>
-      <button class="navitem active" onclick="showTab('dashboard')">📊 نظرة عامة <span class="nav-badge" id="navBadgeEntries"></span></button>
+      <button class="navitem" id="navOrders" style="display:none" onclick="showTab('orders')">🧾 الطلبات والاعتماد <span class="nav-badge" id="navBadgeOrders"></span></button>
+      <button class="navitem active" id="navDashboard" onclick="showTab('dashboard')">📊 نظرة عامة <span class="nav-badge" id="navBadgeEntries"></span></button>
       <button class="navitem" onclick="showTab('diffs')">🔁 فوارق التوصيل <span class="nav-badge" id="navBadgeDiffs"></span></button>
       <button class="navitem" onclick="showTab('penalties')">⚠️ الجزاءات والهدايا</button>
       <button class="navitem" onclick="showTab('reps')">👤 المناديب</button>
@@ -235,6 +270,65 @@
     </div>
 
     <div class="main">
+
+      <!-- ===== ORDERS & APPROVAL ===== -->
+      <div id="tab-orders" class="tab-panel">
+        <h1>الطلبات والاعتماد</h1>
+        <p class="page-sub">كل طلب سلّمه مشرف الإنتاج — بمندوبه ومنطقته وسعره وحالته. اعتمد من هنا مباشرة.</p>
+
+        <div class="card">
+          <div class="qbtns">
+            <button class="qbtn" onclick="oQuick('today')">اليوم</button>
+            <button class="qbtn" onclick="oQuick('yesterday')">أمس</button>
+            <button class="qbtn" onclick="oQuick('week')">آخر ٧ أيام</button>
+            <button class="qbtn" onclick="oQuick('month')">هذا الشهر</button>
+            <button class="qbtn" onclick="oQuick('lastMonth')">الشهر الماضي</button>
+          </div>
+          <div class="ofilters">
+            <div><label>من</label><input type="date" id="oFrom"></div>
+            <div><label>إلى</label><input type="date" id="oTo"></div>
+            <div><label>المندوب</label><select id="oRep" onchange="renderOrdersTab()"></select></div>
+            <div><label>الحالة</label><select id="oStatus" onchange="renderOrdersTab()">
+              <option value="">الكل</option>
+              <option value="awaiting">بانتظار اعتمادك</option>
+              <option value="approved">معتمد</option>
+              <option value="unconfirmed">ما أكدها المندوب</option>
+              <option value="disputed">اعتراض المندوب</option>
+              <option value="rejected">مرفوض</option>
+              <option value="pickup">استلام من المتجر</option>
+            </select></div>
+            <div><label>النوع</label><select id="oType" onchange="renderOrdersTab()">
+              <option value="">الكل</option><option value="doc">دوكمنتيشن</option><option value="ward">ورد إكسبرس</option><option value="wa">واتس دوكمنتيشن</option><option value="shop">طلبات المحل</option>
+            </select></div>
+            <div><label>المنطقة</label><select id="oArea" onchange="renderOrdersTab()"></select></div>
+            <div><label>بحث</label><input id="oSearch" placeholder="رقم الطلب أو جوال" oninput="renderOrdersTab()"></div>
+            <div><button class="btn-a g" style="width:100%" onclick="loadOrdersTab()">عرض</button></div>
+          </div>
+        </div>
+
+        <div class="otiles" id="oTiles"></div>
+        <div class="bulkbar" id="oBulk"></div>
+        <div class="card" style="padding:0;overflow:hidden">
+          <div class="otable-wrap"><table class="otable">
+            <thead><tr>
+              <th><input type="checkbox" id="oAll" onchange="oToggleAll(this.checked)" title="تحديد كل القابل للاعتماد"></th>
+              <th>التاريخ</th><th>المندوب</th><th>رقم الطلب</th><th>النوع</th><th>المنطقة</th><th>السعر</th>
+              <th>التسليم ← الخروج</th><th>المندوب أكد؟</th><th>الاعتماد</th><th>المنسق</th><th>ملاحظات</th>
+            </tr></thead>
+            <tbody id="oBody"></tbody>
+          </table></div>
+          <div id="oEmpty" class="empty" style="display:none">ما فيه طلبات بهذي الفلاتر</div>
+          <div id="oMore" class="empty" style="display:none"></div>
+        </div>
+
+        <div class="card">
+          <h3>ملخص المناديب للفترة</h3>
+          <div class="otable-wrap"><table class="otable" style="min-width:760px">
+            <thead><tr><th>المندوب</th><th>طلبات التوصيل</th><th>معتمد</th><th>بانتظار اعتمادك</th><th>ما أكدها</th><th>اعتراض</th><th>رجعت</th><th>إجمالي المستحق</th></tr></thead>
+            <tbody id="oRepSum"></tbody>
+          </table></div>
+        </div>
+      </div>
 
       <!-- ===== DASHBOARD ===== -->
       <div id="tab-dashboard" class="tab-panel active">
@@ -643,6 +737,11 @@ auth.onAuthStateChanged(async user=>{
       updateNavBadge('navBadgeAreas', AREAS.filter(a=>!(a.rateDoc>0 && a.rateWard>0)).length);
       // لوحة تسليم الطلبات خاصة بمشرف الإنتاج والأدمن الكامل فقط — المشرف والمراجع ما يشوفونها
       document.getElementById('navDispatch').style.display = myRole==='admin' ? '' : 'none';
+      // الطلبات والاعتماد (بالطلب الواحد): للأدمن — وتفتح أول شاشة
+      if(myRole==='admin'){
+        document.getElementById('navOrders').style.display='';
+        openTabDirect('orders');
+      }
       attachRealtimeListeners();
     } else {
       showScreen('deniedScreen');
@@ -675,6 +774,7 @@ function showTab(name){
   event.currentTarget.classList.add('active');
   closeMobileNav();
   if(name==='dashboard') loadDashboard();
+  if(name==='orders' && myRole==='admin') loadOrdersTab();
   if(name==='diffs') loadDiffs();
   if(name==='penalties') { loadPenaltyRepSelect(); loadPenalties(); }
   if(name==='reps') loadReps();
@@ -1622,6 +1722,227 @@ async function runReport(){
   }
   document.getElementById('reportBreakdownTotalCount').textContent = bTotalCount;
   document.getElementById('reportBreakdownTotalAmount').textContent = bTotalAmount + ' ر.س';
+}
+
+/* =====================================================================
+   الطلبات والاعتماد — عرض بالطلب الواحد من سجل مشرف الإنتاج
+   كل طلب أكده المندوب مربوط بقيد يومي (dailyEntries) عن طريق entryId،
+   والاعتماد يتم على القيد — فلو القيد فيه أكثر من طلب يتحدد كله مع بعض.
+   ===================================================================== */
+const O_TYPES = {doc:'دوكمنتيشن', ward:'ورد إكسبرس', wa:'واتس دوكمنتيشن', shop:'طلبات المحل'};
+let O_ORDERS=[], O_ENTRIES={}, O_SEL=new Set(), O_VIEW=[];
+function openTabDirect(name){
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('tab-'+name).classList.add('active');
+  document.querySelectorAll('.navitem').forEach(b=>b.classList.remove('active'));
+  const nb=document.getElementById('nav'+name.charAt(0).toUpperCase()+name.slice(1)); if(nb) nb.classList.add('active');
+  if(name==='orders') loadOrdersTab();
+}
+function oRiyadh(d=new Date()){ return d.toLocaleDateString('en-CA',{timeZone:'Asia/Riyadh'}); }
+function oTime(ts){ return ts&&ts.toDate ? ts.toDate().toLocaleTimeString('ar-SA',{hour:'numeric',minute:'2-digit',timeZone:'Asia/Riyadh'}) : '—'; }
+function oEsc(s){ return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function oQuick(k){
+  const t=oRiyadh(), d=new Date(t+'T12:00:00'), f=x=>x.toISOString().slice(0,10);
+  let from=t, to=t;
+  if(k==='yesterday'){ const y=new Date(d); y.setDate(d.getDate()-1); from=to=f(y); }
+  if(k==='week'){ const w=new Date(d); w.setDate(d.getDate()-6); from=f(w); }
+  if(k==='month'){ from=t.slice(0,8)+'01'; }
+  if(k==='lastMonth'){ from=f(new Date(d.getFullYear(),d.getMonth()-1,1,12)); to=f(new Date(d.getFullYear(),d.getMonth(),0,12)); }
+  document.getElementById('oFrom').value=from; document.getElementById('oTo').value=to;
+  loadOrdersTab();
+}
+function oRate(o){
+  if(o.fulfillment==='pickup') return 0;
+  if(typeof o.rate==='number' && o.rate>0) return o.rate;
+  const a=AREAS.find(x=>x.id===o.areaId); if(!a||!(a.rateDoc>0)) return 0;
+  const base = o.brand==='ward' ? a.rateWard : a.rateDoc;
+  return o.isAmmar ? Math.max(0,base-5) : base;
+}
+function oStage(o){
+  if(o.fulfillment==='pickup') return 'pickup';
+  const st=o.repStatus||'pending';
+  if(st==='disputed') return 'disputed';
+  if(st!=='confirmed') return 'unconfirmed';
+  const es=O_ENTRIES[o.entryId];
+  if(!es) return 'awaiting';
+  if(es.status==='approved') return 'approved';
+  if(es.status==='rejected') return 'rejected';
+  return 'awaiting';   // pending أو reviewed
+}
+const O_STAGE_UI = {
+  awaiting:   o=> O_ENTRIES[o.entryId]?.status==='reviewed' ? '<span class="st st-rev">تمت المراجعة · بانتظار اعتمادك</span>' : '<span class="st st-await">بانتظار اعتمادك</span>',
+  approved:   ()=>'<span class="st st-appr">✓ معتمد</span>',
+  rejected:   o=>`<span class="st st-rej">مرفوض</span>${O_ENTRIES[o.entryId]?.rejectReason?`<div class="dim">${oEsc(O_ENTRIES[o.entryId].rejectReason)}</div>`:''}`,
+  unconfirmed:()=>'<span class="st st-gray">—</span>',
+  disputed:   ()=>'<span class="st st-gray">—</span>',
+  pickup:     ()=>'<span class="st st-gray">لا يحتاج</span>'
+};
+function oRepCell(o){
+  const st=o.repStatus||'pending';
+  if(o.fulfillment==='pickup') return o.pickedUpAt?`<span class="st st-appr">استلمه العميل ${oTime(o.pickedUpAt)}</span>`:'<span class="st st-await">ما استلمه العميل</span>';
+  if(st==='confirmed') return `<span class="st st-appr">✓ أكد</span><div class="dim">${oTime(o.repActionAt)}</div>`;
+  if(st==='disputed') return `<span class="st st-rej">⚠️ اعترض</span><div class="dim">${oEsc(o.disputeReason||'')}</div>`;
+  return '<span class="st st-await">⏳ ما أكد</span>';
+}
+async function loadOrdersTab(){
+  if(myRole!=='admin') return;
+  const fromEl=document.getElementById('oFrom'), toEl=document.getElementById('oTo');
+  if(!fromEl.value){ const t=oRiyadh(); fromEl.value=t.slice(0,8)+'01'; toEl.value=t; }
+  const from=fromEl.value, to=toEl.value;
+  if(from>to){ toast('تحقق من الفترة'); return; }
+  document.getElementById('oBody').innerHTML='<tr><td colspan="12" class="empty">جاري التحميل...</td></tr>';
+  try{
+    const [oSnap, eSnap] = await Promise.all([
+      db.collection('dispatchOrders').where('date','>=',from).where('date','<=',to).get(),
+      db.collection('dailyEntries').where('date','>=',from).where('date','<=',to).get()
+    ]);
+    O_ORDERS = oSnap.docs.map(d=>({id:d.id,...d.data()}));
+    O_ENTRIES = Object.fromEntries(eSnap.docs.map(d=>[d.id,{id:d.id,...d.data()}]));
+  }catch(e){ console.error(e); toast('تعذّر تحميل الطلبات — تأكد من قواعد Firebase'); return; }
+  O_SEL.clear();
+  // قوائم الفلاتر من البيانات نفسها
+  const keep=(id,opts)=>{ const el=document.getElementById(id), v=el.value; el.innerHTML=opts; el.value=v; if(el.value!==v) el.value=''; };
+  const reps=[...new Map(O_ORDERS.filter(o=>o.repPhone).map(o=>[o.repPhone,o.repName])).entries()].sort((a,b)=>(a[1]||'').localeCompare(b[1]||'','ar'));
+  keep('oRep','<option value="">الكل</option>'+reps.map(([p,n])=>`<option value="${p}">${oEsc(n)}</option>`).join(''));
+  const areas=[...new Map(O_ORDERS.filter(o=>o.areaId).map(o=>[o.areaId,o.areaName])).entries()];
+  keep('oArea','<option value="">الكل</option>'+areas.map(([i,n])=>`<option value="${oEsc(i)}">${oEsc(n)}</option>`).join(''));
+  renderOrdersTab();
+  updateNavBadge('navBadgeOrders', O_ORDERS.filter(o=>oStage(o)==='awaiting').length);
+}
+function oFiltered(){
+  const rep=document.getElementById('oRep').value, st=document.getElementById('oStatus').value,
+        tp=document.getElementById('oType').value, ar=document.getElementById('oArea').value,
+        q=String(document.getElementById('oSearch').value||'').replace(/[٠-٩]/g,d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/\s/g,'').toUpperCase();
+  return O_ORDERS.filter(o=>(!rep||o.repPhone===rep) && (!st||oStage(o)===st) && (!tp||o.type===tp) && (!ar||o.areaId===ar) && (!q||String(o.orderNo).toUpperCase().includes(q)))
+    .sort((a,b)=> b.date.localeCompare(a.date) || (a.repName||'').localeCompare(b.repName||'','ar') || (a.handedAt?.toMillis?.()||0)-(b.handedAt?.toMillis?.()||0));
+}
+function renderOrdersTab(){
+  const list = oFiltered(); O_VIEW = list;
+  // البطاقات (على كل الفترة — بغض النظر عن فلتر الحالة)
+  const base = O_ORDERS.filter(o=>{ const rep=document.getElementById('oRep').value; return !rep||o.repPhone===rep; });
+  const c=k=>base.filter(o=>oStage(o)===k), amt=l=>l.reduce((s,o)=>s+oRate(o),0);
+  const aw=c('awaiting'), ap=c('approved'), un=c('unconfirmed'), di=c('disputed'), pk=c('pickup'), rj=c('rejected');
+  const ret=base.filter(o=>o.returned);
+  const tile=(k,n,a,l,hl)=>`<div class="otile ${hl?'hl':''}" onclick="document.getElementById('oStatus').value='${k}';renderOrdersTab()"><div class="n">${n}</div>${a!==null?`<div class="a">${a} ر.س</div>`:''}<div class="l">${l}</div></div>`;
+  document.getElementById('oTiles').innerHTML =
+    `<div class="otile" onclick="document.getElementById('oStatus').value='';renderOrdersTab()"><div class="n">${base.length}</div><div class="a">${amt(base)} ر.س</div><div class="l">كل الطلبات</div></div>`+
+    tile('awaiting',aw.length,amt(aw),'بانتظار اعتمادك',aw.length>0)+
+    tile('approved',ap.length,amt(ap),'معتمد')+
+    tile('unconfirmed',un.length,amt(un),'ما أكدها المندوب')+
+    tile('disputed',di.length,null,'اعتراضات عند المشرف')+
+    (rj.length?tile('rejected',rj.length,amt(rj),'مرفوض'):'')+
+    tile('pickup',pk.length,null,'استلام من المتجر')+
+    `<div class="otile"><div class="n">${ret.length}</div><div class="l">رجعت للمحل</div></div>`;
+
+  // الجدول
+  const MAX=400, shown=list.slice(0,MAX);
+  document.getElementById('oEmpty').style.display = list.length?'none':'block';
+  const more=document.getElementById('oMore'); more.style.display = list.length>MAX?'block':'none';
+  more.textContent = `يعرض أول ${MAX} من ${list.length} — ضيّق الفلاتر أو صدّر Excel للكل`;
+  const selEntries = new Set([...O_SEL].map(id=>O_ORDERS.find(o=>o.id===id)?.entryId));
+  document.getElementById('oBody').innerHTML = shown.map(o=>{
+    const stg=oStage(o), can = stg==='awaiting' && !!o.entryId;
+    const sel=O_SEL.has(o.id), sib=!sel && can && selEntries.has(o.entryId);
+    const r=oRate(o);
+    const flags=[o.redeliveryOf?'<span class="fl fl-re">توصيل ثاني</span>':'', o.returned?`<span class="fl fl-ret">رجع: ${oEsc(o.returnReason||'')}</span>`:'',
+      o.transferredFrom?`<span class="fl fl-tr">محوّل من ${oEsc(o.transferredFrom)}</span>`:''].join('');
+    return `<tr class="${sel?'selrow':(sib?'sib':'')}">
+      <td>${can?`<input type="checkbox" ${sel||sib?'checked':''} onchange="oToggle('${o.id}',this.checked)">`:''}</td>
+      <td class="dim">${o.date}</td>
+      <td><b>${oEsc(o.repName||'استلام من المتجر')}</b></td>
+      <td class="no">${oEsc(o.orderNo)}</td>
+      <td><span class="tp tp-${o.type}">${O_TYPES[o.type]||o.type}</span></td>
+      <td>${oEsc(o.fulfillment==='pickup'?'—':o.areaName)}</td>
+      <td style="font-weight:900;white-space:nowrap">${o.fulfillment==='pickup'?'—':(r?r+' ر.س':'<span class="st st-await">بدون سعر</span>')}</td>
+      <td class="dim">${oTime(o.handedAt)}${o.departedAt?' ← '+oTime(o.departedAt):''}</td>
+      <td>${oRepCell(o)}</td>
+      <td>${O_STAGE_UI[stg](o)}</td>
+      <td class="dim">${oEsc(o.florist||'')}</td>
+      <td>${flags}${o.notes?`<div class="dim" style="white-space:normal">${oEsc(o.notes)}</div>`:''}</td>
+    </tr>`;
+  }).join('');
+  oRenderBulk();
+
+  // ملخص المناديب
+  const byRep={};
+  base.filter(o=>o.fulfillment!=='pickup').forEach(o=>{
+    const k=o.repPhone; byRep[k]=byRep[k]||{name:o.repName,n:0,ap:0,aw:0,un:0,di:0,ret:0,tot:0};
+    const b=byRep[k], st=oStage(o), r=oRate(o);
+    b.n++; b.tot+=r; if(st==='approved') b.ap+=r; if(st==='awaiting') b.aw+=r; if(st==='unconfirmed') b.un++; if(st==='disputed') b.di++; if(o.returned) b.ret++;
+  });
+  const rows=Object.entries(byRep).sort((a,b)=>b[1].n-a[1].n);
+  document.getElementById('oRepSum').innerHTML = rows.length ? rows.map(([p,b])=>`<tr style="cursor:pointer" onclick="document.getElementById('oRep').value='${p}';renderOrdersTab();window.scrollTo({top:0,behavior:'smooth'})">
+    <td><b>${oEsc(b.name)}</b></td><td>${b.n}</td><td style="color:var(--green);font-weight:700">${b.ap} ر.س</td><td style="color:var(--amber);font-weight:700">${b.aw} ر.س</td>
+    <td>${b.un||'—'}</td><td>${b.di||'—'}</td><td>${b.ret||'—'}</td><td style="font-weight:900">${b.tot} ر.س</td></tr>`).join('')
+    : '<tr><td colspan="8" class="empty">—</td></tr>';
+}
+// تحديد طلب = تحديد قيده كامل (الطلبات اللي أكدها المندوب مع بعض)
+function oToggle(id,on){
+  const o=O_ORDERS.find(x=>x.id===id); if(!o) return;
+  O_ORDERS.filter(x=>x.entryId===o.entryId && oStage(x)==='awaiting').forEach(x=> on?O_SEL.add(x.id):O_SEL.delete(x.id));
+  renderOrdersTab();
+}
+function oToggleAll(on){
+  O_SEL.clear();
+  if(on) O_VIEW.filter(o=>oStage(o)==='awaiting').forEach(o=>O_ORDERS.filter(x=>x.entryId===o.entryId && oStage(x)==='awaiting').forEach(x=>O_SEL.add(x.id)));
+  renderOrdersTab();
+}
+function oSelEntries(){ return [...new Set([...O_SEL].map(id=>O_ORDERS.find(o=>o.id===id)?.entryId).filter(Boolean))]; }
+function oRenderBulk(){
+  const sel=[...O_SEL].map(id=>O_ORDERS.find(o=>o.id===id)).filter(Boolean);
+  const amt=sel.reduce((s,o)=>s+oRate(o),0);
+  const viewAw=O_VIEW.filter(o=>oStage(o)==='awaiting');
+  document.getElementById('oAll').checked = viewAw.length>0 && viewAw.every(o=>O_SEL.has(o.id));
+  document.getElementById('oBulk').innerHTML = `
+    <span class="sel">${sel.length?`محدد: ${sel.length} طلب · ${amt} ر.س`:`${O_VIEW.length} طلب معروض`}</span>
+    <button class="btn-a g" ${sel.length?'':'disabled'} onclick="oApprove()">✓ اعتماد المحدد</button>
+    <button class="btn-a y" ${sel.length?'':'disabled'} onclick="oReturnToRep()">↩︎ إرجاع للتصحيح</button>
+    <button class="btn-a r" ${sel.length?'':'disabled'} onclick="oReject()">رفض</button>
+    <button class="btn-a b" onclick="oExport()">⬇︎ تصدير Excel</button>
+    <button class="btn-a b" onclick="loadOrdersTab()">↻ تحديث</button>`;
+}
+async function oSetStatus(status, extra={}){
+  const ids=oSelEntries(); if(!ids.length) return;
+  const wb=db.batch();
+  ids.forEach(id=>wb.update(db.collection('dailyEntries').doc(id), {status, statusUpdatedAt: firebase.firestore.FieldValue.serverTimestamp(), ...extra}));
+  await wb.commit();
+}
+async function oApprove(){
+  const n=O_SEL.size; if(!n) return;
+  try{ await oSetStatus('approved'); toast(`تم اعتماد ${n} طلب ✅`); await loadOrdersTab(); loadDashboard(); }
+  catch(e){ console.error(e); toast('ما انحفظ — تحقق من الاتصال'); }
+}
+async function oReject(){
+  if(!O_SEL.size) return;
+  const reason=prompt('سبب الرفض (يظهر للمندوب):'); if(reason===null) return;
+  if(!confirm(`رفض ${O_SEL.size} طلب نهائياً؟ ما بينحسب للمندوب.\nلو فيه غلط يتصحح استخدم "إرجاع للتصحيح" بدل الرفض.`)) return;
+  try{ await oSetStatus('rejected', {rejectReason: reason.trim()}); toast('تم الرفض'); await loadOrdersTab(); loadDashboard(); }
+  catch(e){ console.error(e); toast('ما انحفظ'); }
+}
+// إرجاع للتصحيح: يلغي القيد ويرجع الطلبات "بانتظار تأكيد المندوب" مع ملاحظتك — فيصلحها المشرف أو يأكدها المندوب من جديد
+async function oReturnToRep(){
+  if(!O_SEL.size) return;
+  const reason=prompt('وش المطلوب تصحيحه؟ (يظهر للمندوب والمشرف)'); if(reason===null) return;
+  const ids=oSelEntries();
+  try{
+    const wb=db.batch();
+    ids.forEach(eid=>{
+      wb.delete(db.collection('dailyEntries').doc(eid));
+      O_ORDERS.filter(o=>o.entryId===eid).forEach(o=>wb.update(db.collection('dispatchOrders').doc(o.id), {repStatus:'pending', entryId:null, ibrahimNote:'الإدارة: '+(reason.trim()||'راجع الطلب')}));
+    });
+    await wb.commit();
+    toast('رجعت الطلبات للمندوب للتصحيح'); await loadOrdersTab(); loadDashboard();
+  }catch(e){ console.error(e); toast('ما انحفظ'); }
+}
+function oExport(){
+  const list=oFiltered(); if(!list.length){ toast('ما فيه بيانات'); return; }
+  const stTxt={awaiting:'بانتظار الاعتماد',approved:'معتمد',rejected:'مرفوض',unconfirmed:'ما أكدها المندوب',disputed:'اعتراض',pickup:'استلام من المتجر'};
+  const head=['التاريخ','المندوب','رقم الطلب','النوع','المنطقة','السعر','وقت التسليم','وقت الخروج','حالة المندوب','الاعتماد','المنسق','رجع','توصيل ثاني','محوّل من','ملاحظات'];
+  const rows=list.map(o=>[o.date,o.repName||'استلام من المتجر',o.orderNo,O_TYPES[o.type]||o.type,o.fulfillment==='pickup'?'':o.areaName,oRate(o)||'',oTime(o.handedAt),oTime(o.departedAt),
+    ({confirmed:'أكد',disputed:'اعترض',na:'—'})[o.repStatus]||'ما أكد', stTxt[oStage(o)], o.florist||'', o.returned?(o.returnReason||'نعم'):'', o.redeliveryOf?'نعم':'', o.transferredFrom||'', o.notes||'']);
+  const csv='\uFEFF'+[head,...rows].map(r=>r.map(c=>`"${String(c??'').replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+  a.download=`الطلبات_${document.getElementById('oFrom').value}_${document.getElementById('oTo').value}.csv`; a.click();
 }
 </script>
 </body>
