@@ -296,6 +296,7 @@
               <option value="disputed">اعتراض المندوب</option>
               <option value="rejected">مرفوض</option>
               <option value="pickup">استلام من المتجر</option>
+              <option value="orphan">قيدها محذوف</option>
             </select></div>
             <div><label>النوع</label><select id="oType" onchange="renderOrdersTab()">
               <option value="">الكل</option><option value="doc">دوكمنتيشن</option><option value="ward">ورد إكسبرس</option><option value="wa">واتس دوكمنتيشن</option><option value="shop">طلبات المحل</option>
@@ -1212,11 +1213,23 @@ async function setEntryStatus(id, status){
   loadDashboard();
 }
 
+// لما ينحذف قيد جاي من سجل مشرف الإنتاج، نرجّع طلباته للمندوب "بانتظار التأكيد" بدل ما تعلق
+async function releaseOrdersOfEntries(ids, wb){
+  for(const id of ids){
+    const snap = await db.collection('dispatchOrders').where('entryId','==',id).get();
+    snap.docs.forEach(d=>wb.update(d.ref, {repStatus:'pending', entryId:null, ibrahimNote:'الإدارة حذفت القيد — راجع الطلب وأكده من جديد'}));
+  }
+}
 async function deleteEntry(id){
   if(myRole !== 'admin'){ noPermissionToast(); return; }
-  if(!confirm('تأكيد حذف هذا الطلب نهائياً؟ لا يمكن التراجع.')) return;
-  await db.collection('dailyEntries').doc(id).delete();
-  toast('تم الحذف');
+  if(!confirm('تأكيد حذف هذا القيد؟\nلو فيه طلبات من سجل مشرف الإنتاج بترجع للمندوب يأكدها من جديد.')) return;
+  try{
+    const wb = db.batch();
+    await releaseOrdersOfEntries([id], wb);
+    wb.delete(db.collection('dailyEntries').doc(id));
+    await wb.commit();
+    toast('تم الحذف');
+  }catch(e){ console.error(e); toast('ما انحذف — تحقق من الاتصال'); }
   loadDashboard();
 }
 
@@ -1626,16 +1639,18 @@ function bulkSetEntryStatus(idsCsv, status){
   });
 }
 
-function bulkDeleteEntries(idsCsv){
+async function bulkDeleteEntries(idsCsv){
   if(myRole !== 'admin'){ noPermissionToast(); return; }
-  if(!confirm('تأكيد حذف كل طلبات هذا اليوم لهذا المندوب نهائياً؟')) return;
+  if(!confirm('تأكيد حذف كل قيود هذا اليوم لهذا المندوب؟\nلو فيه طلبات من سجل مشرف الإنتاج بترجع للمندوب يأكدها من جديد.')) return;
   const ids = idsCsv.split(',');
-  const batch = db.batch();
-  ids.forEach(id => batch.delete(db.collection('dailyEntries').doc(id)));
-  batch.commit().then(()=>{
+  try{
+    const batch = db.batch();
+    await releaseOrdersOfEntries(ids, batch);
+    ids.forEach(id => batch.delete(db.collection('dailyEntries').doc(id)));
+    await batch.commit();
     toast('تم الحذف');
-    loadDashboard();
-  });
+  }catch(e){ console.error(e); toast('ما انحذف — تحقق من الاتصال'); }
+  loadDashboard();
 }
 
 function channelLabel(brand, source){
@@ -1764,7 +1779,7 @@ function oStage(o){
   if(st==='disputed') return 'disputed';
   if(st!=='confirmed') return 'unconfirmed';
   const es=O_ENTRIES[o.entryId];
-  if(!es) return 'awaiting';
+  if(!es) return 'orphan';   // أكده المندوب بس قيده انحذف (مثلاً من "نظرة عامة")
   if(es.status==='approved') return 'approved';
   if(es.status==='rejected') return 'rejected';
   return 'awaiting';   // pending أو reviewed
@@ -1775,7 +1790,8 @@ const O_STAGE_UI = {
   rejected:   o=>`<span class="st st-rej">مرفوض</span>${O_ENTRIES[o.entryId]?.rejectReason?`<div class="dim">${oEsc(O_ENTRIES[o.entryId].rejectReason)}</div>`:''}`,
   unconfirmed:()=>'<span class="st st-gray">—</span>',
   disputed:   ()=>'<span class="st st-gray">—</span>',
-  pickup:     ()=>'<span class="st st-gray">لا يحتاج</span>'
+  pickup:     ()=>'<span class="st st-gray">لا يحتاج</span>',
+  orphan:     ()=>'<span class="st st-rej">القيد محذوف</span><div class="dim">ارجعه للمندوب أو احذفه</div>'
 };
 function oRepCell(o){
   const st=o.repStatus||'pending';
@@ -1831,6 +1847,7 @@ function renderOrdersTab(){
     tile('unconfirmed',un.length,amt(un),'ما أكدها المندوب')+
     tile('disputed',di.length,null,'اعتراضات عند المشرف')+
     (rj.length?tile('rejected',rj.length,amt(rj),'مرفوض'):'')+
+    (c('orphan').length?tile('orphan',c('orphan').length,amt(c('orphan')),'قيدها محذوف — تحتاج إجراء',true):'')+
     tile('pickup',pk.length,null,'استلام من المتجر')+
     `<div class="otile"><div class="n">${ret.length}</div><div class="l">رجعت للمحل</div></div>`;
 
@@ -1841,13 +1858,13 @@ function renderOrdersTab(){
   more.textContent = `يعرض أول ${MAX} من ${list.length} — ضيّق الفلاتر أو صدّر Excel للكل`;
   const selEntries = new Set([...O_SEL].map(id=>O_ORDERS.find(o=>o.id===id)?.entryId));
   document.getElementById('oBody').innerHTML = shown.map(o=>{
-    const stg=oStage(o), can = stg==='awaiting' && !!o.entryId;
+    const stg=oStage(o), can = true;
     const sel=O_SEL.has(o.id), sib=!sel && can && selEntries.has(o.entryId);
     const r=oRate(o);
     const flags=[o.redeliveryOf?'<span class="fl fl-re">توصيل ثاني</span>':'', o.returned?`<span class="fl fl-ret">رجع: ${oEsc(o.returnReason||'')}</span>`:'',
       o.transferredFrom?`<span class="fl fl-tr">محوّل من ${oEsc(o.transferredFrom)}</span>`:''].join('');
     return `<tr class="${sel?'selrow':(sib?'sib':'')}">
-      <td>${can?`<input type="checkbox" ${sel||sib?'checked':''} onchange="oToggle('${o.id}',this.checked)">`:''}</td>
+      <td><input type="checkbox" ${sel||sib?'checked':''} onchange="oToggle('${o.id}',this.checked)"></td>
       <td class="dim">${o.date}</td>
       <td><b>${oEsc(o.repName||'استلام من المتجر')}</b></td>
       <td class="no">${oEsc(o.orderNo)}</td>
@@ -1879,43 +1896,48 @@ function renderOrdersTab(){
 // تحديد طلب = تحديد قيده كامل (الطلبات اللي أكدها المندوب مع بعض)
 function oToggle(id,on){
   const o=O_ORDERS.find(x=>x.id===id); if(!o) return;
-  O_ORDERS.filter(x=>x.entryId===o.entryId && oStage(x)==='awaiting').forEach(x=> on?O_SEL.add(x.id):O_SEL.delete(x.id));
+  if(oStage(o)==='awaiting') O_ORDERS.filter(x=>x.entryId===o.entryId && oStage(x)==='awaiting').forEach(x=> on?O_SEL.add(x.id):O_SEL.delete(x.id));
+  else on?O_SEL.add(o.id):O_SEL.delete(o.id);
   renderOrdersTab();
 }
 function oToggleAll(on){
   O_SEL.clear();
-  if(on) O_VIEW.filter(o=>oStage(o)==='awaiting').forEach(o=>O_ORDERS.filter(x=>x.entryId===o.entryId && oStage(x)==='awaiting').forEach(x=>O_SEL.add(x.id)));
+  if(on) O_VIEW.forEach(o=>{ O_SEL.add(o.id); if(oStage(o)==='awaiting') O_ORDERS.filter(x=>x.entryId===o.entryId && oStage(x)==='awaiting').forEach(x=>O_SEL.add(x.id)); });
   renderOrdersTab();
 }
-function oSelEntries(){ return [...new Set([...O_SEL].map(id=>O_ORDERS.find(o=>o.id===id)?.entryId).filter(Boolean))]; }
+function oSelOrders(){ return [...O_SEL].map(id=>O_ORDERS.find(o=>o.id===id)).filter(Boolean); }
+// الاعتماد/الرفض يشتغل على القيود الموجودة فقط (طلبات أكدها المندوب وقيدها موجود)
+function oSelEntries(){ return [...new Set(oSelOrders().filter(o=>['awaiting','approved','rejected'].includes(oStage(o))).map(o=>o.entryId).filter(Boolean))]; }
 function oRenderBulk(){
-  const sel=[...O_SEL].map(id=>O_ORDERS.find(o=>o.id===id)).filter(Boolean);
+  const sel=oSelOrders();
   const amt=sel.reduce((s,o)=>s+oRate(o),0);
-  const viewAw=O_VIEW.filter(o=>oStage(o)==='awaiting');
-  document.getElementById('oAll').checked = viewAw.length>0 && viewAw.every(o=>O_SEL.has(o.id));
+  const nAw=sel.filter(o=>oStage(o)==='awaiting').length;
+  const nRet=sel.filter(o=>['awaiting','orphan','rejected','approved'].includes(oStage(o))).length;
+  document.getElementById('oAll').checked = O_VIEW.length>0 && O_VIEW.every(o=>O_SEL.has(o.id));
   document.getElementById('oBulk').innerHTML = `
     <span class="sel">${sel.length?`محدد: ${sel.length} طلب · ${amt} ر.س`:`${O_VIEW.length} طلب معروض`}</span>
-    <button class="btn-a g" ${sel.length?'':'disabled'} onclick="oApprove()">✓ اعتماد المحدد</button>
-    <button class="btn-a y" ${sel.length?'':'disabled'} onclick="oReturnToRep()">↩︎ إرجاع للتصحيح</button>
-    <button class="btn-a r" ${sel.length?'':'disabled'} onclick="oReject()">رفض</button>
+    <button class="btn-a g" ${nAw?'':'disabled'} onclick="oApprove()">✓ اعتماد${nAw&&nAw!==sel.length?` (${nAw})`:''}</button>
+    <button class="btn-a y" ${nRet?'':'disabled'} onclick="oReturnToRep()">↩︎ إرجاع للمندوب</button>
+    <button class="btn-a r" ${nAw?'':'disabled'} onclick="oReject()">رفض</button>
+    <button class="btn-a r" ${sel.length?'':'disabled'} onclick="oDelete()" title="حذف نهائي — مثلاً طلبات التجربة">🗑 حذف</button>
     <button class="btn-a b" onclick="oExport()">⬇︎ تصدير Excel</button>
     <button class="btn-a b" onclick="loadOrdersTab()">↻ تحديث</button>`;
 }
 async function oSetStatus(status, extra={}){
-  const ids=oSelEntries(); if(!ids.length) return;
+  const ids=[...new Set(oSelOrders().filter(o=>oStage(o)==='awaiting').map(o=>o.entryId).filter(Boolean))]; if(!ids.length) return;
   const wb=db.batch();
   ids.forEach(id=>wb.update(db.collection('dailyEntries').doc(id), {status, statusUpdatedAt: firebase.firestore.FieldValue.serverTimestamp(), ...extra}));
   await wb.commit();
 }
 async function oApprove(){
-  const n=O_SEL.size; if(!n) return;
+  const n=oSelOrders().filter(o=>oStage(o)==='awaiting').length; if(!n) return;
   try{ await oSetStatus('approved'); toast(`تم اعتماد ${n} طلب ✅`); await loadOrdersTab(); loadDashboard(); }
   catch(e){ console.error(e); toast('ما انحفظ — تحقق من الاتصال'); }
 }
 async function oReject(){
   if(!O_SEL.size) return;
   const reason=prompt('سبب الرفض (يظهر للمندوب):'); if(reason===null) return;
-  if(!confirm(`رفض ${O_SEL.size} طلب نهائياً؟ ما بينحسب للمندوب.\nلو فيه غلط يتصحح استخدم "إرجاع للتصحيح" بدل الرفض.`)) return;
+  if(!confirm(`رفض ${oSelOrders().filter(o=>oStage(o)==='awaiting').length} طلب نهائياً؟ ما بينحسب للمندوب.\nلو فيه غلط يتصحح استخدم "إرجاع للتصحيح" بدل الرفض.`)) return;
   try{ await oSetStatus('rejected', {rejectReason: reason.trim()}); toast('تم الرفض'); await loadOrdersTab(); loadDashboard(); }
   catch(e){ console.error(e); toast('ما انحفظ'); }
 }
@@ -1924,19 +1946,47 @@ async function oReturnToRep(){
   if(!O_SEL.size) return;
   const reason=prompt('وش المطلوب تصحيحه؟ (يظهر للمندوب والمشرف)'); if(reason===null) return;
   const ids=oSelEntries();
+  const orphans=oSelOrders().filter(o=>oStage(o)==='orphan');
+  if(oSelOrders().some(o=>oStage(o)==='approved') && !confirm('فيه طلبات معتمدة بالمحدد — إرجاعها يلغي اعتمادها. أكمل؟')) return;
   try{
     const wb=db.batch();
     ids.forEach(eid=>{
-      wb.delete(db.collection('dailyEntries').doc(eid));
+      if(O_ENTRIES[eid]) wb.delete(db.collection('dailyEntries').doc(eid));
       O_ORDERS.filter(o=>o.entryId===eid).forEach(o=>wb.update(db.collection('dispatchOrders').doc(o.id), {repStatus:'pending', entryId:null, ibrahimNote:'الإدارة: '+(reason.trim()||'راجع الطلب')}));
     });
+    orphans.forEach(o=>wb.update(db.collection('dispatchOrders').doc(o.id), {repStatus:'pending', entryId:null, ibrahimNote:'الإدارة: '+(reason.trim()||'راجع الطلب')}));
     await wb.commit();
     toast('رجعت الطلبات للمندوب للتصحيح'); await loadOrdersTab(); loadDashboard();
   }catch(e){ console.error(e); toast('ما انحفظ'); }
 }
+// حذف نهائي (لبيانات التجربة أو طلب انسجل بالغلط): يحذف الطلب وقيده وتسليمه لو فضي
+async function oDelete(){
+  const sel=oSelOrders(); if(!sel.length) return;
+  if(!confirm(`حذف ${sel.length} طلب نهائياً؟\nينحذف الطلب من سجل مشرف الإنتاج ومن شاشة المندوب، ومعه قيد الاعتماد لو موجود. ما ينفع التراجع.`)) return;
+  try{
+    const wb=db.batch();
+    const entryIds=new Set(sel.map(o=>o.entryId).filter(id=>id && O_ENTRIES[id]));
+    // لو القيد فيه طلبات ما انحذفت، نرجعها للمندوب بدل ما نحذف أعدادها معها
+    entryIds.forEach(eid=>{
+      wb.delete(db.collection('dailyEntries').doc(eid));
+      O_ORDERS.filter(o=>o.entryId===eid && !O_SEL.has(o.id)).forEach(o=>wb.update(db.collection('dispatchOrders').doc(o.id), {repStatus:'pending', entryId:null, ibrahimNote:'الإدارة عدّلت القيد — أكد الطلب من جديد'}));
+    });
+    sel.forEach(o=>wb.delete(db.collection('dispatchOrders').doc(o.id)));
+    // تحديث عدد طلبات كل تسليم، وحذفه لو صار فاضي
+    const byBatch={}; sel.forEach(o=>{ if(o.batchId) byBatch[o.batchId]=(byBatch[o.batchId]||0)+1; });
+    for(const [bid,n] of Object.entries(byBatch)){
+      const rest=(await db.collection('dispatchOrders').where('batchId','==',bid).get()).docs.filter(d=>!O_SEL.has(d.id)).length;
+      if(rest===0) wb.delete(db.collection('dispatchBatches').doc(bid)); else wb.update(db.collection('dispatchBatches').doc(bid),{orderCount:rest});
+    }
+    wb.set(db.collection('auditLog').doc(), {action:'adminDelete', orderNo:sel.map(o=>o.orderNo).join('، '), details:`حذف من الإدارة (${sel.length} طلب)`, by:currentUser.uid, byName:currentUser.email, at:firebase.firestore.FieldValue.serverTimestamp(), date:oRiyadh()});
+    await wb.commit();
+    toast(`انحذف ${sel.length} طلب`); await loadOrdersTab(); loadDashboard();
+  }catch(e){ console.error(e); toast('ما انحذف — تحقق من الاتصال'); }
+}
+
 function oExport(){
   const list=oFiltered(); if(!list.length){ toast('ما فيه بيانات'); return; }
-  const stTxt={awaiting:'بانتظار الاعتماد',approved:'معتمد',rejected:'مرفوض',unconfirmed:'ما أكدها المندوب',disputed:'اعتراض',pickup:'استلام من المتجر'};
+  const stTxt={orphan:'قيدها محذوف',awaiting:'بانتظار الاعتماد',approved:'معتمد',rejected:'مرفوض',unconfirmed:'ما أكدها المندوب',disputed:'اعتراض',pickup:'استلام من المتجر'};
   const head=['التاريخ','المندوب','رقم الطلب','النوع','المنطقة','السعر','وقت التسليم','وقت الخروج','حالة المندوب','الاعتماد','المنسق','رجع','توصيل ثاني','محوّل من','ملاحظات'];
   const rows=list.map(o=>[o.date,o.repName||'استلام من المتجر',o.orderNo,O_TYPES[o.type]||o.type,o.fulfillment==='pickup'?'':o.areaName,oRate(o)||'',oTime(o.handedAt),oTime(o.departedAt),
     ({confirmed:'أكد',disputed:'اعترض',na:'—'})[o.repStatus]||'ما أكد', stTxt[oStage(o)], o.florist||'', o.returned?(o.returnReason||'نعم'):'', o.redeliveryOf?'نعم':'', o.transferredFrom||'', o.notes||'']);
