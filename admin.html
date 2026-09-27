@@ -257,12 +257,12 @@
       <div class="logo">لوحة الإدارة</div>
       <div class="sub">مناديب التوصيل</div>
       <button class="navitem" id="navOrders" style="display:none" onclick="showTab('orders')">🧾 الطلبات والاعتماد <span class="nav-badge" id="navBadgeOrders"></span></button>
-      <button class="navitem active" id="navDashboard" onclick="showTab('dashboard')">📊 نظرة عامة <span class="nav-badge" id="navBadgeEntries"></span></button>
+      <button class="navitem active" id="navDashboard" style="display:none" onclick="showTab('dashboard')">📊 نظرة عامة <span class="nav-badge" id="navBadgeEntries"></span></button>
       <button class="navitem" onclick="showTab('diffs')">🔁 فوارق التوصيل <span class="nav-badge" id="navBadgeDiffs"></span></button>
       <button class="navitem" onclick="showTab('penalties')">⚠️ الجزاءات والهدايا</button>
       <button class="navitem" onclick="showTab('reps')">👤 المناديب</button>
       <button class="navitem" id="navDispatch" style="display:none" onclick="showTab('dispatch')">🚚 تسليم الطلبات</button>
-      <button class="navitem" id="navSupervisor" style="display:none" onclick="showTab('supervisor')">👁 لوحة المشرف</button>
+      <button class="navitem" id="navSupervisor" style="display:none" onclick="showTab('supervisor')">🔍 متابعة المراجعة</button>
       <button class="navitem" onclick="showTab('areas')">📍 المناطق والأسعار <span class="nav-badge" id="navBadgeAreas"></span></button>
       <button class="navitem" onclick="showTab('reports')">📄 التقارير</button>
       <button class="navitem" onclick="showTab('payouts')">💰 المستحقات والدفعات</button>
@@ -323,6 +323,12 @@
           <div id="oMore" class="empty" style="display:none"></div>
         </div>
 
+        <div class="card" id="oLegacyCard" style="display:none">
+          <h3>📝 قيود يدوية قديمة بانتظار الاعتماد</h3>
+          <p class="page-sub" style="margin-top:-6px">أعداد دخّلها المناديب يدوياً قبل نظام التسليم الجديد. اعتمدها أو ارفضها من هنا — ما يحتاج ترجع لـ"نظرة عامة".</p>
+          <div id="oLegacy"></div>
+        </div>
+
         <div class="card" id="oIssuesCard">
           <h3>⚠️ اعتراضات المناديب وبلاغاتهم</h3>
           <p class="page-sub" style="margin-top:-6px">يعالجها مشرف الإنتاج من لوحته — هنا للمتابعة.</p>
@@ -332,7 +338,7 @@
         <div class="card">
           <h3>ملخص المناديب للفترة</h3>
           <div class="otable-wrap"><table class="otable" style="min-width:760px">
-            <thead><tr><th>المندوب</th><th>مشاوير التوصيل</th><th>معتمد</th><th>بانتظار الاعتماد</th><th>ما أكدها</th><th>اعتراض</th><th>رجعت</th><th>فوارق التوصيل</th><th>إجمالي المستحق</th></tr></thead>
+            <thead><tr><th>المندوب</th><th>التوصيلات</th><th>معتمد</th><th>بانتظار الاعتماد</th><th>ما أكدها</th><th>اعتراض</th><th>رجعت</th><th>فوارق التوصيل</th><th>إجمالي المستحق</th></tr></thead>
             <tbody id="oRepSum"></tbody>
           </table></div>
         </div>
@@ -464,9 +470,9 @@
 
       <!-- ===== SUPERVISOR (لوحة مشرف المناديب) ===== -->
       <div id="tab-supervisor" class="tab-panel">
-        <h1>لوحة المشرف</h1>
-        <p class="page-sub">نفس اللوحة اللي يشوفها مشرف المناديب — تقدر تتابع مراجعته من هنا</p>
-        <iframe id="supervisorFrame" title="لوحة المشرف" style="width:100%;height:calc(100vh - 140px);min-height:600px;border:1px solid var(--line);border-radius:12px;background:#fff;"></iframe>
+        <h1>متابعة المراجعة</h1>
+        <p class="page-sub">اللي يشوفه مشرف المناديب في لوحته — تتابع منه وش راجع ووش باقي، وملخص المناديب والاعتراضات</p>
+        <iframe id="supervisorFrame" title="متابعة المراجعة" style="width:100%;height:calc(100vh - 140px);min-height:600px;border:1px solid var(--line);border-radius:12px;background:#fff;"></iframe>
       </div>
 
       <!-- ===== AREAS ===== -->
@@ -496,37 +502,25 @@
       <!-- ===== REPORTS ===== -->
       <div id="tab-reports" class="tab-panel">
         <h1>التقارير</h1>
-        <p class="page-sub">اختر فترة، واحصل على صافي مستحق كل مندوب</p>
+        <p class="page-sub">كل أرقام الفترة في مكان واحد: مستحقات المناديب، القنوات، المناطق، الأيام، والتشغيل.</p>
+
         <div class="card">
-          <div class="toolbar">
-            <div class="field"><label>من تاريخ</label><input type="date" id="repFrom"></div>
-            <div class="field"><label>إلى تاريخ</label><input type="date" id="repTo"></div>
-            <button class="primary" onclick="runReport()">إنشاء التقرير</button>
+          <div class="qbtns">
+            <button class="qbtn" data-rq="today" onclick="rQuick('today')">اليوم</button>
+            <button class="qbtn" data-rq="yesterday" onclick="rQuick('yesterday')">أمس</button>
+            <button class="qbtn" data-rq="week" onclick="rQuick('week')">آخر ٧ أيام</button>
+            <button class="qbtn" data-rq="month" onclick="rQuick('month')">هذا الشهر</button>
+            <button class="qbtn" data-rq="lastMonth" onclick="rQuick('lastMonth')">الشهر الماضي</button>
+          </div>
+          <div class="ofilters">
+            <div><label>من</label><input type="date" id="repFrom"></div>
+            <div><label>إلى</label><input type="date" id="repTo"></div>
+            <div><label>المندوب</label><select id="repRepFilter" onchange="renderReport()"><option value="">كل المناديب</option></select></div>
+            <div><button class="btn-a g" style="width:100%" onclick="runReport()">إنشاء التقرير</button></div>
           </div>
         </div>
-        <div class="card">
-          <h3>الملخص الإجمالي</h3>
-          <table>
-            <thead><tr><th>المندوب</th><th>عدد الطلبات</th><th>مبلغ الطلبات</th><th>الفوارق المعتمدة</th><th>الجزاءات</th><th>الهدايا</th><th>الصافي</th></tr></thead>
-            <tbody id="reportBody"></tbody>
-          </table>
-          <div id="reportEmpty" class="empty">اختر فترة واضغط "إنشاء التقرير"</div>
-        </div>
-        <div class="card">
-          <h3>التفصيل حسب المنطقة والقناة</h3>
-          <table>
-            <thead><tr><th>المندوب</th><th>المنطقة</th><th>القناة</th><th>عدد الطلبات</th><th>المبلغ</th></tr></thead>
-            <tbody id="reportBreakdownBody"></tbody>
-            <tfoot>
-              <tr style="border-top:2px solid var(--line);">
-                <td colspan="3"><b>الإجمالي</b></td>
-                <td><b id="reportBreakdownTotalCount">0</b></td>
-                <td><b id="reportBreakdownTotalAmount">0 ر.س</b></td>
-              </tr>
-            </tfoot>
-          </table>
-          <div id="reportBreakdownEmpty" class="empty" style="display:none;">لا يوجد تفاصيل</div>
-        </div>
+
+        <div id="rOut"><div class="card"><div class="empty">اختر الفترة واضغط "إنشاء التقرير"</div></div></div>
       </div>
 
       <!-- ===== PAYOUTS / BALANCES ===== -->
@@ -800,6 +794,7 @@ function showTab(name){
   closeMobileNav();
   if(name==='dashboard') loadDashboard();
   if(name==='orders') loadOrdersTab();
+  if(name==='reports' && !RPT) rQuick('month');
   if(name==='diffs') loadDiffs();
   if(name==='penalties') { loadPenaltyRepSelect(); loadPenalties(); }
   if(name==='reps') loadReps();
@@ -1130,6 +1125,8 @@ async function openEditEntry(id){
   const doc = await db.collection('dailyEntries').doc(id).get();
   if(!doc.exists){ toast('الطلب غير موجود'); return; }
   const e = doc.data();
+  // القيود الجاية من سجل مشرف الإنتاج مربوطة بطلبات محددة — تعديل الأعداد هنا يفك الربط
+  if(e.fromDispatch){ toast('هذا القيد من سجل مشرف الإنتاج — صحّحه من "الطلبات والاعتماد" بزر "إرجاع للمندوب"'); return; }
 
   let isAmmar = false;
   if(e.repUid){
@@ -1683,85 +1680,231 @@ function channelLabel(brand, source){
   return source === 'whatsapp' ? 'دوكمنتيشن (واتساب)' : 'دوكمنتيشن';
 }
 
+/* =====================================================================
+   التقارير
+   - الفلوس (مستحقات المناديب): من القيود المعتمدة dailyEntries + الفوارق المعتمدة − الجزاءات والهدايا
+     (تشمل القيود اليدوية القديمة، عشان الحساب يطابق الرصيد)
+   - العمليات (قنوات، مناطق، أيام، منسقين، رجوع...): من سجل مشرف الإنتاج dispatchOrders
+   ===================================================================== */
+let RPT=null;
+const R_TYPES={doc:'دوكمنتيشن', ward:'ورد إكسبرس', wa:'واتس دوكمنتيشن', shop:'طلبات المحل'};
+function rQuick(k){
+  const t=oRiyadh(), d=new Date(t+'T12:00:00'), f=x=>x.toISOString().slice(0,10);
+  let from=t, to=t;
+  if(k==='yesterday'){ const y=new Date(d); y.setDate(d.getDate()-1); from=to=f(y); }
+  if(k==='week'){ const w=new Date(d); w.setDate(d.getDate()-6); from=f(w); }
+  if(k==='month'){ from=t.slice(0,8)+'01'; }
+  if(k==='lastMonth'){ from=f(new Date(d.getFullYear(),d.getMonth()-1,1,12)); to=f(new Date(d.getFullYear(),d.getMonth(),0,12)); }
+  document.getElementById('repFrom').value=from; document.getElementById('repTo').value=to;
+  document.querySelectorAll('[data-rq]').forEach(b=>b.style.cssText = b.dataset.rq===k?'background:#000;color:#fff;border-color:#000':'');
+  runReport();
+}
 async function runReport(){
-  const from = document.getElementById('repFrom').value;
-  const to = document.getElementById('repTo').value;
-  if(!from || !to){ toast('اختر الفترة كاملة'); return; }
-  const fromMs = new Date(from+'T00:00:00').getTime();
-  const toMs = new Date(to+'T23:59:59').getTime();
+  const from=document.getElementById('repFrom').value, to=document.getElementById('repTo').value;
+  if(!from||!to||from>to){ toast('اختر فترة صحيحة'); return; }
+  const out=document.getElementById('rOut'); out.innerHTML='<div class="card"><div class="empty">جاري إعداد التقرير...</div></div>';
+  try{
+    const f=new Date(from+'T00:00:00+03:00'), t=new Date(to+'T00:00:00+03:00'); t.setDate(t.getDate()+1);
+    const [eS,oS,dS,pS,yS,rS,bS] = await Promise.all([
+      db.collection('dailyEntries').where('date','>=',from).where('date','<=',to).get(),
+      db.collection('dispatchOrders').where('date','>=',from).where('date','<=',to).get(),
+      db.collection('deliveryDiffs').where('createdAt','>=',f).where('createdAt','<',t).get(),
+      db.collection('penalties').where('date','>=',from).where('date','<=',to).get(),
+      db.collection('payouts').where('date','>=',from).where('date','<=',to).get(),
+      db.collection('reps').get(),
+      myRole==='admin' ? db.collection('dispatchBatches').where('date','>=',from).where('date','<=',to).get() : Promise.resolve({docs:[]})
+    ]);
+    const names={}; rS.docs.forEach(d=>names[d.id]=d.data().name);
+    RPT={from,to,names,
+      entries:eS.docs.map(d=>({id:d.id,...d.data()})),
+      orders:oS.docs.map(d=>({id:d.id,...d.data()})),
+      diffs:dS.docs.map(d=>({id:d.id,...d.data()})),
+      pens:pS.docs.map(d=>d.data()), pays:yS.docs.map(d=>d.data()),
+      batches:bS.docs.map(d=>d.data()).filter(b=>!b.isPickup)};
+  }catch(e){ console.error(e); out.innerHTML='<div class="card"><div class="empty">تعذّر إعداد التقرير — تحقق من الاتصال</div></div>'; return; }
+  // قائمة المناديب
+  const ids=new Set([...RPT.entries.map(e=>e.repUid),...RPT.orders.map(o=>o.repPhone),...RPT.diffs.map(d=>d.repUid),...RPT.pens.map(p=>p.repUid)].filter(Boolean));
+  const sel=document.getElementById('repRepFilter'), v=sel.value;
+  sel.innerHTML='<option value="">كل المناديب</option>'+[...ids].map(id=>[id,RPT.names[id]||id]).sort((a,b)=>a[1].localeCompare(b[1],'ar')).map(([id,n])=>`<option value="${id}">${oEsc(n)}</option>`).join('');
+  sel.value=v; if(sel.value!==v) sel.value='';
+  renderReport();
+}
+function renderReport(){
+  if(!RPT) return;
+  const rf=document.getElementById('repRepFilter').value;
+  const nm=id=>RPT.names[id]||id||'—';
+  const E=RPT.entries.filter(e=>!rf||e.repUid===rf);
+  const O=RPT.orders.filter(o=>!rf||o.repPhone===rf);
+  const D=RPT.diffs.filter(d=>!rf||d.repUid===rf);
+  const P=RPT.pens.filter(p=>!rf||p.repUid===rf);
+  const Y=RPT.pays.filter(p=>!rf||p.repUid===rf);
+  const B=RPT.batches.filter(b=>!rf||b.repPhone===rf);
+  const deliv=O.filter(o=>o.fulfillment!=='pickup'), pick=O.filter(o=>o.fulfillment==='pickup');
+  const rateOf=o=>oRate(o);
+  const pct=(a,b)=>b?Math.round(a*100/b)+'%':'—';
+  const avg=a=>a.length?Math.round(a.reduce((x,y)=>x+y,0)/a.length):'—';
+  const mins=(a,b)=>a&&b&&a.toDate&&b.toDate?Math.round((b.toDate()-a.toDate())/60000):null;
+  const card=(title,body,sub='')=>`<div class="card"><h3>${title}</h3>${sub?`<p class="page-sub" style="margin-top:-6px">${sub}</p>`:''}${body}</div>`;
+  const tbl=(head,rows,foot='',minw=600)=>`<div class="otable-wrap"><table class="otable" style="min-width:${minw}px"><thead><tr>${head.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows||`<tr><td colspan="${head.length}" class="empty">—</td></tr>`}</tbody>${foot?`<tfoot><tr>${foot}</tr></tfoot>`:''}</table></div>`;
+  const bar=(v,max,color='#000')=>`<div style="display:flex;align-items:center;gap:6px"><div style="height:8px;border-radius:4px;background:${color};width:${max?Math.max(2,Math.round(v*120/max)):0}px"></div><span>${v}</span></div>`;
 
-  const entriesSnap = await db.collection('dailyEntries').where('date','>=',from).where('date','<=',to).get();
-  const perRep = {};
-  const breakdown = {}; // key: repName|areaName|channel -> {repName, areaName, channel, count, amount}
+  // ===== ١) مستحقات المناديب (الفلوس) =====
+  const pay={};
+  const P0=id=>pay[id]=pay[id]||{n:0,amt:0,df:0,pen:0,gift:0,pend:0,pendN:0,manual:0,paid:0};
+  E.forEach(e=>{ const r=P0(e.repUid);
+    if(e.status==='approved'){ r.n+=e.totalCount||0; r.amt+=e.totalAmount||0; if(!e.fromDispatch) r.manual+=e.totalCount||0; }
+    else if(e.status==='pending'||e.status==='reviewed'){ r.pend+=e.totalAmount||0; r.pendN+=e.totalCount||0; } });
+  D.forEach(d=>{ if(d.status==='approved') P0(d.repUid).df+=d.amount||0; });
+  P.forEach(p=>{ const r=P0(p.repUid); if(p.type==='هدية مأخوذة') r.gift+=p.amount||0; else r.pen+=p.amount||0; });
+  Y.forEach(p=>{ P0(p.repUid).paid+=p.amount||0; });
+  const unconf={}; deliv.forEach(o=>{ if((o.repStatus||'pending')==='pending') unconf[o.repPhone]=(unconf[o.repPhone]||0)+1; });
+  const payRows=Object.entries(pay).map(([id,r])=>({id,...r,net:r.amt+r.df-r.pen-r.gift})).sort((a,b)=>b.net-a.net);
+  const T=payRows.reduce((t,r)=>{ ['n','amt','df','pen','gift','net','pend','pendN','paid','manual'].forEach(k=>t[k]=(t[k]||0)+r[k]); return t; },{});
+  const payTable=tbl(['المندوب','توصيلات معتمدة','مبلغ التوصيل','الفوارق المعتمدة','الجزاءات','الهدايا','الصافي المعتمد','بانتظار الاعتماد','ما أكدها','المدفوع بالفترة'],
+    payRows.map(r=>`<tr><td><b>${oEsc(nm(r.id))}</b>${r.manual?`<div class="dim">منها ${r.manual} يدوي (قديم)</div>`:''}</td><td>${r.n}</td><td>${r.amt} ر.س</td><td>${r.df?r.df+' ر.س':'—'}</td>
+      <td>${r.pen?'−'+r.pen+' ر.س':'—'}</td><td>${r.gift?'−'+r.gift+' ر.س':'—'}</td><td style="font-weight:900;color:var(--green)">${r.net} ر.س</td>
+      <td style="color:var(--amber);font-weight:700">${r.pend?r.pend+' ر.س ('+r.pendN+')':'—'}</td><td>${unconf[r.id]||'—'}</td><td>${r.paid?r.paid+' ر.س':'—'}</td></tr>`).join(''),
+    payRows.length?`<td>المجموع</td><td>${T.n}</td><td>${T.amt} ر.س</td><td>${T.df} ر.س</td><td>−${T.pen} ر.س</td><td>−${T.gift} ر.س</td><td>${T.net} ر.س</td><td>${T.pend} ر.س</td><td>${Object.values(unconf).reduce((a,b)=>a+b,0)}</td><td>${T.paid} ر.س</td>`:'',1000);
 
-  entriesSnap.forEach(d=>{
-    const e = d.data();
-    if(e.status !== 'approved') return; // الطلبات غير المعتمدة ما تُحتسب بالتقرير
-    const key = e.repName || e.repUid;
-    if(!perRep[key]) perRep[key] = {count:0, amount:0, diffs:0, penalties:0, gifts:0};
-    perRep[key].count += e.totalCount;
-    perRep[key].amount += e.totalAmount;
+  // ===== ٢) القنوات =====
+  const tk=Object.keys(R_TYPES);
+  const byType=tk.map(t=>{ const l=O.filter(o=>o.type===t), dl=l.filter(o=>o.fulfillment!=='pickup');
+    return {t,orders:new Set(l.map(o=>o.orderNo)).size,deliv:dl.length,pick:l.length-dl.length,cost:dl.reduce((s,o)=>s+rateOf(o),0)}; });
+  const maxT=Math.max(1,...byType.map(x=>x.orders));
+  const typeTable=tbl(['القناة','الطلبات','النسبة','توصيل','استلام من المتجر','تكلفة التوصيل','متوسط تكلفة التوصيل'],
+    byType.map(x=>`<tr><td><span class="tp tp-${x.t}">${R_TYPES[x.t]}</span></td><td>${bar(x.orders,maxT)}</td><td>${pct(x.orders,new Set(O.map(o=>o.orderNo)).size)}</td><td>${x.deliv}</td><td>${x.pick||'—'}</td><td>${x.cost} ر.س</td><td>${x.deliv?Math.round(x.cost/x.deliv):'—'} ر.س</td></tr>`).join(''),
+    `<td>المجموع</td><td>${new Set(O.map(o=>o.orderNo)).size}</td><td>100%</td><td>${deliv.length}</td><td>${pick.length}</td><td>${deliv.reduce((s,o)=>s+rateOf(o),0)} ر.س</td><td>${deliv.length?Math.round(deliv.reduce((s,o)=>s+rateOf(o),0)/deliv.length):'—'} ر.س</td>`,700);
+  const docN=O.filter(o=>o.brand==='documentation').length, wardN=O.filter(o=>o.brand==='ward').length;
 
-    (e.entries || []).forEach(en=>{
-      const ch = channelLabel(e.brand, en.source);
-      const bKey = key+'|'+en.areaName+'|'+ch;
-      if(!breakdown[bKey]) breakdown[bKey] = {repName:key, areaName:en.areaName, channel:ch, count:0, amount:0};
-      breakdown[bKey].count += en.count;
-      breakdown[bKey].amount += en.amount;
-    });
-  });
+  // ===== ٣) المناطق =====
+  const ar={}; deliv.forEach(o=>{ const k=o.areaName||'—'; ar[k]=ar[k]||{n:0,cost:0,...Object.fromEntries(tk.map(t=>[t,0]))}; ar[k].n++; ar[k][o.type]++; ar[k].cost+=rateOf(o); });
+  const arRows=Object.entries(ar).sort((a,b)=>b[1].n-a[1].n); const maxA=Math.max(1,...arRows.map(([,v])=>v.n));
+  const areaTable=tbl(['المنطقة','التوصيلات','النسبة',...tk.map(t=>R_TYPES[t]),'التكلفة'],
+    arRows.map(([k,v])=>`<tr><td><b>${oEsc(k)}</b></td><td>${bar(v.n,maxA,'#B8935F')}</td><td>${pct(v.n,deliv.length)}</td>${tk.map(t=>`<td>${v[t]||'—'}</td>`).join('')}<td>${v.cost} ر.س</td></tr>`).join(''),'',760);
 
-  // فوارق التوصيل المعتمدة خلال نفس الفترة (بالاعتماد على تاريخ الإنشاء، لأن الفارق ما له حقل "تاريخ" مستقل)
-  const diffsSnap = await db.collection('deliveryDiffs').where('status','==','approved').get();
-  diffsSnap.forEach(d=>{
-    const e = d.data();
-    const t = e.createdAt ? e.createdAt.toMillis() : 0;
-    if(t < fromMs || t > toMs) return;
-    const key = e.repName || e.repUid;
-    if(!perRep[key]) perRep[key] = {count:0, amount:0, diffs:0, penalties:0, gifts:0};
-    perRep[key].diffs += e.amount;
-  });
+  // ===== ٤) حسب اليوم =====
+  const days=[...new Set(O.map(o=>o.date))].sort().reverse();
+  const maxD=Math.max(1,...days.map(d=>O.filter(o=>o.date===d).length));
+  const dayTable=tbl(['التاريخ','اليوم',...tk.map(t=>R_TYPES[t]),'استلام','التوصيلات','الإجمالي','التكلفة'],
+    days.map(d=>{ const l=O.filter(o=>o.date===d), dl=l.filter(o=>o.fulfillment!=='pickup');
+      return `<tr><td class="dim">${d}</td><td>${new Date(d+'T12:00:00').toLocaleDateString('ar-SA',{weekday:'long'})}</td>${tk.map(t=>`<td>${l.filter(o=>o.type===t).length||'—'}</td>`).join('')}<td>${l.length-dl.length||'—'}</td><td>${dl.length}</td><td>${bar(l.length,maxD,'#4C7A5C')}</td><td>${dl.reduce((s,o)=>s+rateOf(o),0)} ر.س</td></tr>`; }).join(''),'',860);
 
-  const penSnap = await db.collection('penalties').where('date','>=',from).where('date','<=',to).get();
-  penSnap.forEach(d=>{
-    const e = d.data();
-    const key = e.repName || e.repUid;
-    if(!perRep[key]) perRep[key] = {count:0, amount:0, diffs:0, penalties:0, gifts:0};
-    if(e.type === 'هدية مأخوذة') perRep[key].gifts += (e.amount||0);
-    else perRep[key].penalties += (e.amount||0);
-  });
+  // ===== ٥) المناديب — التشغيل =====
+  const waits={}; B.forEach(b=>{ const w=mins(b.handedAt,b.departedAt); if(w!==null&&w>=0)(waits[b.repPhone]=waits[b.repPhone]||[]).push(w); });
+  const conf={}; deliv.forEach(o=>{ if(o.repStatus==='confirmed'&&o.handedAt&&o.repActionAt){ const m=mins(o.handedAt,o.repActionAt); if(m!==null&&m>=0)(conf[o.repPhone]=conf[o.repPhone]||[]).push(m); } });
+  const rp={}; deliv.forEach(o=>{ const k=o.repPhone; rp[k]=rp[k]||{n:0,ret:0,re:0,multi:0,tr:0,disp:0,areas:new Set(),orders:new Set()}; const r=rp[k];
+    r.n++; r.orders.add(o.orderNo); r.areas.add(o.areaName); if(o.returned) r.ret++; if(o.redeliveryOf) r.re++; if(o.multiDelivery) r.multi++; if(o.transferredFrom) r.tr++; if((o.disputeCount||0)>0) r.disp++; });
+  const opsTable=tbl(['المندوب','التوصيلات','طلبات مختلفة','مناطق','رجعت','توصيل ثاني','توصيل إضافي','محوّل له','اعترض','متوسط الانتظار قبل الخروج (د)','متوسط وقت التأكيد (د)'],
+    Object.entries(rp).sort((a,b)=>b[1].n-a[1].n).map(([id,r])=>`<tr><td><b>${oEsc(nm(id))}</b></td><td>${r.n}</td><td>${r.orders.size}</td><td>${r.areas.size}</td><td>${r.ret||'—'}</td><td>${r.re||'—'}</td><td>${r.multi||'—'}</td><td>${r.tr||'—'}</td><td>${r.disp||'—'}</td><td>${avg(waits[id]||[])}</td><td>${avg(conf[id]||[])}</td></tr>`).join(''),'',1000);
 
-  const body = document.getElementById('reportBody');
-  const empty = document.getElementById('reportEmpty');
-  const keys = Object.keys(perRep);
-  if(keys.length === 0){ body.innerHTML=''; empty.style.display='block'; empty.textContent='لا يوجد بيانات بهذه الفترة'; }
-  else{
-    empty.style.display='none';
-    body.innerHTML = keys.map(k=>{
-      const r = perRep[k];
-      const net = r.amount + r.diffs - r.penalties - r.gifts;
-      return `<tr>
-        <td>${k}</td><td>${r.count}</td><td>${r.amount} ر.س</td><td>${r.diffs} ر.س</td>
-        <td>${r.penalties} ر.س</td><td>${r.gifts} ر.س</td><td><b>${net} ر.س</b></td>
-      </tr>`;
+  // ===== ٦) المنسقين =====
+  const fl={}; O.forEach(o=>{ const k=o.florist||'—'; fl[k]=fl[k]||{n:0,...Object.fromEntries(tk.map(t=>[t,0]))}; fl[k].n++; fl[k][o.type]++; });
+  const flRows=Object.entries(fl).sort((a,b)=>b[1].n-a[1].n); const maxF=Math.max(1,...flRows.map(([,v])=>v.n));
+  const flTable=tbl(['المنسق','الطلبات',...tk.map(t=>R_TYPES[t]),'النسبة'],
+    flRows.map(([k,v])=>`<tr><td><b>${oEsc(k)}</b></td><td>${bar(v.n,maxF,'#7A5C8A')}</td>${tk.map(t=>`<td>${v[t]||'—'}</td>`).join('')}<td>${pct(v.n,O.length)}</td></tr>`).join(''),'',640);
+
+  // ===== ٧) الجودة: الرجوع والاعتراضات =====
+  const reasons={}; deliv.filter(o=>o.returned).forEach(o=>{ const k=String(o.returnReason||'—').split(' — ')[0]; reasons[k]=(reasons[k]||0)+1; });
+  const dReasons={}; deliv.filter(o=>o.disputeReason).forEach(o=>{ dReasons[o.disputeReason]=(dReasons[o.disputeReason]||0)+1; });
+  const listT=(obj,empty)=>Object.keys(obj).length?Object.entries(obj).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line)"><span>${oEsc(k)}</span><b>${v}</b></div>`).join(''):`<div class="dim">${empty}</div>`;
+  const diffsApproved=D.filter(d=>d.status==='approved'), diffsPending=D.filter(d=>d.status==='pending');
+
+  // ===== البطاقات =====
+  const uniq=new Set(O.map(o=>o.orderNo)).size, dayN=days.length;
+  const cost=deliv.reduce((s,o)=>s+rateOf(o),0);
+  const k=(n,l,sub='')=>`<div class="otile" style="cursor:default"><div class="n">${n}</div>${sub?`<div class="a">${sub}</div>`:''}<div class="l">${l}</div></div>`;
+  const tiles=`<div class="otiles">
+    ${k(uniq,'طلب',`${dayN?Math.round(uniq/dayN*10)/10:0} باليوم`)}
+    ${k(deliv.length,'توصيلة',`${cost} ر.س تكلفة`)}
+    ${k(pick.length,'استلام من المتجر')}
+    ${k(T.net||0,'صافي مستحقات معتمد (ر.س)',`${T.n||0} توصيلة معتمدة`)}
+    ${k(T.pend||0,'بانتظار الاعتماد (ر.س)',`${T.pendN||0} توصيلة`)}
+    ${k(docN,'دوكمنتيشن',pct(docN,O.length))}
+    ${k(wardN,'ورد إكسبرس',pct(wardN,O.length))}
+    ${k(deliv.filter(o=>o.returned).length,'رجعت للمحل',pct(deliv.filter(o=>o.returned).length,deliv.length))}
+  </div>`;
+
+  // ===== كشف حساب مندوب (لما تختار مندوب) =====
+  let stmt='';
+  if(rf){
+    const ENT=Object.fromEntries(RPT.entries.map(e=>[e.id,e]));
+    const dmap={}; D.forEach(x=>{ if(x.status==='rejected') return; const k=oNorm(x.orderNo); dmap[k]=dmap[k]||[]; dmap[k].push(x); });
+    const usedDiff=new Set();
+    const stTxt=o=>{ if(o.fulfillment==='pickup') return ['استلام','st-gray'];
+      const st=o.repStatus||'pending'; if(st==='disputed') return ['اعترض','st-rej']; if(st!=='confirmed') return ['ما أكده','st-await'];
+      const e=ENT[o.entryId]; if(!e) return ['قيد محذوف','st-rej']; if(e.status==='approved') return ['معتمد','st-appr']; if(e.status==='rejected') return ['مرفوض','st-rej']; if(e.status==='reviewed') return ['راجعه المشرف','st-rev']; return ['بانتظار المراجعة','st-await']; };
+    const lines=[];
+    deliv.forEach(o=>{ const [t,c]=stTxt(o); const k=oNorm(o.orderNo); let df=null;
+      if(dmap[k] && !usedDiff.has(k)){ df=dmap[k]; usedDiff.add(k); }
+      lines.push({date:o.date, kind:'order', o, st:t, cls:c, amt:rateOf(o), df}); });
+    // فوارق على طلبات مو موجودة بالفترة
+    Object.entries(dmap).forEach(([k,l])=>{ if(!usedDiff.has(k)) l.forEach(x=>lines.push({date:x.createdAt?.toDate?oRiyadh(x.createdAt.toDate()):'', kind:'diff', x})); });
+    E.filter(e=>!e.fromDispatch && e.status==='approved').forEach(e=>lines.push({date:e.date, kind:'manual', e}));
+    P.forEach(p=>lines.push({date:p.date, kind:'pen', p}));
+    Y.forEach(p=>lines.push({date:p.date, kind:'pay', p}));
+    lines.sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+    const flagsOf=o=>[o.redeliveryOf?'🔁 توصيل ثاني':'',o.multiDelivery?'➕ مستلم آخر':'',o.returned?'↩︎ رجع: '+(o.returnReason||''):'',o.transferredFrom?'محوّل من '+o.transferredFrom:''].filter(Boolean).join(' · ');
+    const rowsH=lines.map(l=>{
+      if(l.kind==='order'){ const o=l.o, dfA=l.df?l.df.reduce((s,x)=>s+(x.amount||0),0):0, dfOk=l.df?l.df.every(x=>x.status==='approved'):false;
+        return `<tr><td class="dim">${o.date}</td><td class="no">${oEsc(o.orderNo)}</td><td><span class="tp tp-${o.type}">${R_TYPES[o.type]}</span></td><td>${oEsc(o.areaName)}</td>
+          <td style="font-weight:900">${l.amt?l.amt+' ر.س':'—'}</td><td>${dfA?`+${dfA} ر.س<div class="dim">${dfOk?'معتمد':'بانتظار'}</div>`:'—'}</td><td><span class="st ${l.cls}">${l.st}</span></td><td class="dim" style="white-space:normal">${oEsc(flagsOf(o))}</td></tr>`; }
+      if(l.kind==='diff') return `<tr><td class="dim">${l.date}</td><td class="no">${oEsc(l.x.orderNo)}</td><td colspan="3"><span class="st st-rev">فارق توصيل</span> ${oEsc(l.x.areaName||'')}</td><td>+${l.x.amount} ر.س</td><td><span class="st ${l.x.status==='approved'?'st-appr':'st-await'}">${l.x.status==='approved'?'معتمد':'بانتظار'}</span></td><td class="dim">طلب خارج الفترة</td></tr>`;
+      if(l.kind==='manual') return `<tr><td class="dim">${l.e.date}</td><td>—</td><td colspan="2"><span class="st st-gray">قيد يدوي قديم</span> ${(l.e.entries||[]).map(en=>oEsc(en.areaName)+': '+en.count).join(' · ')}</td><td style="font-weight:900">${l.e.totalAmount} ر.س</td><td>—</td><td><span class="st st-appr">معتمد</span></td><td class="dim">${l.e.totalCount} طلب</td></tr>`;
+      if(l.kind==='pen') return `<tr><td class="dim">${l.p.date}</td><td>—</td><td colspan="2"><span class="st st-rej">${oEsc(l.p.type||'جزاء')}</span> ${oEsc(l.p.note||l.p.reason||'')}</td><td style="font-weight:900;color:var(--red)">−${l.p.amount} ر.س</td><td>—</td><td></td><td></td></tr>`;
+      return `<tr><td class="dim">${l.p.date}</td><td>—</td><td colspan="2"><span class="st st-rev">دفعة مستلمة</span> ${oEsc(l.p.note||'')}</td><td style="font-weight:900;color:var(--blue,#3A6EA5)">${l.p.amount} ر.س</td><td>—</td><td></td><td class="dim">للمعلومية — ما تنقص من المستحق</td></tr>`;
     }).join('');
+    const me=pay[rf]||{n:0,amt:0,df:0,pen:0,gift:0,pend:0,paid:0};
+    stmt = card(`🧾 كشف حساب ${oEsc(nm(rf))}`, `
+      <div class="otiles" style="margin-bottom:12px">
+        ${k(me.amt+' ر.س','توصيل معتمد',me.n+' توصيلة')}${k(me.df+' ر.س','فوارق معتمدة')}${k('−'+(me.pen+me.gift)+' ر.س','جزاءات وهدايا')}
+        ${k((me.amt+me.df-me.pen-me.gift)+' ر.س','الصافي المعتمد للفترة')}${k(me.pend+' ر.س','بانتظار الاعتماد')}${k(me.paid+' ر.س','المدفوع له بالفترة')}
+      </div>
+      <div id="stmtTbl">${tbl(['التاريخ','رقم الطلب','القناة','المنطقة','التوصيل','فارق التوصيل','الحالة','ملاحظات'], rowsH, '', 900)}</div>
+      <div style="margin-top:10px"><button class="btn-a b" onclick="exportStatement()">⬇︎ تصدير كشف الحساب</button></div>`,
+      'كل توصيلة للمندوب بالفترة مع سعرها وفارقها وحالتها، ومعها القيود اليدوية القديمة والجزاءات والدفعات.');
   }
 
-  const bBody = document.getElementById('reportBreakdownBody');
-  const bEmpty = document.getElementById('reportBreakdownEmpty');
-  const bKeys = Object.keys(breakdown).sort((a,b)=> breakdown[a].repName.localeCompare(breakdown[b].repName) || breakdown[a].areaName.localeCompare(breakdown[b].areaName));
-  let bTotalCount = 0, bTotalAmount = 0;
-  if(bKeys.length === 0){ bBody.innerHTML=''; bEmpty.style.display='block'; }
-  else{
-    bEmpty.style.display='none';
-    bBody.innerHTML = bKeys.map(k=>{
-      const r = breakdown[k];
-      bTotalCount += r.count; bTotalAmount += r.amount;
-      return `<tr><td>${r.repName}</td><td>${r.areaName}</td><td>${r.channel}</td><td>${r.count}</td><td>${r.amount} ر.س</td></tr>`;
-    }).join('');
-  }
-  document.getElementById('reportBreakdownTotalCount').textContent = bTotalCount;
-  document.getElementById('reportBreakdownTotalAmount').textContent = bTotalAmount + ' ر.س';
+  document.getElementById('rOut').innerHTML = `
+    <div class="bulkbar" style="position:static"><span class="sel">الفترة: ${RPT.from===RPT.to?RPT.from:RPT.from+' ← '+RPT.to}${rf?' · '+oEsc(nm(rf)):' · <span style="font-weight:500;color:var(--ink-soft)">اختر مندوب من الفلتر لعرض كشف حسابه التفصيلي</span>'}</span>
+      <button class="btn-a b" onclick="exportPayroll()">⬇︎ تصدير المستحقات</button>
+      <button class="btn-a b" onclick="exportReportOrders()">⬇︎ تصدير كل الطلبات</button></div>
+    ${tiles}
+    ${stmt}
+    ${card('💰 مستحقات المناديب', '<div id="payTbl">'+payTable+'</div>', 'الصافي المعتمد = التوصيل المعتمد + الفوارق المعتمدة − الجزاءات − الهدايا. "بانتظار الاعتماد" ما ينحسب لين تعتمده. "المدفوع بالفترة" للمقارنة فقط — الرصيد الكامل في "المستحقات والدفعات".')}
+    ${card('📊 القنوات', typeTable)}
+    ${card('📍 المناطق', areaTable, 'التوصيلات فقط — الاستلام من المتجر ما له منطقة.')}
+    ${dayN>1?card('📅 حسب اليوم', dayTable):''}
+    ${card('🛵 أداء المناديب (تشغيل)', opsTable, '"طلبات مختلفة" أقل من "التوصيلات" لما يكون فيه توصيل ثاني أو توصيل إضافي لنفس رقم الطلب.')}
+    ${card('💐 المنسقين', flTable)}
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px">
+      ${card('↩︎ أسباب رجوع الطلبات', listT(reasons,'ما رجع أي طلب 👍'))}
+      ${card('⚠️ أسباب اعتراضات المناديب', listT(dReasons,'ما فيه اعتراضات 👍'))}
+      ${card('🔁 فوارق التوصيل', `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line)"><span>معتمدة</span><b>${diffsApproved.length} · ${diffsApproved.reduce((s,d)=>s+(d.amount||0),0)} ر.س</b></div><div style="display:flex;justify-content:space-between;padding:6px 0"><span>بانتظار المراجعة</span><b>${diffsPending.length} · ${diffsPending.reduce((s,d)=>s+(d.amount||0),0)} ر.س</b></div>`)}
+    </div>`;
+}
+function rCSV(name,head,rows){
+  const csv='\uFEFF'+[head,...rows].map(r=>r.map(c=>`"${String(c??'').replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})); a.download=name; a.click();
+}
+function exportPayroll(){
+  if(!RPT) return;
+  const rows=[...document.querySelectorAll('#payTbl tbody tr')].map(tr=>[...tr.children].map(td=>td.textContent.replace(/\s+/g,' ').trim()));
+  const head=['المندوب','توصيلات معتمدة','مبلغ التوصيل','الفوارق المعتمدة','الجزاءات','الهدايا','الصافي المعتمد','بانتظار الاعتماد','ما أكدها','المدفوع بالفترة'];
+  rCSV(`مستحقات_المناديب_${RPT.from}_${RPT.to}.csv`,head,rows);
+}
+function exportStatement(){
+  const rf=document.getElementById('repRepFilter').value; if(!rf) return;
+  const rows=[...document.querySelectorAll('#stmtTbl tbody tr')].map(tr=>[...tr.children].map(td=>td.textContent.replace(/\s+/g,' ').trim()));
+  rCSV(`كشف_حساب_${(RPT.names[rf]||rf)}_${RPT.from}_${RPT.to}.csv`,['التاريخ','رقم الطلب','القناة','المنطقة','التوصيل','فارق التوصيل','الحالة','ملاحظات'],rows);
+}
+function exportReportOrders(){
+  if(!RPT) return;
+  const rf=document.getElementById('repRepFilter').value;
+  const O=RPT.orders.filter(o=>!rf||o.repPhone===rf).sort((a,b)=>a.date.localeCompare(b.date));
+  rCSV(`الطلبات_${RPT.from}_${RPT.to}.csv`,
+    ['التاريخ','المندوب','رقم الطلب','القناة','توصيل/استلام','المنطقة','السعر','المنسق','حالة المندوب','رجع','توصيل ثاني','توصيل إضافي','محوّل من','ملاحظات'],
+    O.map(o=>[o.date,o.repName||'استلام من المتجر',o.orderNo,R_TYPES[o.type]||o.type,o.fulfillment==='pickup'?'استلام':'توصيل',o.fulfillment==='pickup'?'':o.areaName,oRate(o)||'',o.florist||'',
+      ({confirmed:'أكد',disputed:'اعترض',na:'—'})[o.repStatus]||'ما أكد',o.returned?(o.returnReason||'نعم'):'',o.redeliveryOf?'نعم':'',o.multiDelivery?'نعم':'',o.transferredFrom||'',o.notes||'']));
 }
 
 /* =====================================================================
@@ -1850,6 +1993,15 @@ async function loadOrdersTab(){
     dSnap.docs.forEach(d=>{ const x=d.data(); if(x.status==='rejected') return; const k=(x.repUid||'')+'|'+oNorm(x.orderNo);
       O_DIFFS[k] = O_DIFFS[k] ? {...O_DIFFS[k], amount:O_DIFFS[k].amount+(x.amount||0), multi:true} : {amount:x.amount||0, status:x.status, area:x.areaName}; });
   }catch(e){ console.warn('diffs',e); }
+  // القيود اليدوية القديمة (مو من سجل مشرف الإنتاج) اللي لسا ما انعتمدت — بكل التواريخ
+  try{
+    const [lp, lr] = await Promise.all([
+      db.collection('dailyEntries').where('status','==','pending').get(),
+      db.collection('dailyEntries').where('status','==','reviewed').get()
+    ]);
+    const legacy=[...lp.docs,...lr.docs].map(d=>({id:d.id,...d.data()})).filter(e=>!e.fromDispatch).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+    renderLegacy(legacy);
+  }catch(e){ console.warn('legacy',e); }
   O_ISSUES={disputes:[],missing:[]};
   try{
     const [ds, ms] = await Promise.all([
@@ -1884,7 +2036,7 @@ function renderOrdersTab(){
   const ret=base.filter(o=>o.returned);
   const tile=(k,n,a,l,hl)=>`<div class="otile ${hl?'hl':''}" onclick="document.getElementById('oStatus').value='${k}';renderOrdersTab()"><div class="n">${n}</div>${a!==null?`<div class="a">${a} ر.س</div>`:''}<div class="l">${l}</div></div>`;
   document.getElementById('oTiles').innerHTML =
-    `<div class="otile" onclick="document.getElementById('oStatus').value='';renderOrdersTab()"><div class="n">${new Set(base.map(o=>o.orderNo)).size}</div><div class="a">${base.filter(o=>o.fulfillment!=='pickup').length} مشوار · ${amt(base)} ر.س</div><div class="l">طلبات (بدون تكرار الرقم)</div></div>`+
+    `<div class="otile" onclick="document.getElementById('oStatus').value='';renderOrdersTab()"><div class="n">${new Set(base.map(o=>o.orderNo)).size}</div><div class="a">${base.filter(o=>o.fulfillment!=='pickup').length} توصيلة · ${amt(base)} ر.س</div><div class="l">طلبات (بدون تكرار الرقم)</div></div>`+
     tile('awaiting',aw.length,amt(aw),myRole==='admin'?'بانتظار اعتمادك':'بانتظار المراجعة/الاعتماد',aw.length>0)+
     tile('approved',ap.length,amt(ap),'معتمد')+
     tile('unconfirmed',un.length,amt(un),'ما أكدها المندوب')+
@@ -1901,7 +2053,7 @@ function renderOrdersTab(){
   const more=document.getElementById('oMore'); more.style.display = list.length>MAX?'block':'none';
   more.textContent = `يعرض أول ${MAX} من ${list.length} — ضيّق الفلاتر أو صدّر Excel للكل`;
   const selEntries = new Set([...O_SEL].map(id=>O_ORDERS.find(o=>o.id===id)?.entryId));
-  const diffShown = new Set();   // الفارق يظهر مرة وحدة للطلب حتى لو له أكثر من مشوار
+  const diffShown = new Set();   // الفارق يظهر مرة وحدة للطلب حتى لو له أكثر من توصيلة
   document.getElementById('oBody').innerHTML = shown.map(o=>{
     const stg=oStage(o);
     const can = myRole==='admin' || (myRole==='supervisor' && stg==='awaiting' && O_ENTRIES[o.entryId]?.status==='pending');
@@ -2001,6 +2153,28 @@ async function oSetStatus(status, extra={}){
   ids.forEach(id=>wb.update(db.collection('dailyEntries').doc(id), {status, statusUpdatedAt: firebase.firestore.FieldValue.serverTimestamp(), ...extra}));
   await wb.commit();
 }
+function renderLegacy(list){
+  const card=document.getElementById('oLegacyCard');
+  card.style.display = list.length ? '' : 'none';
+  if(!list.length) return;
+  const brandTxt=b=>b==='ward'?'ورد إكسبرس':'دوكمنتيشن';
+  document.getElementById('oLegacy').innerHTML = `<div class="otable-wrap"><table class="otable" style="min-width:760px">
+    <thead><tr><th>التاريخ</th><th>المندوب</th><th>البراند</th><th>التفاصيل</th><th>العدد</th><th>المبلغ</th><th>الحالة</th><th></th></tr></thead><tbody>
+    ${list.map(e=>`<tr><td class="dim">${e.date||'—'}</td><td><b>${oEsc(e.repName||e.repUid)}</b></td><td>${brandTxt(e.brand)}</td>
+      <td class="dim" style="white-space:normal">${(e.entries||[]).map(en=>`${oEsc(en.areaName)}${en.source==='whatsapp'?' (واتس)':''}: ${en.count}`).join(' · ')}</td>
+      <td>${e.totalCount||0}</td><td style="font-weight:900">${e.totalAmount||0} ر.س</td>
+      <td>${e.status==='reviewed'?'<span class="st st-rev">تمت المراجعة</span>':'<span class="st st-await">بانتظار</span>'}</td>
+      <td style="white-space:nowrap">${myRole==='admin'?`<button class="btn-a g" style="padding:6px 10px" onclick="legacyAct('${e.id}','approved')">✓ اعتماد</button>
+        <button class="btn-a r" style="padding:6px 10px" onclick="legacyAct('${e.id}','rejected')">رفض</button>`:''}</td></tr>`).join('')}
+    </tbody></table></div>`;
+}
+async function legacyAct(id,status){
+  if(myRole!=='admin'){ noPermissionToast(); return; }
+  try{ await db.collection('dailyEntries').doc(id).update({status, statusUpdatedAt: firebase.firestore.FieldValue.serverTimestamp()});
+    toast(status==='approved'?'تم الاعتماد ✅':'تم الرفض'); loadOrdersTab(); }
+  catch(e){ console.error(e); toast('ما انحفظ'); }
+}
+
 // مشرف المناديب: "تمت المراجعة" بس (القاعدة تسمح له يغير الحالة من pending إلى reviewed فقط)
 async function oMarkReviewed(){
   const ids=[...new Set(oSelOrders().filter(o=>oStage(o)==='awaiting' && O_ENTRIES[o.entryId]?.status==='pending').map(o=>o.entryId))];

@@ -250,6 +250,12 @@
   .sp.gray{background:var(--cream);color:var(--ink-soft);}
   .ibtn{border:none;border-radius:7px;width:30px;height:30px;font-size:15px;font-weight:900;cursor:pointer;font-family:inherit;}
   .ibtn.ok{background:var(--green);color:#fff;} .ibtn.no{background:#FBEAEA;color:#B23A3A;}
+  .stps{display:flex;gap:3px;flex-wrap:nowrap;}
+  .stp{font-size:10px;font-weight:700;padding:2px 5px;border-radius:6px;background:var(--cream);color:#B9AEA6;white-space:nowrap;}
+  .stp.on{background:var(--green-bg);color:var(--green);}
+  .stp.cur{background:var(--amber-bg);color:var(--amber);}
+  .stxt{font-size:11px;color:var(--ink-soft);margin-top:3px;white-space:nowrap;}
+  .dim{color:var(--ink-soft);}
   .legend{font-size:11.5px;color:var(--ink-soft);margin-top:8px;line-height:1.8;}
   .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:flex-end;justify-content:center;z-index:60;}
   .modal-bg.show{display:flex;}
@@ -1139,16 +1145,28 @@ let ENTRY_STATUS = {}, ENTRY_REASON = {};
 // حالة الطلب عند المندوب: تأكيده ← ثم اعتماد الإدارة لقيده اليومي
 function orderStage(o){
   const st=repStatusOf(o);
-  if(st==='disputed') return {k:'disp', html:'<span class="sp rej">اعترضت — عند المشرف</span>'};
+  if(st==='disputed') return {k:'disp'};
   if(st==='confirmed'){
     const es = ENTRY_STATUS[o.entryId];
-    if(es==='approved') return {k:'appr', html:'<span class="sp appr">✓ تم الاعتماد</span>'};
-    if(es==='rejected') return {k:'rej', html:`<span class="sp rej">رفضته الإدارة</span>${ENTRY_REASON[o.entryId]?`<div class="sub" style="color:#B23A3A">${escH(ENTRY_REASON[o.entryId])}</div>`:''}`};
-    if(es==='reviewed') return {k:'sent', html:'<span class="sp sent">تمت المراجعة</span>'};
-    return {k:'sent', html:'<span class="sp sent">بانتظار الاعتماد</span>'};
+    if(es==='approved') return {k:'appr'};
+    if(es==='rejected') return {k:'rej'};
+    if(es==='reviewed') return {k:'rev'};      // راجعها المشرف — بانتظار الإدارة
+    return {k:'conf'};                         // أكدتها — بانتظار مراجعة المشرف
   }
-  if(orderRate(o)<=0) return {k:'nop', html:'<span class="sp gray">المنطقة بانتظار التسعير</span>'};
-  return {k:'pend', html:''};
+  if(orderRate(o)<=0) return {k:'nop'};
+  return {k:'pend'};
+}
+// مراحل الطلب بعد تأكيد المندوب: أكدت ← المشرف ← الإدارة
+function stageCell(o){
+  const k=orderStage(o).k;
+  if(k==='disp') return '<span class="sp rej">اعترضت — عند مشرف الإنتاج</span>';
+  if(k==='nop') return '<span class="sp gray">المنطقة بانتظار التسعير</span>';
+  if(k==='rej') return `<span class="sp rej">رفضته الإدارة</span>${ENTRY_REASON[o.entryId]?`<div class="sub" style="color:#B23A3A">${escH(ENTRY_REASON[o.entryId])}</div>`:''}`;
+  const step=(label,state)=>`<span class="stp ${state}">${state==='on'?'✓ ':''}${label}</span>`;
+  const s2 = k==='rev'||k==='appr' ? 'on' : 'cur';
+  const s3 = k==='appr' ? 'on' : (k==='rev' ? 'cur' : '');
+  const txt = k==='appr' ? '<b style="color:var(--green)">تم الاعتماد — انضاف لرصيدك</b>' : k==='rev' ? 'بانتظار اعتماد الإدارة' : 'بانتظار مراجعة المشرف';
+  return `<div class="stps">${step('أكدت','on')}${step('المشرف',s2)}${step('الإدارة',s3)}</div><div class="stxt">${txt}</div>`;
 }
 function renderMyOrders(){
   const box = document.getElementById('myOrdersList');
@@ -1162,54 +1180,60 @@ function renderMyOrders(){
   MY_ORDERS.forEach(o=>(batches[o.batchId]=batches[o.batchId]||[]).push(o));
   const list = Object.values(batches).sort((a,b)=>(b[0].handedAt?.toMillis?.()||0)-(a[0].handedAt?.toMillis?.()||0));
 
-  let n={pend:0,sent:0,appr:0,disp:0,rej:0,nop:0}, a={pend:0,sent:0,appr:0};
-  MY_ORDERS.forEach(o=>{ const k=orderStage(o).k; n[k]=(n[k]||0)+1; if(a[k]!==undefined) a[k]+=orderRate(o); });
+  const n={}, a={};
+  MY_ORDERS.forEach(o=>{ const k=orderStage(o).k; n[k]=(n[k]||0)+1; a[k]=(a[k]||0)+orderRate(o); });
   sum.style.display='block';
   sum.innerHTML = [
-    `${MY_ORDERS.length} طلب`,
+    `${new Set(MY_ORDERS.map(o=>o.orderNo)).size} طلب · ${MY_ORDERS.length} توصيلة`,
     n.appr ? `✓ معتمد ${n.appr} (${a.appr} ر.س)` : '',
-    n.sent ? `بانتظار الاعتماد ${n.sent} (${a.sent} ر.س)` : '',
+    n.rev ? `بانتظار الإدارة ${n.rev} (${a.rev} ر.س)` : '',
+    n.conf ? `بانتظار المشرف ${n.conf} (${a.conf} ر.س)` : '',
     n.pend ? `⏳ تحتاج تأكيدك ${n.pend} (${a.pend} ر.س)` : '',
     n.disp ? `⚠️ معترض ${n.disp}` : '',
     n.rej ? `مرفوض ${n.rej}` : ''
   ].filter(Boolean).join(' · ');
 
   box.innerHTML = list.map(orders=>{
-    orders.sort((x,y)=>x.orderNo.localeCompare(y.orderNo));
+    // الطلب اللي له أكثر من منطقة (مستلمين مختلفين) يطلع كطلب واحد بأكثر من منطقة وسعر
+    const groups=[]; const gi={};
+    orders.sort((x,y)=>x.orderNo.localeCompare(y.orderNo)||(x.multiDelivery?1:0)-(y.multiDelivery?1:0));
+    orders.forEach(o=>{ const key=o.orderNo+(o.redeliveryOf?'|re':''); if(gi[key]===undefined){ gi[key]=groups.length; groups.push([]); } groups[gi[key]].push(o); });
     const pend = orders.filter(o=>orderStage(o).k==='pend');
     const bAmt = orders.reduce((s,o)=>s+orderRate(o),0);
     return `<div class="batch">
       <div class="batch-head">
-        <div><div class="bt">استلمت ${fmtT(orders[0].handedAt)} · ${orders.length} طلب</div>
+        <div><div class="bt">استلمت ${fmtT(orders[0].handedAt)} · ${groups.length} طلب${orders.length>groups.length?` (${orders.length} توصيلة)`:''}</div>
           <div class="bs">${orders[0].departedAt?'خرجت '+fmtT(orders[0].departedAt):'لسا ما خرجت'}</div></div>
         ${pend.length?`<button class="btn-ok" onclick="confirmOrders(['${pend.map(o=>o.id).join("','")}'])">✓ تأكيد الكل (${pend.length})</button>`:''}
       </div>
       <div class="otbl-wrap"><table class="otbl">
         <thead><tr><th>رقم الطلب</th><th>النوع</th><th>المنطقة</th><th>التوصيل</th><th>الحالة</th></tr></thead>
-        <tbody>${orders.map(o=>{
-          const r=orderRate(o), stg=orderStage(o);
+        <tbody>${groups.map(g=>{
+          const o=g[0], multi=g.length>1, stg=orderStage(o), ids=g.map(x=>x.id);
+          const gPend = g.filter(x=>orderStage(x).k==='pend').map(x=>x.id);
           const sub = [
-            o.redeliveryOf ? '<div class="sub" style="color:#3A6EA5">🔁 توصيل ثاني</div>' : '',
-            o.multiDelivery ? '<div class="sub" style="color:#3A6EA5">➕ توصيل إضافي لنفس الطلب — مشوار مستقل</div>' : '',
+            multi ? `<div class="sub" style="color:#3A6EA5">➕ طلب لمستلمين مختلفين (${g.length} توصيلات)</div>` : '',
+            o.redeliveryOf ? '<div class="sub" style="color:#3A6EA5">🔁 توصيل ثاني — توصيلة مستقلة تنحسب لك</div>' : '',
             o.transferredFrom ? `<div class="sub" style="color:var(--ink-soft)">محوّل من ${escH(o.transferredFrom)}</div>` : '',
             o.returned ? `<div class="sub" style="color:#B23A3A">↩︎ رجع: ${escH(o.returnReason||'')}</div>` : '',
-            (o.ibrahimNote && stg.k==='pend') ? `<div class="sub" style="color:var(--amber)">المشرف: ${escH(o.ibrahimNote)}</div>` : ''
+            (o.ibrahimNote && stg.k==='pend') ? `<div class="sub" style="color:var(--amber)">ملاحظة: ${escH(o.ibrahimNote)}</div>` : ''
           ].join('');
-          const act = stg.k==='pend'
-            ? `<div style="display:flex;gap:5px"><button class="ibtn ok" title="تأكيد" onclick="confirmOrders(['${o.id}'])">✓</button><button class="ibtn no" title="اعتراض" onclick="openDispute('${o.id}')">✕</button></div>`
-            : stg.html;
-          return `<tr>
-            <td><div class="no">${escH(o.orderNo)}</div>${sub}</td>
-            <td style="white-space:nowrap">${OTYPES[o.type]?.label||''}</td>
-            <td>${escH(o.areaName)}</td>
-            <td class="price">${r?r+' ر.س':'—'}</td>
-            <td>${act}</td>
-          </tr>`;
+          const act = gPend.length
+            ? `<div style="display:flex;gap:5px"><button class="ibtn ok" title="تأكيد" onclick="confirmOrders(['${gPend.join("','")}'])">✓</button><button class="ibtn no" title="اعتراض" onclick="openDispute('${gPend.join(',')}')">✕</button></div>`
+            : stageCell(o);
+          const rs = multi ? ` rowspan="${g.length}"` : '';
+          return g.map((x,i)=>{
+            const r=orderRate(x);
+            const areaCell = `<td>${multi?`<span class="dim" style="font-size:10.5px">منطقة ${i+1}:</span> `:''}${escH(x.areaName)}</td><td class="price">${r?r+' ر.س':'—'}</td>`;
+            return i===0
+              ? `<tr><td${rs}><div class="no">${escH(o.orderNo)}</div>${sub}</td><td${rs} style="white-space:nowrap">${OTYPES[o.type]?.label||''}</td>${areaCell}<td${rs}>${act}</td></tr>`
+              : `<tr>${areaCell}</tr>`;
+          }).join('');
         }).join('')}</tbody>
         <tfoot><tr><td colspan="3">المجموع</td><td class="price">${bAmt} ر.س</td><td></td></tr></tfoot>
       </table></div>
     </div>`;
-  }).join('') + `<div class="legend">✓ = تأكيد إنك استلمت الطلب والبيانات صحيحة · ✕ = اعتراض لو فيه غلط.<br>بعد التأكيد يروح للإدارة، ولما تعتمده يتغير لـ <b>تم الاعتماد</b> وينضاف لرصيدك.</div>`;
+  }).join('') + `<div class="legend">✓ = تأكيد إنك استلمت الطلب والبيانات صحيحة · ✕ = اعتراض لو فيه غلط.<br>بعد تأكيدك يمر الطلب بمرحلتين: <b>مراجعة المشرف</b> ثم <b>اعتماد الإدارة</b>، وبعدها ينضاف لرصيدك.</div>`;
 }
 
 // التأكيد: يحوّل الطلبات المؤكدة لقيد يومي (dailyEntries) بنفس الشكل القديم، فيوصل للإدارة
@@ -1254,9 +1278,10 @@ document.addEventListener('click',e=>{
   disputeReason=c.dataset.r;
   document.querySelectorAll('#dispReasons .chip').forEach(x=>x.classList.toggle('on',x===c));
 });
-function openDispute(id){
-  const o=MY_ORDERS.find(x=>x.id===id); if(!o) return;
-  disputeId=id; disputeReason='';
+function openDispute(ids){
+  const list=String(ids).split(',');
+  const o=MY_ORDERS.find(x=>x.id===list[0]); if(!o) return;
+  disputeId=list; disputeReason='';
   document.getElementById('dispNo').textContent=o.orderNo;
   document.getElementById('dispNote').value='';
   document.querySelectorAll('#dispReasons .chip').forEach(x=>x.classList.remove('on'));
@@ -1264,13 +1289,16 @@ function openDispute(id){
 }
 async function submitDispute(){
   if(!disputeReason){ toast('اختر سبب الاعتراض'); return; }
-  const o=MY_ORDERS.find(x=>x.id===disputeId); if(!o) return;
+  const list=(Array.isArray(disputeId)?disputeId:[disputeId]).map(id=>MY_ORDERS.find(x=>x.id===id)).filter(Boolean);
+  if(!list.length) return;
   const btn=document.getElementById('dispBtn'); btn.disabled=true;
   try{
-    await db.collection('dispatchOrders').doc(disputeId).update({
+    const wb=db.batch();
+    list.forEach(o=>wb.update(db.collection('dispatchOrders').doc(o.id), {
       repStatus:'disputed', disputeReason, disputeNote:document.getElementById('dispNote').value.trim(),
       disputeCount:(o.disputeCount||0)+1, repActionAt:TS()
-    });
+    }));
+    await wb.commit();
     closeModal('disputeModal'); toast('وصل اعتراضك لمشرف الإنتاج');
   }catch(e){ console.error(e); toast('ما انرسل — تحقق من الإنترنت'); }
   btn.disabled=false;

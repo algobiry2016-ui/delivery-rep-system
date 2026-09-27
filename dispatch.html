@@ -295,7 +295,7 @@
 <div class="modal-bg" id="returnModal">
   <div class="modal">
     <h3 style="margin-top:0">الطلب رجع للمحل <span id="retNo" style="direction:ltr;unicode-bidi:isolate"></span></h3>
-    <div class="muted" style="margin-bottom:10px">المشوار الأول ينحسب للمندوب. وإذا العميل طلب توصيل ثاني، يتسجل كطلب مستقل مربوط بالأصلي.</div>
+    <div class="muted" style="margin-bottom:10px">التوصيلة الأولى تنحسب للمندوب. وإذا العميل طلب توصيل ثاني، يتسجل كطلب مستقل مربوط بالأصلي.</div>
     <div class="field"><label>السبب</label><select id="retReason"></select></div>
     <div class="field"><label>توضيح (اختياري)</label><input id="retNote"></div>
     <label class="chk"><input type="checkbox" id="retPaid" checked> العميل دفع رسوم التوصيل الثاني</label>
@@ -497,7 +497,7 @@ async function loadFloristList(){
 }
 function areaOptions(sel, ph='المنطقة...'){ return `<option value="">${ph}</option>`+AREAS.map(a=>`<option value="${esc(a.id)}" ${a.id===sel?'selected':''}>${esc(a.name)}</option>`).join('')+(canWrite?'<option value="__new">+ منطقة جديدة...</option>':''); }
 function refreshAreaSelects(){
-  document.querySelectorAll('.o-area').forEach(s=>{ const v=s.value; s.innerHTML=areaOptions(v==='__new'?'':v); });
+  document.querySelectorAll('.o-area,.o-area-x').forEach(s=>{ const v=s.value; s.innerHTML=areaOptions(v==='__new'?'':v); });
 }
 
 /* ---------------- QUICK ADD: REP / AREA ---------------- */
@@ -590,7 +590,7 @@ function addRow(prep, redel){
     <span class="num"></span>
     <button class="danger rm" onclick="removeRow('${id}')">✕</button>
     ${prep?`<div class="src" style="margin-top:6px">${prep.photo?`<img src="${prep.photo}" alt="">`:''}✓ من المنسق ${esc(prep.floristName)} · جاهز ${fmtTime(prep.readyAt)}</div>`:''}
-    ${redel?`<div class="rowtag">🔁 توصيل ثاني للطلب — المشوار الأول كان مع ${esc(redel.repName)}</div>`:''}
+    ${redel?`<div class="rowtag">🔁 توصيل ثاني للطلب — التوصيلة الأولى كانت مع ${esc(redel.repName)}</div>`:''}
     <div class="seg" style="margin-top:8px">
       ${Object.keys(TYPES).map(t=>`<button data-t="${t}" class="${t===prevType?'on':''}" onclick="pickType('${id}','${t}')">${TYPES[t].label}</button>`).join('')}
     </div>
@@ -600,12 +600,24 @@ function addRow(prep, redel){
       <div class="field o-area-field" style="${MODE==='pickup'?'display:none':''}"><select class="o-area" onchange="onAreaSelect(this)">${areaOptions(redel?redel.areaId:prevArea)}</select></div>
     </div>
     <div class="field" style="margin:0"><input class="o-notes" placeholder="ملاحظات (اختياري)" value="${redel?esc('توصيل ثاني — '+(redel.returnReason||'')):''}"></div>
-    ${(redel||prep)?'':`<label class="chk" style="font-size:12.5px"><input type="checkbox" class="o-multi"> توصيل إضافي لنفس رقم الطلب (منطقة توصيل ثانية) — اختر منطقته فوق</label>`}`;
+    <div class="extra-areas"></div>
+    ${(redel||prep)?'':`<button type="button" class="mini addx" style="margin-top:8px;${MODE==='pickup'?'display:none':''}" onclick="addExtraArea('${id}')">＋ منطقة توصيل ثانية لنفس الطلب (مستلم مختلف)</button>`}`;
   document.getElementById('orderRows').appendChild(div);
   renumber();
   if(prep||redel) div.querySelector('.seg').style.pointerEvents = redel?'none':'';
   if(!prep && !redel) div.querySelector('.o-no').focus();
 }
+// نفس رقم الطلب لأكثر من مستلم: كل منطقة إضافية = توصيلة مستقلة بسعر منطقتها
+function addExtraArea(rowId){
+  const r=document.getElementById(rowId), box=r.querySelector('.extra-areas');
+  const n=box.children.length+2;
+  const div=document.createElement('div');
+  div.className='row2 xrow'; div.style.marginTop='8px';
+  div.innerHTML=`<div class="field" style="margin:0"><label style="font-size:11.5px">المنطقة ${n} (مستلم آخر)</label><select class="o-area-x" onchange="onAreaSelect(this)">${areaOptions('')}</select></div>
+    <div style="display:flex;align-items:end"><button type="button" class="danger" onclick="this.closest('.xrow').remove();renumberX('${rowId}')">✕ إزالة</button></div>`;
+  box.appendChild(div);
+}
+function renumberX(rowId){ document.getElementById(rowId).querySelectorAll('.xrow label').forEach((l,i)=>l.textContent=`المنطقة ${i+2} (مستلم آخر)`); }
 function removeRow(id){
   const r=document.getElementById(id);
   if(r.dataset.prepId){ SELECTED.delete(r.dataset.prepId); renderReady(); }
@@ -696,7 +708,9 @@ async function saveHandover(){
     const n = i+1;
     const type = r.dataset.type||'doc';
     const isRedel = !!r.dataset.redeliveryOf;
-    const multi = !!r.querySelector('.o-multi')?.checked;
+    const multi = false;
+    const extras = pickup ? [] : [...r.querySelectorAll('.o-area-x')].map(x=>x.value);
+    if(extras.some(v=>!v)){ toast(`طلب ${n}: اختر المنطقة الإضافية أو شيلها`); return; }
     if(PHONE_TYPES.includes(type) && !isRedel){
       if(!/^05\d{8}$/.test(no)){ toast(`طلب ${n}: ${TYPES[type].full} — اكتب جوال العميل 05xxxxxxxx`); return; }
     } else if(!isRedel){
@@ -705,7 +719,7 @@ async function saveHandover(){
       if(no.length<6 || no.length>12){ toast(`طلب ${n}: رقم الطلب غير منطقي (${no})`); return; }
     }
     if(r.dataset.prepId && !prep){ toast(`الطلب ${no} ما عاد في قائمة الجاهز — شيله وحدّث`); return; }
-    if(no && seen.has(no) && !multi){ toast(`الطلب ${no} مكرر في نفس التسليم — لو له منطقة توصيل ثانية فعّل "توصيل إضافي لنفس رقم الطلب"`); return; }
+    if(no && seen.has(no)){ toast(`الطلب ${no} مكرر في نفس التسليم — لو لمستلم ثاني استخدم "＋ منطقة توصيل ثانية" في نفس السطر`); return; }
     if(!florist){ toast(`طلب ${n}: اختر المنسق`); return; }
     if(!pickup && !areaId){ toast(`طلب ${n}: اختر المنطقة`); return; }
     if(no) seen.add(no);
@@ -721,6 +735,12 @@ async function saveHandover(){
       manual: FLORIST_FLOW && !prep, prepId: prep?prep.id:null,
       floristReceivedAt: prep?prep.receivedAt:null, floristReadyAt: prep?prep.readyAt:null,
       hasPhoto: !!(prep&&prep.photo)});
+    extras.forEach((xa,xi)=>{
+      const xarea=AREAS.find(a=>a.id===xa);
+      orders.push({...orders[orders.length-1-xi], areaId:xa, areaName:xarea?xarea.name:'',
+        rate: isPriced(xarea) ? rateFor(xarea,type,rep) : null, multiDelivery:true, multiIndex:xi+2});
+    });
+    if(extras.length) orders[orders.length-1-extras.length].multiGroup = extras.length+1;
   }
 
   const btn=document.getElementById('saveBtn'), btnTxt=btn.textContent; btn.disabled=true; btn.textContent='جاري الحفظ...';
@@ -741,7 +761,7 @@ async function saveHandover(){
     }
     samePhone.forEach(o=>o.samePhoneSameDay=true);
     if(dups.length){
-      alert(`هذي الطلبات مسجّلة قبل:\n${dups.join('\n')}\n\n• لو الطلب رجع والعميل طلب يعاد توصيله: افتح "سجل اليوم" واضغط "رجع" على الطلب الأصلي.\n• لو نفس الطلب له أكثر من منطقة توصيل (مثلاً باقتين لمكانين): فعّل "توصيل إضافي لنفس رقم الطلب" واختر منطقته.`);
+      alert(`هذي الطلبات مسجّلة قبل:\n${dups.join('\n')}\n\n• لو الطلب رجع والعميل طلب يعاد توصيله: افتح "سجل اليوم" واضغط "رجع" على الطلب الأصلي.\n• لو نفس الطلب لأكثر من مستلم بمناطق مختلفة: سجّله مرة وحدة واضغط "＋ منطقة توصيل ثانية لنفس الطلب".`);
       btn.disabled=false; btn.textContent=btnTxt; return;
     }
 
@@ -788,7 +808,8 @@ async function saveHandover(){
     await wb.commit();
     pendingMissingId = null;
     const codes = '';
-    toast(pickup ? `تم تسجيل ${orders.length} طلب استلام ✅${codes}` : `تم تسليم ${orders.length} طلب لـ ${rep.name} ✅${codes}`);
+    const nU=new Set(orders.map(o=>o.orderNo)).size, extraTxt = orders.length>nU ? ` (${orders.length} توصيلة)` : '';
+    toast(pickup ? `تم تسجيل ${nU} طلب استلام ✅${codes}` : `تم تسليم ${nU} طلب${extraTxt} لـ ${rep.name} ✅${codes}`);
     resetForm();
   }catch(e){ console.error(e); toast('ما انحفظ — تحقق من الاتصال أو الصلاحيات'); }
   btn.disabled=false; btn.textContent=btnTxt;
@@ -1217,7 +1238,7 @@ async function loadReports(){
     <div class="muted" style="margin-bottom:10px">الفترة: <b>${fromTxt}</b></div>
     <div class="stats">
       <div class="stat"><div class="v">${new Set(orders.map(o=>o.orderNo)).size}</div><div class="l">طلبات فريدة (بدون تكرار الرقم)</div></div>
-      <div class="stat"><div class="v">${deliv.length}</div><div class="l">مشاوير توصيل</div></div>
+      <div class="stat"><div class="v">${deliv.length}</div><div class="l">التوصيلات</div></div>
       <div class="stat"><div class="v">${pick.length}</div><div class="l">استلام من المتجر</div></div>
       ${tkeys.map(t=>`<div class="stat"><div class="v">${sumOf(orders,t)}</div><div class="l">${TYPES[t].full}</div></div>`).join('')}
       <div class="stat"><div class="v">${returned.length}</div><div class="l">رجعت للمحل</div></div>
@@ -1242,7 +1263,7 @@ async function loadReports(){
       <tbody>${returned.map(o=>`<tr><td>${o.date}</td><td style="direction:ltr;unicode-bidi:isolate"><b>${esc(o.orderNo)}</b></td><td>${esc(o.repName)}</td><td><span class="flag f-ret">رجع</span>${o.redeliveryId?' <span class="flag f-re">أُعيد توصيله</span>':''}</td><td>${esc(o.returnReason||'')}${o.secondFeePaid===false?' · <b>بدون رسوم توصيل ثاني</b>':''}</td></tr>`).join('')}
         ${transferred.map(o=>`<tr><td>${o.date}</td><td style="direction:ltr;unicode-bidi:isolate"><b>${esc(o.orderNo)}</b></td><td>${esc(o.repName)}</td><td><span class="flag f-tr">محوّل من ${esc(o.transferredFrom)}</span></td><td>${esc(o.transferNote||'')}</td></tr>`).join('')}</tbody></table></div></div>`:''}
     ${unpricedTotal?`<div class="note">فيه ${unpricedTotal} طلب على مناطق بانتظار السعر — ما انحسبت في المستحق.</div>`:''}
-    <div class="muted">المستحق التقديري = التوصيل فقط حسب أسعار المناطق (مع خصم عمار). التوصيل الثاني لطلب راجع ينحسب مشوار مستقل. الاستلام من المتجر ما عليه رسوم.</div>`;
+    <div class="muted">المستحق التقديري = التوصيل فقط حسب أسعار المناطق (مع خصم عمار). التوصيل الثاني لطلب راجع ينحسب توصيلة مستقلة. الاستلام من المتجر ما عليه رسوم.</div>`;
 }
 
 function exportCSV(){
