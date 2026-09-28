@@ -298,6 +298,7 @@
               <option value="rejected">مرفوض</option>
               <option value="pickup">استلام من المتجر</option>
               <option value="orphan">قيدها محذوف</option>
+              <option value="nopay">رجعت — ما تنحسب</option>
             </select></div>
             <div><label>النوع</label><select id="oType" onchange="renderOrdersTab()">
               <option value="">الكل</option><option value="doc">دوكمنتيشن</option><option value="ward">ورد إكسبرس</option><option value="wa">واتس دوكمنتيشن</option><option value="shop">طلبات المحل</option>
@@ -1830,7 +1831,7 @@ function renderReport(){
     const ENT=Object.fromEntries(RPT.entries.map(e=>[e.id,e]));
     const dmap={}; D.forEach(x=>{ if(x.status==='rejected') return; const k=oNorm(x.orderNo); dmap[k]=dmap[k]||[]; dmap[k].push(x); });
     const usedDiff=new Set();
-    const stTxt=o=>{ if(o.fulfillment==='pickup') return ['استلام','st-gray'];
+    const stTxt=o=>{ if(o.fulfillment==='pickup') return ['استلام','st-gray']; if(o.noPay && !o.entryId) return ['رجع — ما تنحسب','st-rej'];
       const st=o.repStatus||'pending'; if(st==='disputed') return ['اعترض','st-rej']; if(st!=='confirmed') return ['ما أكده','st-await'];
       const e=ENT[o.entryId]; if(!e) return ['قيد محذوف','st-rej']; if(e.status==='approved') return ['معتمد','st-appr']; if(e.status==='rejected') return ['مرفوض','st-rej']; if(e.status==='reviewed') return ['راجعه المشرف','st-rev']; return ['بانتظار المراجعة','st-await']; };
     const lines=[];
@@ -1938,7 +1939,7 @@ function oQuick(k){
   loadOrdersTab();
 }
 function oRate(o){
-  if(o.fulfillment==='pickup') return 0;
+  if(o.fulfillment==='pickup' || o.noPay) return 0;
   if(typeof o.rate==='number' && o.rate>0) return o.rate;
   const a=AREAS.find(x=>x.id===o.areaId); if(!a||!(a.rateDoc>0)) return 0;
   const base = o.brand==='ward' ? a.rateWard : a.rateDoc;
@@ -1946,6 +1947,7 @@ function oRate(o){
 }
 function oStage(o){
   if(o.fulfillment==='pickup') return 'pickup';
+  if(o.noPay && !o.entryId) return 'nopay';
   const st=o.repStatus||'pending';
   if(st==='disputed') return 'disputed';
   if(st!=='confirmed') return 'unconfirmed';
@@ -1962,11 +1964,13 @@ const O_STAGE_UI = {
   unconfirmed:()=>'<span class="st st-gray">—</span>',
   disputed:   ()=>'<span class="st st-gray">—</span>',
   pickup:     ()=>'<span class="st st-gray">لا يحتاج</span>',
-  orphan:     ()=>'<span class="st st-rej">القيد محذوف</span><div class="dim">ارجعه للمندوب أو احذفه</div>'
+  orphan:     ()=>'<span class="st st-rej">القيد محذوف</span><div class="dim">ارجعه للمندوب أو احذفه</div>',
+  nopay:      ()=>'<span class="st st-gray">ما تنحسب</span>'
 };
 function oRepCell(o){
   const st=o.repStatus||'pending';
   if(o.fulfillment==='pickup') return o.pickedUpAt?`<span class="st st-appr">استلمه العميل ${oTime(o.pickedUpAt)}</span>`:'<span class="st st-await">ما استلمه العميل</span>';
+  if(o.noPay && st!=='confirmed') return '<span class="st st-rej">↩︎ رجع</span>';
   if(st==='confirmed') return `<span class="st st-appr">✓ أكد</span><div class="dim">${oTime(o.repActionAt)}</div>`;
   if(st==='disputed') return `<span class="st st-rej">⚠️ اعترض</span><div class="dim">${oEsc(o.disputeReason||'')}</div>`;
   return '<span class="st st-await">⏳ ما أكد</span>';
@@ -2045,6 +2049,7 @@ function renderOrdersTab(){
     (c('orphan').length?tile('orphan',c('orphan').length,amt(c('orphan')),'قيدها محذوف — تحتاج إجراء',true):'')+
     tile('pickup',pk.length,null,'استلام من المتجر')+
     `<div class="otile"><div class="n">${ret.length}</div><div class="l">رجعت للمحل</div></div>`+
+    (()=>{ const ex=base.filter(o=>o.noPay && o.entryId && O_ENTRIES[o.entryId]); return ex.length?`<div class="otile hl" onclick="document.getElementById('oSearch').value='';renderOrdersTab()"><div class="n">${ex.length}</div><div class="l">رجعت بدون توصيل ثاني وهي داخل حساب المندوب — استبعدها</div></div>`:''; })()+
     (()=>{ const ds=base.map(oDiffOf).filter(Boolean); return `<div class="otile"><div class="n">${ds.length}</div><div class="a">${ds.reduce((s,d)=>s+d.amount,0)} ر.س</div><div class="l">فوارق توصيل</div></div>`; })();
 
   // الجدول
@@ -2062,7 +2067,10 @@ function renderOrdersTab(){
     const orig = o.redeliveryOf ? O_ORDERS.find(x=>x.id===o.redeliveryOf) : null;
     let df = oDiffOf(o);
     if(df){ const k=o.repPhone+'|'+o.orderNo; if(diffShown.has(k)) df=null; else diffShown.add(k); }
-    const flags=[o.redeliveryOf?`<span class="fl fl-re">🔁 توصيل ثاني${orig?` · الأول مع ${oEsc(orig.repName)}`:''}</span>`:'',
+    const flags=[o.noPay?`<span class="fl fl-ret">↩︎ رجع بدون توصيل ثاني — ما تنحسب</span>${o.entryId&&O_ENTRIES[o.entryId]&&myRole==='admin'?` <button class="btn-a r" style="padding:3px 8px;font-size:11px" onclick="oExclude('${o.id}')">استبعاد من الحساب</button>`:''}`:'',
+      o.proofImage?`<span class="fl fl-re" style="cursor:zoom-in" onclick="oViewImg('${o.id}')">🧾 إثبات تحويل التوصيل الثاني</span>`:'',
+      (o.needsRepProof&&!o.proofImage)?'<span class="fl fl-ret">بانتظار إثبات المندوب</span>':'',
+      o.redeliveryOf?`<span class="fl fl-re">🔁 توصيل ثاني${orig?` · الأول مع ${oEsc(orig.repName)}`:''}</span>`:'',
       o.multiDelivery?'<span class="fl fl-re">➕ توصيل إضافي لنفس الطلب</span>':'', o.returned?`<span class="fl fl-ret">رجع: ${oEsc(o.returnReason||'')}</span>`:'',
       o.transferredFrom?`<span class="fl fl-tr">محوّل من ${oEsc(o.transferredFrom)}</span>`:''].join('');
     return `<tr class="${sel?'selrow':(sib?'sib':'')}">
@@ -2107,6 +2115,30 @@ function renderOrdersTab(){
     </tbody></table></div>` : 'ما فيه اعتراضات أو بلاغات مفتوحة 👍';
 }
 // تحديد طلب = تحديد قيده كامل (الطلبات اللي أكدها المندوب مع بعض)
+function oViewImg(id){ const o=O_ORDERS.find(x=>x.id===id); if(!o||!o.proofImage) return; const w=window.open(); if(w) w.document.write(`<img src="${o.proofImage}" style="max-width:100%">`); }
+// طلب رجع بدون توصيل ثاني وكان المندوب أكده: نشيله من قيده (ينقص العدد والمبلغ) — حتى لو القيد معتمد
+async function oExclude(id){
+  if(myRole!=='admin'){ noPermissionToast(); return; }
+  const o=O_ORDERS.find(x=>x.id===id); if(!o||!o.entryId) return;
+  const e=O_ENTRIES[o.entryId]; if(!e){ toast('القيد مو موجود'); return; }
+  const rate=(typeof o.rate==='number'&&o.rate>0)?o.rate:0;
+  if(!confirm(`استبعاد الطلب ${o.orderNo} من حساب ${o.repName}؟\nينقص ${rate} ر.س${e.status==='approved'?' من المعتمد':''}.`)) return;
+  try{
+    const entries=(e.entries||[]).map(x=>({...x}));
+    let idx=entries.findIndex(x=>x.areaId===o.areaId && x.source===o.source && x.rate===rate);
+    if(idx<0) idx=entries.findIndex(x=>x.areaId===o.areaId && x.source===o.source);
+    const cut = idx>=0 ? (entries[idx].rate||rate) : rate;
+    if(idx>=0){ entries[idx].count-=1; entries[idx].amount-=cut; if(entries[idx].count<=0) entries.splice(idx,1); }
+    const orderIds=(e.orderIds||[]).filter(x=>x!==o.id);
+    const nos=[...(e.orderNos||[])]; const ni=nos.indexOf(o.orderNo); if(ni>=0) nos.splice(ni,1);
+    const wb=db.batch();
+    if(!entries.length) wb.delete(db.collection('dailyEntries').doc(e.id));
+    else wb.update(db.collection('dailyEntries').doc(e.id), {entries, orderIds, orderNos:nos, totalCount:Math.max(0,(e.totalCount||0)-1), totalAmount:Math.max(0,(e.totalAmount||0)-cut)});
+    wb.update(db.collection('dispatchOrders').doc(o.id), {entryId:null, repStatus:'na'});
+    wb.set(db.collection('auditLog').doc(), {action:'exclude', orderNo:o.orderNo, details:`استبعاد من حساب ${o.repName} (${cut} ر.س) — رجع بدون توصيل ثاني`, by:currentUser.uid, byName:currentUser.email, at:firebase.firestore.FieldValue.serverTimestamp(), date:oRiyadh()});
+    await wb.commit(); toast('تم الاستبعاد ✅'); loadOrdersTab();
+  }catch(err){ console.error(err); toast('ما انحفظ'); }
+}
 function oToggle(id,on){
   const o=O_ORDERS.find(x=>x.id===id); if(!o) return;
   if(oStage(o)==='awaiting') O_ORDERS.filter(x=>x.entryId===o.entryId && oStage(x)==='awaiting').forEach(x=> on?O_SEL.add(x.id):O_SEL.delete(x.id));

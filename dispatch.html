@@ -295,13 +295,19 @@
 <div class="modal-bg" id="returnModal">
   <div class="modal">
     <h3 style="margin-top:0">الطلب رجع للمحل <span id="retNo" style="direction:ltr;unicode-bidi:isolate"></span></h3>
-    <div class="muted" style="margin-bottom:10px">التوصيلة الأولى تنحسب للمندوب. وإذا العميل طلب توصيل ثاني، يتسجل كطلب مستقل مربوط بالأصلي.</div>
     <div class="field"><label>السبب</label><select id="retReason"></select></div>
     <div class="field"><label>توضيح (اختياري)</label><input id="retNote"></div>
-    <label class="chk"><input type="checkbox" id="retPaid" checked> العميل دفع رسوم التوصيل الثاني</label>
+    <div class="field"><label>وش صار بعدها؟</label>
+      <label class="chk" style="margin-top:4px"><input type="radio" name="retMode" value="none" checked onchange="retModeChanged()"> ما فيه توصيل ثاني — <b>ما تنحسب للمندوب</b></label>
+      <label class="chk"><input type="radio" name="retMode" value="redel" onchange="retModeChanged()"> العميل طلب توصيل ثاني ودفع رسومه</label>
+    </div>
+    <div id="retProofBox" class="diffbox">
+      <div class="muted" style="margin-bottom:8px">التوصيلة الأولى تنحسب للمندوب الأول، والثانية تنحسب للي يوصّلها. لازم إثبات تحويل رسوم التوصيل الثاني:</div>
+      <div class="field"><label>صورة إثبات التحويل</label><input type="file" id="retProof" accept="image/*"></div>
+      <label class="chk"><input type="checkbox" id="retProofByRep" onchange="document.getElementById('retProof').disabled=this.checked"> الإثبات عند المندوب — يرفعه هو قبل ما يأكد</label>
+    </div>
     <div style="display:flex;flex-direction:column;gap:8px;margin-top:14px">
-      <button class="primary" onclick="saveReturn(true)">سجّل الرجوع وجهّز توصيل ثاني</button>
-      <button class="ghost" onclick="saveReturn(false)">سجّل الرجوع بس</button>
+      <button class="primary" id="retSaveBtn" onclick="saveReturn()">حفظ</button>
       <button class="ghost" onclick="closeModal('returnModal')">إلغاء</button>
     </div>
   </div>
@@ -569,7 +575,7 @@ function setMode(m){
   document.getElementById('repCard').style.display = m==='pickup'?'none':'';
   document.getElementById('pickNote').style.display = m==='pickup'?'':'none';
   document.getElementById('saveBtn').textContent = m==='pickup'?'حفظ طلبات الاستلام':'حفظ التسليم';
-  pendingMissingId=null; resetForm();
+  pendingMissingId=null; PENDING_REDEL=null; resetForm();
 }
 function addRow(prep, redel){
   // نسخ المنطقة والنوع من آخر طلب — غالباً طلبات الرحلة الوحدة بنفس المنطقة
@@ -791,8 +797,10 @@ async function saveHandover(){
     orders.forEach(o=>{
       if(o.prepId) wb.update(db.collection('prepOrders').doc(o.prepId), {status:'dispatched', dispatchedAt:TS(), batchId:batchRef.id, repName:pickup?'استلام':rep.name});
       const ref = db.collection('dispatchOrders').doc();
+      const pr2 = (o.redeliveryOf && PENDING_REDEL && PENDING_REDEL.origId===o.redeliveryOf) ? PENDING_REDEL : null;
       wb.set(ref, {
         ...o, date, batchId:batchRef.id,
+        ...(o.redeliveryOf ? {proofImage: pr2?pr2.proof:null, needsRepProof: pr2?(!!pr2.byRep && !pr2.proof):false} : {}),
         repPhone: pickup?null:rep.id, repName: pickup?null:rep.name, isAmmar: pickup?false:!!rep.isAmmar,
         handedAt:TS(), departedAt:null, repStatus: pickup?'na':'pending',
         createdBy:currentUser.uid, createdAt:TS()
@@ -800,13 +808,14 @@ async function saveHandover(){
       if(o.multiDelivery) wb.set(db.collection('auditLog').doc(), auditRow('multi', {id:ref.id, orderNo:o.orderNo}, `توصيل إضافي لنفس الطلب · ${pickup?'استلام':rep.name} · ${o.areaName}`));
       if(o.samePhoneSameDay) wb.set(db.collection('auditLog').doc(), auditRow('samePhone', {id:ref.id, orderNo:o.orderNo}, `طلب ثاني لنفس العميل بنفس اليوم · ${pickup?'استلام':rep.name}`));
       if(o.redeliveryOf){
-        wb.update(db.collection('dispatchOrders').doc(o.redeliveryOf), {redeliveryId: ref.id});
+        const pr = (PENDING_REDEL && PENDING_REDEL.origId===o.redeliveryOf) ? PENDING_REDEL : null;
+        wb.update(db.collection('dispatchOrders').doc(o.redeliveryOf), {redeliveryId: ref.id, returned:true, returnedAt:TS(), returnReason: pr?pr.reason:'رجع — توصيل ثاني', secondFeePaid:true});
         wb.set(db.collection('auditLog').doc(), auditRow('redelivery', {id:ref.id, orderNo:o.orderNo}, `توصيل ثاني مع ${rep.name}`));
       }
     });
     if(pendingMissingId){ wb.update(db.collection('missingReports').doc(pendingMissingId), {status:'resolved', resolvedAt:TS(), resolvedBy:currentUser.uid, resolvedOrderNo:orders[0].orderNo}); }
     await wb.commit();
-    pendingMissingId = null;
+    pendingMissingId = null; PENDING_REDEL = null;
     const codes = '';
     const nU=new Set(orders.map(o=>o.orderNo)).size, extraTxt = orders.length>nU ? ` (${orders.length} توصيلة)` : '';
     toast(pickup ? `تم تسجيل ${nU} طلب استلام ✅${codes}` : `تم تسليم ${nU} طلب${extraTxt} لـ ${rep.name} ✅${codes}`);
@@ -820,34 +829,66 @@ function auditRow(action, o, details){
   return {action, orderId:o.id||null, orderNo:o.orderNo||null, details:details||'', by:currentUser.uid, byName:myName, at:TS(), date:localDate()};
 }
 let returnId=null;
+function retModeChanged(){
+  const redel=document.querySelector('input[name=retMode]:checked').value==='redel';
+  document.getElementById('retProofBox').classList.toggle('show',redel);
+  document.getElementById('retSaveBtn').textContent = redel ? 'التالي: اختر مندوب التوصيل الثاني' : 'حفظ الرجوع (ما تنحسب للمندوب)';
+}
 function openReturn(id){
   const o=DAY_ORDERS[id]; if(!o) return;
   returnId=id;
   document.getElementById('retNo').textContent=o.orderNo;
   document.getElementById('retNote').value='';
-  document.getElementById('retPaid').checked=true;
+  document.querySelector('input[name=retMode][value=none]').checked=true;
+  document.getElementById('retProof').value=''; document.getElementById('retProof').disabled=false;
+  document.getElementById('retProofByRep').checked=false;
+  retModeChanged();
   document.getElementById('returnModal').classList.add('show');
 }
-async function saveReturn(andRedeliver){
+// تصغير الصورة قبل الحفظ (نفس طريقة إثبات الفوارق عند المندوب)
+function compressImage(file, max=1000, q=0.6){
+  return new Promise((res,rej)=>{
+    const img=new Image(), url=URL.createObjectURL(file);
+    img.onload=()=>{ const sc=Math.min(1,max/Math.max(img.width,img.height)); const c=document.createElement('canvas');
+      c.width=Math.round(img.width*sc); c.height=Math.round(img.height*sc); c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+      URL.revokeObjectURL(url); res(c.toDataURL('image/jpeg',q)); };
+    img.onerror=rej; img.src=url;
+  });
+}
+let PENDING_REDEL=null;   // بيانات الرجوع — تنحفظ على الطلب الأصلي مع حفظ التوصيل الثاني
+async function saveReturn(){
   const o=DAY_ORDERS[returnId]; if(!o) return;
   const reason=document.getElementById('retReason').value, note=document.getElementById('retNote').value.trim();
-  const paid=document.getElementById('retPaid').checked;
-  try{
-    const wb=db.batch();
-    wb.update(db.collection('dispatchOrders').doc(o.id), {returned:true, returnedAt:TS(), returnReason:reason+(note?' — '+note:''), secondFeePaid:paid});
-    wb.set(db.collection('auditLog').doc(), auditRow('return', o, `${reason}${note?' — '+note:''}${paid?' · العميل دفع توصيل ثاني':' · بدون رسوم توصيل ثاني'}`));
-    await wb.commit();
-    closeModal('returnModal');
-    o.returned=true; o.returnReason=reason+(note?' — '+note:'');
-    if(andRedeliver){
-      if(MODE!=='delivery'){ MODE='pickup'; setMode('delivery'); }
-      showPane('new'); resetForm();
-      document.getElementById('orderRows').innerHTML=''; rowSeq=0;
-      addRow(null, o);
-      toast('اختر المندوب للتوصيل الثاني واحفظ');
-    } else { toast('انسجل رجوع الطلب'); loadDay(); }
-  }catch(e){ console.error(e); toast('ما انحفظ'); }
+  const full=reason+(note?' — '+note:'');
+  const redel=document.querySelector('input[name=retMode]:checked').value==='redel';
+  if(!redel){
+    // رجوع بدون توصيل ثاني: التوصيلة ما تنحسب للمندوب
+    try{
+      const wb=db.batch();
+      const confirmed = repStatusOf(o)==='confirmed';
+      wb.update(db.collection('dispatchOrders').doc(o.id), confirmed
+        ? {returned:true, returnedAt:TS(), returnReason:full, noPay:true}          // مؤكد: الإدارة تستبعده من القيد
+        : {returned:true, returnedAt:TS(), returnReason:full, noPay:true, repStatus:'na'});
+      wb.set(db.collection('auditLog').doc(), auditRow('return', o, `${full} · بدون توصيل ثاني — ما تنحسب للمندوب${confirmed?' (كان مؤكد — الإدارة تستبعده من القيد)':''}`));
+      await wb.commit();
+      closeModal('returnModal'); toast('انسجل الرجوع — ما تنحسب للمندوب'); loadDay();
+    }catch(e){ console.error(e); toast('ما انحفظ'); }
+    return;
+  }
+  const byRep=document.getElementById('retProofByRep').checked;
+  const f=document.getElementById('retProof').files[0];
+  if(!byRep && !f){ toast('ارفع صورة إثبات تحويل رسوم التوصيل الثاني، أو حدد إن الإثبات عند المندوب'); return; }
+  let proof=null;
+  if(f){ try{ proof=await compressImage(f); }catch(e){ toast('تعذّر قراءة الصورة'); return; } }
+  PENDING_REDEL={origId:o.id, reason:full, proof, byRep};
+  closeModal('returnModal');
+  if(MODE!=='delivery'){ MODE='pickup'; document.querySelectorAll('.orow').forEach(x=>x.remove()); setMode('delivery'); }
+  showPane('new'); resetForm();
+  document.getElementById('orderRows').innerHTML=''; rowSeq=0;
+  addRow(null, {...o, returnReason:full});
+  toast('اختر المندوب للتوصيل الثاني واحفظ');
 }
+
 let transferId=null;
 function openTransfer(id){
   const o=DAY_ORDERS[id]; if(!o) return;
@@ -1015,6 +1056,9 @@ async function deleteBatch(batchId){
 
 function orderFlags(o){
   let f='';
+  if(o.noPay) f+=' <span class="flag f-ret">ما تنحسب</span>';
+  if(o.needsRepProof && !o.proofImage) f+=' <span class="flag f-ret">بانتظار إثبات المندوب</span>';
+  if(o.proofImage) f+=` <span class="flag f-re" style="cursor:zoom-in" onclick="window.open().document.write('<img src=&quot;'+this.dataset.src+'&quot; style=&quot;max-width:100%&quot;>')" data-src="${o.proofImage}">🧾 إثبات التحويل</span>`;
   if(o.redeliveryOf) f+=' <span class="flag f-re">🔁 توصيل ثاني</span>';
   if(o.multiDelivery) f+=' <span class="flag f-re">➕ توصيل إضافي</span>';
   if(o.returned) f+=` <span class="flag f-ret">↩︎ رجع: ${esc(o.returnReason||'')}</span>`;
@@ -1036,6 +1080,7 @@ function orderActions(o,b){
 /* ---------------- المطابقة مع المناديب ---------------- */
 function repStatusOf(o){ return o.repStatus || 'pending'; }
 function repStatusBadge(o){
+  if(o.noPay) return '<span class="rs rs-disputed">↩︎ رجع — ما تنحسب</span>';
   const st=repStatusOf(o);
   if(st==='confirmed') return '<span class="rs rs-confirmed">✓ أكد</span>';
   if(st==='disputed') return `<span class="rs rs-disputed">⚠️ اعترض</span><div class="muted" style="font-size:11.5px">${esc(o.disputeReason||'')}</div>`;
@@ -1203,9 +1248,9 @@ async function loadReports(){
   const reps = group(deliv, o=>o.repPhone);
   deliv.forEach(o=>{
     const area=AREAS.find(a=>a.id===o.areaId);
-    const r = (typeof o.rate==='number' && o.rate>0) ? o.rate : (isPriced(area) ? rateFor(area,o.type,{isAmmar:o.isAmmar}) : 0);
+    const r = o.noPay ? 0 : (typeof o.rate==='number' && o.rate>0) ? o.rate : (isPriced(area) ? rateFor(area,o.type,{isAmmar:o.isAmmar}) : 0);
     reps[o.repPhone].amount += r;
-    if(!r) reps[o.repPhone].unpriced = (reps[o.repPhone].unpriced||0)+1;
+    if(!r && !o.noPay) reps[o.repPhone].unpriced = (reps[o.repPhone].unpriced||0)+1;
   });
   const unpricedTotal = Object.values(reps).reduce((s,r)=>s+(r.unpriced||0),0);
   const waits={}; batches.forEach(b=>{ const w=minsBetween(b.handedAt,b.departedAt); if(w!==null&&w>=0){ (waits[b.repPhone]=waits[b.repPhone]||[]).push(w);} });

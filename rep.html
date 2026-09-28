@@ -1124,6 +1124,7 @@ function closeModal(id){ document.getElementById(id).classList.remove('show'); }
 function repStatusOf(o){ return o.repStatus || 'pending'; }
 // السعر: المحفوظ وقت التسليم، ولو كانت المنطقة بدون سعر وقتها ناخذ سعرها الحالي
 function orderRate(o){
+  if(o.noPay) return 0;   // رجع بدون توصيل ثاني — ما تنحسب
   if(typeof o.rate==='number' && o.rate>0) return o.rate;
   const a = AREAS.find(x=>x.id===o.areaId);
   return a ? rateForRep(a, o.brand) : 0;
@@ -1144,6 +1145,7 @@ function listenMyOrders(){
 let ENTRY_STATUS = {}, ENTRY_REASON = {};
 // حالة الطلب عند المندوب: تأكيده ← ثم اعتماد الإدارة لقيده اليومي
 function orderStage(o){
+  if(o.noPay && repStatusOf(o)!=='confirmed') return {k:'nopay'};
   const st=repStatusOf(o);
   if(st==='disputed') return {k:'disp'};
   if(st==='confirmed'){
@@ -1154,13 +1156,17 @@ function orderStage(o){
     return {k:'conf'};                         // أكدتها — بانتظار مراجعة المشرف
   }
   if(orderRate(o)<=0) return {k:'nop'};
+  if(o.needsRepProof && !o.proofImage) return {k:'proof'};   // توصيل ثاني: لازم يرفع إثبات التحويل قبل التأكيد
   return {k:'pend'};
 }
 // مراحل الطلب بعد تأكيد المندوب: أكدت ← المشرف ← الإدارة
 function stageCell(o){
   const k=orderStage(o).k;
+  if(k==='nopay') return '<span class="sp rej">↩︎ رجع للمحل — ما تنحسب</span>';
+  if(k==='proof') return `<button class="btn-ok" style="background:#3A6EA5" onclick="pickProof('${o.id}')">📎 ارفع إثبات التحويل</button><div class="stxt">مطلوب قبل التأكيد</div>`;
   if(k==='disp') return '<span class="sp rej">اعترضت — عند مشرف الإنتاج</span>';
   if(k==='nop') return '<span class="sp gray">المنطقة بانتظار التسعير</span>';
+  if(o.noPay && k!=='rej') return '<span class="sp rej">↩︎ رجع — الإدارة بتستبعدها من الحساب</span>';
   if(k==='rej') return `<span class="sp rej">رفضته الإدارة</span>${ENTRY_REASON[o.entryId]?`<div class="sub" style="color:#B23A3A">${escH(ENTRY_REASON[o.entryId])}</div>`:''}`;
   const step=(label,state)=>`<span class="stp ${state}">${state==='on'?'✓ ':''}${label}</span>`;
   const s2 = k==='rev'||k==='appr' ? 'on' : 'cur';
@@ -1215,7 +1221,8 @@ function renderMyOrders(){
             multi ? `<div class="sub" style="color:#3A6EA5">➕ طلب لمستلمين مختلفين (${g.length} توصيلات)</div>` : '',
             o.redeliveryOf ? '<div class="sub" style="color:#3A6EA5">🔁 توصيل ثاني — توصيلة مستقلة تنحسب لك</div>' : '',
             o.transferredFrom ? `<div class="sub" style="color:var(--ink-soft)">محوّل من ${escH(o.transferredFrom)}</div>` : '',
-            o.returned ? `<div class="sub" style="color:#B23A3A">↩︎ رجع: ${escH(o.returnReason||'')}</div>` : '',
+            (!multi && o.returned) ? `<div class="sub" style="color:#B23A3A">↩︎ رجع: ${escH(o.returnReason||'')}${o.noPay?' — ما تنحسب':' — العميل طلب توصيل ثاني'}</div>` : '',
+            (o.proofImage) ? `<div class="sub"><a href="#" style="color:#3A6EA5" onclick="viewProof('${o.id}');return false">🧾 إثبات تحويل التوصيل الثاني</a></div>` : '',
             (o.ibrahimNote && stg.k==='pend') ? `<div class="sub" style="color:var(--amber)">ملاحظة: ${escH(o.ibrahimNote)}</div>` : ''
           ].join('');
           const act = gPend.length
@@ -1224,7 +1231,8 @@ function renderMyOrders(){
           const rs = multi ? ` rowspan="${g.length}"` : '';
           return g.map((x,i)=>{
             const r=orderRate(x);
-            const areaCell = `<td>${multi?`<span class="dim" style="font-size:10.5px">منطقة ${i+1}:</span> `:''}${escH(x.areaName)}</td><td class="price">${r?r+' ر.س':'—'}</td>`;
+            const xflag = multi && x.returned ? `<div class="sub" style="color:#B23A3A">↩︎ رجع${x.noPay?' — ما تنحسب':''}</div>` : '';
+            const areaCell = `<td>${multi?`<span class="dim" style="font-size:10.5px">منطقة ${i+1}:</span> `:''}${escH(x.areaName)}${xflag}</td><td class="price">${x.noPay?'<s class="dim">'+(x.rate||'')+'</s> 0 ر.س':(r?r+' ر.س':'—')}</td>`;
             return i===0
               ? `<tr><td${rs}><div class="no">${escH(o.orderNo)}</div>${sub}</td><td${rs} style="white-space:nowrap">${OTYPES[o.type]?.label||''}</td>${areaCell}<td${rs}>${act}</td></tr>`
               : `<tr>${areaCell}</tr>`;
@@ -1241,7 +1249,7 @@ function renderMyOrders(){
 let confirming=false;
 async function confirmOrders(ids){
   if(confirming) return;
-  const orders = MY_ORDERS.filter(o=>ids.includes(o.id) && repStatusOf(o)==='pending' && orderRate(o)>0);
+  const orders = MY_ORDERS.filter(o=>ids.includes(o.id) && orderStage(o).k==='pend');
   if(!orders.length) return;
   confirming=true;
   try{
@@ -1272,6 +1280,25 @@ async function confirmOrders(ids){
   confirming=false;
 }
 
+// إثبات تحويل رسوم التوصيل الثاني (لما يكون الإثبات عند المندوب)
+let proofFor=null;
+function pickProof(id){
+  proofFor=id;
+  let inp=document.getElementById('proofInput');
+  if(!inp){ inp=document.createElement('input'); inp.type='file'; inp.accept='image/*'; inp.id='proofInput'; inp.style.display='none';
+    inp.onchange=async()=>{ const f=inp.files[0]; if(!f||!proofFor) return;
+      try{ const data=await compressImageToBase64(f);
+        await db.collection('dispatchOrders').doc(proofFor).update({proofImage:data, proofAt:TS()});
+        toast('تم رفع الإثبات ✅ — تقدر تأكد الطلب الحين'); }
+      catch(e){ console.error(e); toast('ما انرفع — تحقق من الإنترنت'); }
+      inp.value=''; proofFor=null; };
+    document.body.appendChild(inp); }
+  inp.click();
+}
+function viewProof(id){
+  const o=MY_ORDERS.find(x=>x.id===id); if(!o||!o.proofImage) return;
+  const w=window.open(); if(w) w.document.write(`<img src="${o.proofImage}" style="max-width:100%">`);
+}
 let disputeId=null, disputeReason='';
 document.addEventListener('click',e=>{
   const c=e.target.closest('#dispReasons .chip'); if(!c) return;

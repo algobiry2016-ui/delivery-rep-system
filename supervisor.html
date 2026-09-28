@@ -176,10 +176,10 @@
     <!-- ملخص المناديب -->
     <div id="pane-reps" class="pane">
       <div class="card"><h3>ملخص كل مندوب للفترة</h3><div class="scroll"><table style="min-width:900px">
-        <thead><tr><th>المندوب</th><th>مشاوير</th><th>دوكمنتيشن</th><th>ورد إكسبرس</th><th>واتس</th><th>محل</th><th>أكد</th><th>ما أكد</th><th>اعتراض</th><th>رجعت</th><th>فوارق</th><th>معتمد</th><th>بانتظار</th><th>الإجمالي</th></tr></thead>
+        <thead><tr><th>المندوب</th><th>التوصيلات</th><th>دوكمنتيشن</th><th>ورد إكسبرس</th><th>واتس</th><th>محل</th><th>أكد</th><th>ما أكد</th><th>اعتراض</th><th>رجعت</th><th>فوارق</th><th>معتمد</th><th>بانتظار</th><th>الإجمالي</th></tr></thead>
         <tbody id="repsBody"></tbody><tfoot id="repsFoot"></tfoot>
       </table></div></div>
-      <div class="card"><h3>المناديب × المناطق (عدد المشاوير)</h3><div class="scroll" id="matrixBox"></div></div>
+      <div class="card"><h3>المناديب × المناطق (عدد التوصيلات)</h3><div class="scroll" id="matrixBox"></div></div>
       <div class="card"><h3>حسب اليوم</h3><div class="scroll" id="dailyBox"></div></div>
     </div>
 
@@ -300,7 +300,7 @@ async function loadAll(){
   renderAll();
 }
 function rate(o){
-  if(o.fulfillment==='pickup') return 0;
+  if(o.fulfillment==='pickup' || o.noPay) return 0;
   if(typeof o.rate==='number' && o.rate>0) return o.rate;
   const a=AREAS.find(x=>x.id===o.areaId); if(!a||!(a.rateDoc>0)) return 0;
   const b=o.brand==='ward'?a.rateWard:a.rateDoc; return o.isAmmar?Math.max(0,b-5):b;
@@ -309,6 +309,7 @@ function diffOf(o){ return DIFFMAP[(o.repPhone||'')+'|'+norm(o.orderNo)]||null; 
 // مراحل الطلب من منظور المشرف
 function stage(o){
   if(o.fulfillment==='pickup') return 'pickup';
+  if(o.noPay && !o.entryId) return 'nopay';
   const st=o.repStatus||'pending';
   if(st==='disputed') return 'disputed';
   if(st!=='confirmed') return 'unconfirmed';
@@ -325,11 +326,12 @@ const STAGE_UI = {
   approved:'<span class="st st-appr">✓ معتمد</span>',
   rejected:'<span class="st st-rej">مرفوض</span>',
   unconfirmed:'<span class="st st-gray">—</span>', disputed:'<span class="st st-gray">—</span>',
-  pickup:'<span class="st st-gray">لا يحتاج</span>', orphan:'<span class="st st-rej">القيد محذوف — عند الإدارة</span>'
+  pickup:'<span class="st st-gray">لا يحتاج</span>', nopay:'<span class="st st-gray">رجعت — ما تنحسب</span>', orphan:'<span class="st st-rej">القيد محذوف — عند الإدارة</span>'
 };
 function repCell(o){
   if(o.fulfillment==='pickup') return o.pickedUpAt?`<span class="st st-appr">استلمه العميل</span>`:'<span class="st st-await">ما استلمه</span>';
   const st=o.repStatus||'pending';
+  if(o.noPay && st!=='confirmed') return '<span class="st st-rej">↩︎ رجع</span>';
   if(st==='confirmed') return `<span class="st st-appr">✓ أكد</span><div class="dim">${tm(o.repActionAt)}</div>`;
   if(st==='disputed') return `<span class="st st-rej">⚠️ اعترض</span><div class="dim">${esc(o.disputeReason||'')}</div>`;
   return '<span class="st st-await">⏳ ما أكد</span>';
@@ -349,7 +351,7 @@ function renderOrders(){
   const tr=c('toReview');
   const tile=(k,n,a,lb,hl)=>`<div class="tile ${hl?'hl':''}" onclick="document.getElementById('fStatus').value='${k}';renderOrders()"><div class="n">${n}</div>${a!==null?`<div class="a">${a} ر.س</div>`:''}<div class="lb">${lb}</div></div>`;
   document.getElementById('oTiles').innerHTML =
-    `<div class="tile" onclick="document.getElementById('fStatus').value='';renderOrders()"><div class="n">${new Set(base.map(o=>o.orderNo)).size}</div><div class="a">${base.filter(o=>o.fulfillment!=='pickup').length} مشوار · ${amt(base)} ر.س</div><div class="lb">طلبات (بدون تكرار)</div></div>`+
+    `<div class="tile" onclick="document.getElementById('fStatus').value='';renderOrders()"><div class="n">${new Set(base.map(o=>o.orderNo)).size}</div><div class="a">${base.filter(o=>o.fulfillment!=='pickup').length} توصيلة · ${amt(base)} ر.س</div><div class="lb">طلبات (بدون تكرار)</div></div>`+
     tile('toReview',tr.length,amt(tr),'تحتاج مراجعتك',tr.length>0)+
     tile('reviewed',c('reviewed').length,amt(c('reviewed')),'تمت المراجعة')+
     tile('approved',c('approved').length,amt(c('approved')),'معتمد')+
@@ -365,7 +367,9 @@ function renderOrders(){
     const s=stage(o), r=rate(o), sel=SEL.has(o.id), can=canRev && s==='toReview';
     let df=diffOf(o); if(df){ const k=o.repPhone+'|'+o.orderNo; if(diffShown.has(k)) df=null; else diffShown.add(k); }
     const orig=o.redeliveryOf?ORDERS.find(x=>x.id===o.redeliveryOf):null;
-    const flags=[o.redeliveryOf?`<span class="fl fl-re">🔁 توصيل ثاني${orig?' · الأول مع '+esc(orig.repName):''}</span>`:'',
+    const flags=[o.noPay?'<span class="fl fl-ret">↩︎ رجع بدون توصيل ثاني — ما تنحسب</span>':'',
+      o.proofImage?`<span class="fl fl-re" style="cursor:zoom-in" onclick="viewImg(ORDERS.find(x=>x.id==='${o.id}').proofImage)">🧾 إثبات التحويل</span>`:'',
+      o.redeliveryOf?`<span class="fl fl-re">🔁 توصيل ثاني${orig?' · الأول مع '+esc(orig.repName):''}</span>`:'',
       o.multiDelivery?'<span class="fl fl-re">➕ توصيل إضافي لنفس الطلب</span>':'',
       o.returned?`<span class="fl fl-ret">رجع: ${esc(o.returnReason||'')}</span>`:'',
       o.transferredFrom?`<span class="fl fl-tr">محوّل من ${esc(o.transferredFrom)}</span>`:''].join('');
@@ -469,7 +473,7 @@ function renderReps(){
   // حسب اليوم
   const days=[...new Set(repFiltered().map(o=>o.date))].sort().reverse();
   const all=repFiltered();
-  document.getElementById('dailyBox').innerHTML = days.length ? `<table style="min-width:640px"><thead><tr><th>التاريخ</th><th>اليوم</th>${Object.values(TYPES).map(t=>`<th>${t}</th>`).join('')}<th>استلام</th><th>المشاوير</th></tr></thead><tbody>
+  document.getElementById('dailyBox').innerHTML = days.length ? `<table style="min-width:640px"><thead><tr><th>التاريخ</th><th>اليوم</th>${Object.values(TYPES).map(t=>`<th>${t}</th>`).join('')}<th>استلام</th><th>التوصيلات</th></tr></thead><tbody>
     ${days.map(d=>{ const l=all.filter(o=>o.date===d); return `<tr><td>${d}</td><td>${new Date(d+'T12:00:00').toLocaleDateString('ar-SA',{weekday:'long'})}</td>${Object.keys(TYPES).map(t=>`<td>${l.filter(o=>o.type===t&&o.fulfillment!=='pickup').length}</td>`).join('')}<td>${l.filter(o=>o.fulfillment==='pickup').length}</td><td><b>${l.filter(o=>o.fulfillment!=='pickup').length}</b></td></tr>`; }).join('')}</tbody></table>` : '<div class="empty">—</div>';
 }
 
