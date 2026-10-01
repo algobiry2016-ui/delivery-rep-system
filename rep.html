@@ -1222,6 +1222,7 @@ function renderMyOrders(){
             o.redeliveryOf ? '<div class="sub" style="color:#3A6EA5">🔁 توصيل ثاني — توصيلة مستقلة تنحسب لك</div>' : '',
             o.transferredFrom ? `<div class="sub" style="color:var(--ink-soft)">محوّل من ${escH(o.transferredFrom)}</div>` : '',
             (!multi && o.returned) ? `<div class="sub" style="color:#B23A3A">↩︎ رجع: ${escH(o.returnReason||'')}${o.noPay?' — ما تنحسب':' — العميل طلب توصيل ثاني'}</div>` : '',
+            o.contactedAt ? `<div class="sub" style="color:var(--green)">📞 التواصل مع المستلم ${fmtT(o.contactedAt)}</div>` : '',
             (o.proofImage) ? `<div class="sub"><a href="#" style="color:#3A6EA5" onclick="viewProof('${o.id}');return false">🧾 إثبات تحويل التوصيل الثاني</a></div>` : '',
             (o.ibrahimNote && stg.k==='pend') ? `<div class="sub" style="color:var(--amber)">ملاحظة: ${escH(o.ibrahimNote)}</div>` : ''
           ].join('');

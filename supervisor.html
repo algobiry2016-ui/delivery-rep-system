@@ -157,7 +157,7 @@
           <thead><tr>
             <th><input type="checkbox" id="oAll" onchange="toggleAll(this.checked)"></th>
             <th>التاريخ</th><th>المندوب</th><th>رقم الطلب</th><th>النوع</th><th>المنطقة</th><th>السعر</th><th>فارق التوصيل</th>
-            <th>التسليم ← الخروج</th><th>المندوب أكد؟</th><th>المراجعة والاعتماد</th><th>ملاحظات</th>
+            <th>التسليم ← الخروج · 📞 التواصل</th><th>المندوب أكد؟</th><th>المراجعة والاعتماد</th><th>ملاحظات</th>
           </tr></thead>
           <tbody id="oBody"></tbody>
         </table></div>
@@ -380,7 +380,7 @@ function renderOrders(){
       <td>${o.fulfillment==='pickup'?'—':esc(o.areaName)}</td>
       <td style="font-weight:900;white-space:nowrap">${o.fulfillment==='pickup'?'—':(r?r+' ر.س':'<span class="st st-await">بدون سعر</span>')}</td>
       <td style="white-space:nowrap">${df?`<b>+${df.amount} ر.س</b><div class="dim">${df.status==='approved'?'معتمد':'بانتظار'}${df.area?' · '+esc(df.area):''}</div>`:'<span class="dim">—</span>'}</td>
-      <td class="dim">${tm(o.handedAt)}${o.departedAt?' ← '+tm(o.departedAt):''}</td>
+      <td class="dim">${tm(o.handedAt)}${o.departedAt?' ← '+tm(o.departedAt):''}${o.contactedAt?`<div>📞 تواصل ${tm(o.contactedAt)}</div>`:''}</td>
       <td>${repCell(o)}</td><td>${STAGE_UI[s]}</td>
       <td>${flags}${o.notes?`<div class="dim">${esc(o.notes)}</div>`:''}</td></tr>`;
   }).join('');

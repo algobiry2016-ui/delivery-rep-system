@@ -75,6 +75,9 @@
   .flag{display:inline-block;font-size:11px;font-weight:700;padding:1px 7px;border-radius:8px;margin-inline-start:4px;}
   .f-ret{background:var(--red-bg);color:var(--red);} .f-re{background:#E6EEF5;color:#3A6EA5;} .f-tr{background:#F2EEE9;color:var(--ink);} .f-pick{background:#EEE6F2;color:#7A5C8A;}
   .orow.redel{background:#EEF3F8;border-color:#C9D8E8;}
+  .tpk{display:flex;gap:4px;align-items:center;flex-wrap:wrap;}
+  .tpk select{width:auto;padding:7px 6px;font-size:14px;}
+  .tpk .now{background:var(--cream);border:1px solid var(--line);border-radius:7px;padding:6px 9px;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;}
   .rowtag{font-size:12px;font-weight:700;color:#3A6EA5;margin:4px 0 8px;}
 
   .badge{display:inline-block;padding:2px 9px;border-radius:10px;font-size:11.5px;font-weight:700;color:#fff;}
@@ -573,6 +576,7 @@ function setMode(m){
   document.getElementById('modeDel').classList.toggle('on',m==='delivery');
   document.getElementById('modePick').classList.toggle('on',m==='pickup');
   document.getElementById('repCard').style.display = m==='pickup'?'none':'';
+  document.querySelectorAll('.o-contact-field').forEach(x=>x.style.display = m==='pickup'?'none':'');
   document.getElementById('pickNote').style.display = m==='pickup'?'':'none';
   document.getElementById('saveBtn').textContent = m==='pickup'?'حفظ طلبات الاستلام':'حفظ التسليم';
   pendingMissingId=null; PENDING_REDEL=null; resetForm();
@@ -605,7 +609,10 @@ function addRow(prep, redel){
       <div class="field"><select class="o-florist" ${prep?'disabled':''}>${floristOptions(prep?prep.floristName:(redel?redel.florist:''))}</select></div>
       <div class="field o-area-field" style="${MODE==='pickup'?'display:none':''}"><select class="o-area" onchange="onAreaSelect(this)">${areaOptions(redel?redel.areaId:prevArea)}</select></div>
     </div>
-    <div class="field" style="margin:0"><input class="o-notes" placeholder="ملاحظات (اختياري)" value="${redel?esc('توصيل ثاني — '+(redel.returnReason||'')):''}"></div>
+    <div class="row2">
+      <div class="field" style="margin:0"><input class="o-notes" placeholder="ملاحظات (اختياري)" value="${redel?esc('توصيل ثاني — '+(redel.returnReason||'')):''}"></div>
+      <div class="field o-contact-field" style="margin:0;${MODE==='pickup'?'display:none':''}"><label style="font-size:11.5px">وقت تواصل المندوب مع المستلم (لإرسال الموقع)</label>${timePicker('')}</div>
+    </div>
     <div class="extra-areas"></div>
     ${(redel||prep)?'':`<button type="button" class="mini addx" style="margin-top:8px;${MODE==='pickup'?'display:none':''}" onclick="addExtraArea('${id}')">＋ منطقة توصيل ثانية لنفس الطلب (مستلم مختلف)</button>`}`;
   document.getElementById('orderRows').appendChild(div);
@@ -715,6 +722,8 @@ async function saveHandover(){
     const type = r.dataset.type||'doc';
     const isRedel = !!r.dataset.redeliveryOf;
     const multi = false;
+    const cTime = pickup ? '' : readTime(r.querySelector('.o-contact-field .tpk'));
+    if(cTime===null){ toast(`طلب ${n}: كمّل وقت التواصل (الساعة والدقيقة وص/م) أو امسحه`); return; }
     const extras = pickup ? [] : [...r.querySelectorAll('.o-area-x')].map(x=>x.value);
     if(extras.some(v=>!v)){ toast(`طلب ${n}: اختر المنطقة الإضافية أو شيلها`); return; }
     if(PHONE_TYPES.includes(type) && !isRedel){
@@ -737,6 +746,7 @@ async function saveHandover(){
       rate: (!pickup && isPriced(area)) ? rateFor(area,type,rep) : null,   // السعر وقت التسليم — ما يتغير لو تغيّرت الأسعار بعدين
       notes:r.querySelector('.o-notes').value.trim(),
       redeliveryOf: r.dataset.redeliveryOf || null,
+      contactTime: cTime || null,
       multiDelivery: multi,
       manual: FLORIST_FLOW && !prep, prepId: prep?prep.id:null,
       floristReceivedAt: prep?prep.receivedAt:null, floristReadyAt: prep?prep.readyAt:null,
@@ -800,6 +810,7 @@ async function saveHandover(){
       const pr2 = (o.redeliveryOf && PENDING_REDEL && PENDING_REDEL.origId===o.redeliveryOf) ? PENDING_REDEL : null;
       wb.set(ref, {
         ...o, date, batchId:batchRef.id,
+        ...(o.contactTime ? {contactedAt: contactTs(date,o.contactTime), contactedBy:'dispatcher'} : {}),
         ...(o.redeliveryOf ? {proofImage: pr2?pr2.proof:null, needsRepProof: pr2?(!!pr2.byRep && !pr2.proof):false} : {}),
         repPhone: pickup?null:rep.id, repName: pickup?null:rep.name, isAmmar: pickup?false:!!rep.isAmmar,
         handedAt:TS(), departedAt:null, repStatus: pickup?'na':'pending',
@@ -990,10 +1001,10 @@ async function loadDay(){
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${status}${departBtn}</div>
       </div>
       <div class="scroll"><table>
-        <thead><tr><th>رقم الطلب</th><th>النوع</th><th>المنسق</th><th>${b.isPickup?'الاستلام':'المنطقة'}</th><th>${b.isPickup?'':'المندوب'}</th><th>ملاحظات</th><th></th></tr></thead>
+        <thead><tr><th>رقم الطلب</th><th>النوع</th><th>المنسق</th><th>${b.isPickup?'الاستلام':'المنطقة'}</th><th>${b.isPickup?'':'التواصل مع المستلم ← الخروج من المحل'}</th><th>${b.isPickup?'':'المندوب'}</th><th>ملاحظات</th><th></th></tr></thead>
         <tbody>${orders.map(o=>`<tr>
           <td><b style="direction:ltr;unicode-bidi:isolate">${esc(o.orderNo)}</b>${o.manual?' <span class="manual-tag">يدوي</span>':''}${orderFlags(o)}</td><td>${typeBadge(o.type)}</td><td>${esc(o.florist)}${o.floristReadyAt?`<div class="muted" style="font-size:11.5px">تجهيز ${minsBetween(o.floristReceivedAt,o.floristReadyAt)} د · انتظر ${minsBetween(o.floristReadyAt,o.handedAt)} د</div>`:''}</td>
-          <td>${isPickup(o) ? (o.pickedUpAt?`<span class="rs rs-confirmed">استلمه ${fmtTime(o.pickedUpAt)}</span>`:'<span class="rs rs-pending">ما استلمه</span>') : esc(o.areaName)}</td><td>${isPickup(o)?'':repStatusBadge(o)}</td><td>${esc(o.notes)}</td>
+          <td>${isPickup(o) ? (o.pickedUpAt?`<span class="rs rs-confirmed">استلمه ${fmtTime(o.pickedUpAt)}</span>`:'<span class="rs rs-pending">ما استلمه</span>') : esc(o.areaName)}</td><td>${isPickup(o)?'':contactCell(o)}</td><td>${isPickup(o)?'':repStatusBadge(o)}</td><td>${esc(o.notes)}</td>
           <td style="white-space:nowrap">${orderActions(o,b)}</td>
         </tr>`).join('')}</tbody>
       </table></div>
@@ -1017,6 +1028,8 @@ async function searchOrder(){
 }
 
 async function markDeparted(batchId){
+  const noContact=Object.values(DAY_ORDERS).filter(o=>o.batchId===batchId && !isPickup(o) && !o.contactedAt);
+  if(noContact.length && !confirm(`فيه ${noContact.length} طلب ما انسجل له وقت تواصل المندوب مع المستلم:\n${noContact.map(o=>o.orderNo).join('، ')}\n\nتسجّل خروج المندوب كذا؟`)) return;
   try{
     const oSnap = await db.collection('dispatchOrders').where('batchId','==',batchId).get();
     const wb = db.batch();
@@ -1054,6 +1067,62 @@ async function deleteBatch(batchId){
   }catch(e){ console.error(e); toast('ما انحذف'); }
 }
 
+// وقت تواصل المندوب مع المستلم (عشان يرسل الموقع) — يسجله المندوب من تطبيقه أو مشرف الإنتاج من هنا
+// وقت تواصل المندوب مع المستلم (عشان يرسل الموقع) — يسجله مشرف الإنتاج وقت التسليم أو بعده من هنا
+function contactTs(date, hhmm){ return firebase.firestore.Timestamp.fromDate(new Date(`${date}T${hhmm}:00+03:00`)); }
+// منتقي وقت بسيط (ساعة/دقيقة/ص-م + زر الآن) — بدل حقل الوقت حق المتصفح اللي يضيع لو ما انختار ص/م
+function timePicker(val){
+  let h='', m='', ap='';
+  if(val){ const [H,M]=val.split(':').map(Number); ap=H>=12?'pm':'am'; h=String(H%12||12); m=String(M).padStart(2,'0'); }
+  const hs=['<option value="">ساعة</option>',...[...Array(12)].map((_,i)=>`<option ${String(i+1)===h?'selected':''}>${i+1}</option>`)].join('');
+  const ms=['<option value="">دقيقة</option>',...[...Array(60)].map((_,i)=>{const v=String(i).padStart(2,'0');return `<option ${v===m?'selected':''}>${v}</option>`;})].join('');
+  return `<div class="tpk"><select class="tp-h">${hs}</select><span>:</span><select class="tp-m">${ms}</select>
+    <select class="tp-ap"><option value="">ص/م</option><option value="am" ${ap==='am'?'selected':''}>ص</option><option value="pm" ${ap==='pm'?'selected':''}>م</option></select>
+    <button type="button" class="now" onclick="setNow(this.closest('.tpk'))">الآن</button></div>`;
+}
+function setNow(el){
+  const t=new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',timeZone:'Asia/Riyadh'}).split(':').map(Number);
+  el.querySelector('.tp-h').value=String(t[0]%12||12); el.querySelector('.tp-m').value=String(t[1]).padStart(2,'0'); el.querySelector('.tp-ap').value=t[0]>=12?'pm':'am';
+}
+// يرجع "HH:MM" (24 ساعة)، أو "" لو فاضي، أو null لو ناقص
+function readTime(el){
+  if(!el) return '';
+  const h=el.querySelector('.tp-h').value, m=el.querySelector('.tp-m').value, ap=el.querySelector('.tp-ap').value;
+  if(!h && !m && !ap) return '';
+  if(!h || !m || !ap) return null;
+  let H=Number(h)%12; if(ap==='pm') H+=12;
+  return String(H).padStart(2,'0')+':'+m;
+}
+function contactCell(o){
+  const val = o.contactTime || (o.contactedAt && o.contactedAt.toDate ? o.contactedAt.toDate().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',timeZone:'Asia/Riyadh'}) : '');
+  const editor = canWrite ? `<div id="ct_${o.id}" style="display:${val?'none':'block'};margin:2px 0">${timePicker(val)}
+      <button type="button" class="mini" style="margin-top:4px" onclick="saveContactFrom('${o.id}')">حفظ الوقت</button></div>` : '';
+  const pen = (canWrite && val) ? ` <a href="#" title="تعديل" style="text-decoration:none" onclick="document.getElementById('ct_${o.id}').style.display='block';this.style.display='none';return false">✎</a>` : '';
+  const contactLine = val ? `<div>📞 تواصل: <b>${fmtTime(o.contactedAt)}</b>${pen}</div>` : `<div class="muted" style="font-size:12px">📞 وقت التواصل:</div>`;
+  const departLine = o.departedAt ? `<div>🚪 خرج: <b>${fmtTime(o.departedAt)}</b></div>` : `<div class="muted" style="font-size:12px">🚪 لسا ما خرج</div>`;
+  let gap='';
+  if(o.contactedAt && o.departedAt){
+    const m=minsBetween(o.contactedAt,o.departedAt);
+    gap = m>=0 ? `<div style="font-size:11.5px;color:var(--ink-soft)">من التواصل للخروج: <b>${m} د</b></div>`
+               : `<div style="font-size:11.5px;color:var(--red);font-weight:700">⚠️ وقت التواصل بعد وقت الخروج — راجع الوقت</div>`;
+  }
+  return `<div style="line-height:1.7;white-space:nowrap">${contactLine}${editor}${departLine}${gap}</div>`;
+}
+async function saveContactFrom(id){
+  const el=document.querySelector(`#ct_${id} .tpk`); const v=readTime(el);
+  if(v===null){ toast('كمّل الساعة والدقيقة وص/م'); return; }
+  saveContact(id,v);
+}
+async function saveContact(id,val){
+  const o=DAY_ORDERS[id]; if(!o) return;
+  try{
+    // يتسجل على كل توصيلات نفس الطلب بنفس التسليم (لو له أكثر من منطقة)
+    const sibs=Object.values(DAY_ORDERS).filter(x=>x.batchId===o.batchId && x.orderNo===o.orderNo);
+    const wb=db.batch();
+    sibs.forEach(x=>wb.update(db.collection('dispatchOrders').doc(x.id), val ? {contactTime:val, contactedAt:contactTs(o.date,val), contactedBy:'dispatcher'} : {contactTime:null, contactedAt:null, contactedBy:null}));
+    await wb.commit(); toast('انحفظ وقت التواصل ✅'); loadDay();
+  }catch(e){ console.error(e); toast('ما انحفظ'); }
+}
 function orderFlags(o){
   let f='';
   if(o.noPay) f+=' <span class="flag f-ret">ما تنحسب</span>';
@@ -1290,9 +1359,9 @@ async function loadReports(){
       <div class="stat"><div class="v">${dayCount?Math.round(orders.length/dayCount*10)/10:'—'}</div><div class="l">متوسط الطلبات باليوم</div></div>
       <div class="stat"><div class="v">${avg(allWaits)}</div><div class="l">متوسط الانتظار قبل الخروج (د)</div></div>
     </div>
-    ${table('المناديب (توصيل)','المندوب',reps,deliv,'<th>أكد</th><th>ما أكد</th><th>اعترض</th><th>رجع</th><th>متوسط الانتظار (د)</th><th>المستحق التقديري</th>',
-      (k,v)=>{ const l=deliv.filter(o=>o.repPhone===k); return `${stCols(l)}<td>${l.filter(o=>o.returned).length}</td><td>${avg(waits[k])}</td><td><b>${v.amount} ر.س</b>${v.unpriced?`<br><span class="new-tag">+${v.unpriced} طلب بدون سعر</span>`:''}</td>`; },
-      `${stCols(deliv)}<td>${returned.length}</td><td>${avg(allWaits)}</td><td>${totalAmount} ر.س</td>`)}
+    ${table('المناديب (توصيل)','المندوب',reps,deliv,'<th>أكد</th><th>ما أكد</th><th>اعترض</th><th>رجع</th><th>متوسط الانتظار قبل الخروج (د)</th><th>متوسط من التواصل للخروج (د)</th><th>المستحق التقديري</th>',
+      (k,v)=>{ const l=deliv.filter(o=>o.repPhone===k); const cg=l.map(o=>minsBetween(o.contactedAt,o.departedAt)).filter(x=>x!==null&&x>=0); return `${stCols(l)}<td>${l.filter(o=>o.returned).length}</td><td>${avg(waits[k])}</td><td>${avg(cg)}</td><td><b>${v.amount} ر.س</b>${v.unpriced?`<br><span class="new-tag">+${v.unpriced} طلب بدون سعر</span>`:''}</td>`; },
+      `${stCols(deliv)}<td>${returned.length}</td><td>${avg(allWaits)}</td><td>${avg(deliv.map(o=>minsBetween(o.contactedAt,o.departedAt)).filter(x=>x!==null&&x>=0))}</td><td>${totalAmount} ر.س</td>`)}
     ${dayCount>1 ? dailyTable : ''}
     ${table('المناطق (توصيل)','المنطقة',areas,deliv)}
     ${!FLORIST_FLOW ? table('المنسقين','المنسق',florists,orders) : table('المنسقين','المنسق',florists,orders,'<th>متوسط التجهيز (د)</th><th>متوسط انتظار الجاهز (د)</th><th>يدوي</th>',

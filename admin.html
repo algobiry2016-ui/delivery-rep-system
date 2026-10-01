@@ -316,7 +316,7 @@
             <thead><tr>
               <th><input type="checkbox" id="oAll" onchange="oToggleAll(this.checked)" title="تحديد كل القابل للاعتماد"></th>
               <th>التاريخ</th><th>المندوب</th><th>رقم الطلب</th><th>النوع</th><th>المنطقة</th><th>السعر</th><th>فارق التوصيل</th>
-              <th>التسليم ← الخروج</th><th>المندوب أكد؟</th><th>الاعتماد</th><th>المنسق</th><th>ملاحظات</th>
+              <th>التسليم ← الخروج · 📞 التواصل</th><th>المندوب أكد؟</th><th>الاعتماد</th><th>المنسق</th><th>ملاحظات</th>
             </tr></thead>
             <tbody id="oBody"></tbody>
           </table></div>
@@ -1795,8 +1795,9 @@ function renderReport(){
   const conf={}; deliv.forEach(o=>{ if(o.repStatus==='confirmed'&&o.handedAt&&o.repActionAt){ const m=mins(o.handedAt,o.repActionAt); if(m!==null&&m>=0)(conf[o.repPhone]=conf[o.repPhone]||[]).push(m); } });
   const rp={}; deliv.forEach(o=>{ const k=o.repPhone; rp[k]=rp[k]||{n:0,ret:0,re:0,multi:0,tr:0,disp:0,areas:new Set(),orders:new Set()}; const r=rp[k];
     r.n++; r.orders.add(o.orderNo); r.areas.add(o.areaName); if(o.returned) r.ret++; if(o.redeliveryOf) r.re++; if(o.multiDelivery) r.multi++; if(o.transferredFrom) r.tr++; if((o.disputeCount||0)>0) r.disp++; });
-  const opsTable=tbl(['المندوب','التوصيلات','طلبات مختلفة','مناطق','رجعت','توصيل ثاني','توصيل إضافي','محوّل له','اعترض','متوسط الانتظار قبل الخروج (د)','متوسط وقت التأكيد (د)'],
-    Object.entries(rp).sort((a,b)=>b[1].n-a[1].n).map(([id,r])=>`<tr><td><b>${oEsc(nm(id))}</b></td><td>${r.n}</td><td>${r.orders.size}</td><td>${r.areas.size}</td><td>${r.ret||'—'}</td><td>${r.re||'—'}</td><td>${r.multi||'—'}</td><td>${r.tr||'—'}</td><td>${r.disp||'—'}</td><td>${avg(waits[id]||[])}</td><td>${avg(conf[id]||[])}</td></tr>`).join(''),'',1000);
+  const cont={}, after={}; deliv.forEach(o=>{ const m=mins(o.contactedAt,o.departedAt); if(m===null) return; if(m>=0)(cont[o.repPhone]=cont[o.repPhone]||[]).push(m); else after[o.repPhone]=(after[o.repPhone]||0)+1; });
+  const opsTable=tbl(['المندوب','التوصيلات','طلبات مختلفة','مناطق','رجعت','توصيل ثاني','توصيل إضافي','محوّل له','اعترض','متوسط الانتظار قبل الخروج (د)','متوسط من التواصل للخروج (د)','متوسط وقت التأكيد (د)'],
+    Object.entries(rp).sort((a,b)=>b[1].n-a[1].n).map(([id,r])=>`<tr><td><b>${oEsc(nm(id))}</b></td><td>${r.n}</td><td>${r.orders.size}</td><td>${r.areas.size}</td><td>${r.ret||'—'}</td><td>${r.re||'—'}</td><td>${r.multi||'—'}</td><td>${r.tr||'—'}</td><td>${r.disp||'—'}</td><td>${avg(waits[id]||[])}</td><td>${avg(cont[id]||[])}</td><td>${avg(conf[id]||[])}</td></tr>`).join(''),'',1150);
 
   // ===== ٦) المنسقين =====
   const fl={}; O.forEach(o=>{ const k=o.florist||'—'; fl[k]=fl[k]||{n:0,...Object.fromEntries(tk.map(t=>[t,0]))}; fl[k].n++; fl[k][o.type]++; });
@@ -2082,7 +2083,7 @@ function renderOrdersTab(){
       <td>${oEsc(o.fulfillment==='pickup'?'—':o.areaName)}</td>
       <td style="font-weight:900;white-space:nowrap">${o.fulfillment==='pickup'?'—':(r?r+' ر.س':'<span class="st st-await">بدون سعر</span>')}</td>
       <td style="white-space:nowrap">${df?`<b>+${df.amount} ر.س</b><div class="dim">${df.status==='approved'?'معتمد':'بانتظار المراجعة'}${df.area?' · '+oEsc(df.area):''}</div>`:'<span class="dim">—</span>'}</td>
-      <td class="dim">${oTime(o.handedAt)}${o.departedAt?' ← '+oTime(o.departedAt):''}</td>
+      <td class="dim">${oTime(o.handedAt)}${o.departedAt?' ← '+oTime(o.departedAt):''}${o.contactedAt?`<div>📞 تواصل ${oTime(o.contactedAt)}</div>`:''}</td>
       <td>${oRepCell(o)}</td>
       <td>${O_STAGE_UI[stg](o)}</td>
       <td class="dim">${oEsc(o.florist||'')}</td>
