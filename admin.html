@@ -263,6 +263,7 @@
       <button class="navitem" onclick="showTab('reps')">👤 المناديب</button>
       <button class="navitem" id="navDispatch" style="display:none" onclick="showTab('dispatch')">🚚 تسليم الطلبات</button>
       <button class="navitem" id="navSupervisor" style="display:none" onclick="showTab('supervisor')">🔍 متابعة المراجعة</button>
+      <button class="navitem" id="navSecurity" style="display:none" onclick="showTab('security')">🛡️ الرقابة والتنبيهات <span class="nav-badge" id="navBadgeSecurity"></span></button>
       <button class="navitem" onclick="showTab('areas')">📍 المناطق والأسعار <span class="nav-badge" id="navBadgeAreas"></span></button>
       <button class="navitem" onclick="showTab('reports')">📄 التقارير</button>
       <button class="navitem" onclick="showTab('payouts')">💰 المستحقات والدفعات</button>
@@ -469,6 +470,56 @@
         <iframe id="dispatchFrame" title="تسليم الطلبات" style="width:100%;height:calc(100vh - 140px);min-height:600px;border:1px solid var(--line);border-radius:12px;background:#fff;"></iframe>
       </div>
 
+      <!-- ===== SECURITY ===== -->
+      <div id="tab-security" class="tab-panel">
+        <h1>الرقابة والتنبيهات</h1>
+        <p class="page-sub">كل شي يسويه مشرف الإنتاج ينسجل هنا، والنظام يطلع لك اللي يستاهل انتباهك، وتطابق طلباته مع سلة.</p>
+        <div class="card">
+          <div class="qbtns">
+            <button class="qbtn" onclick="secQuick('today')">اليوم</button>
+            <button class="qbtn" onclick="secQuick('yesterday')">أمس</button>
+            <button class="qbtn" onclick="secQuick('week')">آخر ٧ أيام</button>
+            <button class="qbtn" onclick="secQuick('month')">هذا الشهر</button>
+          </div>
+          <div class="ofilters">
+            <div><label>من</label><input type="date" id="secFrom"></div>
+            <div><label>إلى</label><input type="date" id="secTo"></div>
+            <div><button class="btn-a g" style="width:100%" onclick="secLoad()">عرض</button></div>
+          </div>
+        </div>
+
+        <div class="card"><h3>🚨 تنبيهات تحتاج انتباهك</h3><div id="secAlerts" class="empty">—</div></div>
+
+        <div class="card">
+          <h3>🧾 مطابقة طلبات مشرف الإنتاج مع سلة</h3>
+          <p class="page-sub" style="margin-top:-6px">من سلة: الطلبات ← تصدير (Excel أو CSV) لنفس الفترة. ارفع ملف دوكمنتيشن وملف ورد إكسبرس مع بعض. النظام يطابق أرقام الطلبات ويطلع لك أي رقم سجّله إبراهيم وهو مو موجود في سلة.</p>
+          <input type="file" id="sallaFiles" accept=".xlsx,.xls,.csv" multiple style="margin-bottom:10px">
+          <button class="btn-a g" onclick="sallaMatch()">مطابقة</button>
+          <div id="sallaOut" style="margin-top:12px"></div>
+        </div>
+
+        <div class="card">
+          <h3>🔧 تصحيح أسعار مندوب</h3>
+          <p class="page-sub" style="margin-top:-6px">لو تغيّر سعر منطقة أو حالة "عمار" لمندوب بعد ما انسجلت طلباته: يعيد احتساب أسعار طلباته بالفترة على الأسعار والحالة الحالية، ويصحح قيوده اللي ما انعتمدت. المعتمد ما يتغير.</p>
+          <div class="ofilters">
+            <div><label>المندوب</label><select id="fixRep"></select></div>
+            <div><label>من</label><input type="date" id="fixFrom"></div>
+            <div><label>إلى</label><input type="date" id="fixTo"></div>
+            <div><button class="btn-a y" style="width:100%" onclick="fixPreview()">معاينة التصحيح</button></div>
+          </div>
+          <div id="fixOut" style="margin-top:12px"></div>
+        </div>
+
+        <div class="card">
+          <h3>📜 سجل نشاط مشرف الإنتاج</h3>
+          <div class="ofilters" style="margin-bottom:10px">
+            <div><label>الإجراء</label><select id="secAction" onchange="secRenderLog()"><option value="">الكل</option></select></div>
+            <div><label>بحث</label><input id="secSearch" placeholder="رقم طلب، مندوب..." oninput="secRenderLog()"></div>
+          </div>
+          <div id="secLog" class="empty">—</div>
+        </div>
+      </div>
+
       <!-- ===== SUPERVISOR (لوحة مشرف المناديب) ===== -->
       <div id="tab-supervisor" class="tab-panel">
         <h1>متابعة المراجعة</h1>
@@ -636,6 +687,7 @@
 
 <div class="toast" id="toast"></div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
@@ -750,6 +802,8 @@ auth.onAuthStateChanged(async user=>{
       // لوحة تسليم الطلبات خاصة بمشرف الإنتاج والأدمن الكامل فقط — المشرف والمراجع ما يشوفونها
       document.getElementById('navDispatch').style.display = myRole==='admin' ? '' : 'none';
       document.getElementById('navSupervisor').style.display = myRole==='admin' ? '' : 'none';
+      document.getElementById('navSecurity').style.display = myRole==='admin' ? '' : 'none';
+      if(myRole==='admin') secBadge();
       // الطلبات بالطلب الواحد: أول شاشة لكل أدوار الإدارة
       // الأدمن: اعتماد/رفض/إرجاع/حذف — مشرف المناديب: "تمت المراجعة" فقط — المراجع: عرض
       const nav=document.getElementById('navOrders');
@@ -796,6 +850,7 @@ function showTab(name){
   if(name==='dashboard') loadDashboard();
   if(name==='orders') loadOrdersTab();
   if(name==='reports' && !RPT) rQuick('month');
+  if(name==='security' && myRole==='admin') secOpen();
   if(name==='diffs') loadDiffs();
   if(name==='penalties') { loadPenaltyRepSelect(); loadPenalties(); }
   if(name==='reps') loadReps();
@@ -894,7 +949,7 @@ async function saveRep(){
   if(!name || !phone){ toast('عبّي الاسم والجوال'); return; }
 
   await db.collection('reps').doc(phone).set({
-    name, phone, brand, isAmmar,
+    name, phone, brand, isAmmar, addedByDispatcher:false,   // الإدارة راجعت بيانات المندوب (يشيل تنبيه "أضافه مشرف الإنتاج")
     createdAt: firebase.firestore.FieldValue.serverTimestamp()
   }, {merge:true});
 
@@ -2286,6 +2341,206 @@ function oExport(){
   const csv='\uFEFF'+[head,...rows].map(r=>r.map(c=>`"${String(c??'').replace(/"/g,'""')}"`).join(',')).join('\n');
   const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
   a.download=`الطلبات_${document.getElementById('oFrom').value}_${document.getElementById('oTo').value}.csv`; a.click();
+}
+
+/* =====================================================================
+   الرقابة والتنبيهات
+   ===================================================================== */
+const SEC_NAMES={create:'تسليم جديد',depart:'خروج مندوب',contact:'وقت التواصل',pickedUp:'استلام عميل',addRep:'إضافة مندوب',addArea:'إضافة منطقة',
+  edit:'تعديل طلب',delete:'حذف طلب',deleteBatch:'حذف تسليم كامل',transfer:'تحويل لمندوب',return:'رجوع للمحل',redelivery:'توصيل ثاني',multi:'توصيل إضافي لنفس الطلب',
+  samePhone:'طلب ثاني لنفس الجوال',keep:'رفض اعتراض مندوب',rejectMissing:'رفض بلاغ مندوب',adminDelete:'حذف من الإدارة',exclude:'استبعاد من الحساب',recalc:'إعادة احتساب أسعار'};
+const SEC_RISK={delete:2,deleteBatch:2,keep:2,rejectMissing:1,edit:1,transfer:1,addRep:1,samePhone:1,multi:1,return:0,redelivery:0};
+let SEC={from:null,to:null,log:[],orders:[]};
+function secLastSeen(){ try{ return Number(localStorage.getItem('secLastSeen')||0); }catch(e){ return 0; } }
+function secMarkSeen(){ try{ localStorage.setItem('secLastSeen', String(Date.now())); }catch(e){} updateNavBadge('navBadgeSecurity',0); }
+async function secBadge(){
+  try{
+    const since=new Date(Math.max(secLastSeen(), Date.now()-14*864e5));
+    const s=await db.collection('auditLog').where('at','>',since).get();
+    // الرقم على القائمة = الإجراءات اللي تستاهل انتباه وما شفتها (حذف، تعديل، تحويل، رفض اعتراض...)
+    updateNavBadge('navBadgeSecurity', s.docs.filter(d=>(SEC_RISK[d.data().action]||0)>=1).length);
+  }catch(e){}
+}
+function secQuick(k){
+  const t=oRiyadh(), d=new Date(t+'T12:00:00'), f=x=>x.toISOString().slice(0,10);
+  let from=t, to=t;
+  if(k==='yesterday'){ const y=new Date(d); y.setDate(d.getDate()-1); from=to=f(y); }
+  if(k==='week'){ const w=new Date(d); w.setDate(d.getDate()-6); from=f(w); }
+  if(k==='month'){ from=t.slice(0,8)+'01'; }
+  document.getElementById('secFrom').value=from; document.getElementById('secTo').value=to; secLoad();
+}
+async function secOpen(){
+  if(!document.getElementById('secFrom').value){ secQuick('today'); }
+  // قائمة المناديب لأداة التصحيح
+  try{ const r=await db.collection('reps').get(); document.getElementById('fixRep').innerHTML='<option value="">اختر المندوب...</option>'+r.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.name||'').localeCompare(b.name||'','ar')).map(x=>`<option value="${x.id}">${oEsc(x.name)}${x.isAmmar?' (عمار −5)':''}</option>`).join(''); }catch(e){}
+  if(!document.getElementById('fixFrom').value){ const t=oRiyadh(); document.getElementById('fixFrom').value=t; document.getElementById('fixTo').value=t; }
+}
+async function secLoad(){
+  const from=document.getElementById('secFrom').value, to=document.getElementById('secTo').value;
+  if(!from||!to||from>to){ toast('تحقق من الفترة'); return; }
+  document.getElementById('secAlerts').innerHTML='جاري التحميل...';
+  try{
+    const [l,o,ds]=await Promise.all([
+      db.collection('auditLog').where('date','>=',from).where('date','<=',to).get(),
+      db.collection('dispatchOrders').where('date','>=',from).where('date','<=',to).get(),
+      db.collection('dispatchOrders').where('repStatus','==','disputed').get()
+    ]);
+    SEC={from,to,log:l.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.at?.toMillis?.()||0)-(a.at?.toMillis?.()||0)),
+      orders:o.docs.map(d=>({id:d.id,...d.data()})), disputes:ds.docs.map(d=>d.data())};
+    const reps=await db.collection('reps').get(); SEC.reps=reps.docs.map(d=>({id:d.id,...d.data()}));
+  }catch(e){ console.error(e); document.getElementById('secAlerts').innerHTML='تعذّر التحميل'; return; }
+  const acts=[...new Set(SEC.log.map(x=>x.action))];
+  document.getElementById('secAction').innerHTML='<option value="">الكل</option><option value="__risk">⚠️ اللي تستاهل انتباه بس</option>'+acts.map(a=>`<option value="${a}">${SEC_NAMES[a]||a}</option>`).join('');
+  secRenderAlerts(); secRenderLog(); secMarkSeen();
+}
+function secRenderAlerts(){
+  const A=[]; const O=SEC.orders, L=SEC.log;
+  const add=(lvl,title,body)=>A.push({lvl,title,body});
+  // ١) المندوب قال ما استلم الطلب
+  const notRec=SEC.disputes.filter(o=>o.disputeReason==='ما استلمت الطلب');
+  if(notRec.length) add(3,`🔴 ${notRec.length} طلب المندوب يقول ما استلمه`, notRec.map(o=>`${o.orderNo} · ${o.repName} · ${o.date}`).join('<br>'));
+  // ٢) حذف طلبات
+  const del=L.filter(x=>x.action==='delete'||x.action==='deleteBatch');
+  if(del.length) add(2,`🟠 ${del.length} عملية حذف من مشرف الإنتاج`, del.map(x=>`${oTime(x.at)} · ${oEsc(x.orderNo||'')} — ${oEsc(x.details)}`).join('<br>'));
+  // ٣) تعديل رفع السعر
+  const up=L.filter(x=>x.action==='edit' && (x.newRate||0)>(x.oldRate||0));
+  if(up.length) add(2,`🟠 ${up.length} تعديل رفع سعر التوصيل`, up.map(x=>`${oEsc(x.orderNo)} · ${oEsc(x.repName||'')}: ${x.oldRate} ← ${x.newRate} ر.س`).join('<br>'));
+  // ٤) رفض اعتراض المندوب
+  const keep=L.filter(x=>x.action==='keep');
+  if(keep.length) add(2,`🟠 ${keep.length} اعتراض مندوب رفضه مشرف الإنتاج`, keep.map(x=>`${oEsc(x.orderNo)} — ${oEsc(x.details)}`).join('<br>'));
+  // ٥) مندوب جديد أضافه إبراهيم (لازم تتأكد من حالة عمار)
+  const newReps=L.filter(x=>x.action==='addRep');
+  const flagged=(SEC.reps||[]).filter(r=>r.addedByDispatcher);
+  if(newReps.length||flagged.length) add(2,`🟠 مناديب أضافهم مشرف الإنتاج — تأكد من الأسعار وحالة "عمار"`, (flagged.length?flagged:newReps).map(r=>`${oEsc(r.name||r.repName)} · ${oEsc(r.phone||r.repPhone||'')}${r.isAmmar?' · عمار ✓':''}`).join('<br>')+'<br><span class="dim">المندوب اللي يضيفه إبراهيم ينضاف دايماً كمندوب عادي. لو هو عمار: من "المناديب" أعد حفظه بـ"عمار = نعم"، وبعدها صحح أسعاره من "تصحيح أسعار مندوب" تحت.</span>');
+  // ٦) تكرار نفس رقم الطلب
+  const byNo={}; O.forEach(o=>(byNo[o.orderNo]=byNo[o.orderNo]||[]).push(o));
+  const rep=Object.entries(byNo).filter(([,l])=>l.length>1);
+  if(rep.length) add(1,`🟡 ${rep.length} رقم طلب انسجل أكثر من مرة`, rep.map(([n,l])=>`${oEsc(n)}: ${l.map(o=>`${oEsc(o.repName||'استلام')}${o.multiDelivery?' (مستلم إضافي)':o.redeliveryOf?' (توصيل ثاني)':''}`).join(' · ')}`).join('<br>'));
+  // ٧) تحويلات
+  const tr=L.filter(x=>x.action==='transfer');
+  if(tr.length) add(1,`🟡 ${tr.length} طلب تحوّل لمندوب ثاني`, tr.map(x=>`${oEsc(x.orderNo)} — ${oEsc(x.details)}`).join('<br>'));
+  // ٨) بدون وقت تواصل
+  const nc=O.filter(o=>o.fulfillment!=='pickup' && !o.noPay && !o.contactedAt);
+  if(nc.length) add(1,`🟡 ${nc.length} توصيلة بدون وقت تواصل مع المستلم`, [...new Set(nc.map(o=>o.repName))].map(n=>`${oEsc(n)}: ${nc.filter(o=>o.repName===n).length}`).join(' · '));
+  // ٩) طلبات واتس/محل كثيرة لنفس المندوب (ما لها رقم سلة للتحقق)
+  const phoneTypes=O.filter(o=>o.type==='wa'||o.type==='shop');
+  if(phoneTypes.length) add(0,`ℹ️ ${phoneTypes.length} طلب واتس/محل (برقم جوال — ما ينطابق مع سلة)`, 'هذي تتحقق منها بتأكيد المندوب + نظام الواتس عند منال. الطلبات برقم سلة طابقها تحت.');
+  A.sort((a,b)=>b.lvl-a.lvl);
+  document.getElementById('secAlerts').className = A.length?'':'empty';
+  document.getElementById('secAlerts').innerHTML = A.length ? A.map(a=>`<div style="border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px;${a.lvl>=3?'border-color:#B23A3A;background:#FFF7F7':a.lvl===2?'border-color:#E8C9A0;background:#FFFBF4':''}">
+      <div style="font-weight:900;margin-bottom:4px">${a.title}</div><div style="font-size:12.5px;line-height:1.9">${a.body}</div></div>`).join('') : 'ما فيه شي يستاهل انتباه بهذي الفترة 👍';
+}
+function secRenderLog(){
+  const act=document.getElementById('secAction').value, q=String(document.getElementById('secSearch').value||'').trim();
+  const seen=secLastSeen();
+  const list=SEC.log.filter(x=>(!act || (act==='__risk' ? (SEC_RISK[x.action]||0)>=1 : x.action===act)) && (!q || (String(x.orderNo||'')+' '+x.details+' '+(x.byName||'')).includes(q)));
+  document.getElementById('secLog').className = list.length?'':'empty';
+  document.getElementById('secLog').innerHTML = list.length ? `<div class="otable-wrap"><table class="otable" style="min-width:820px">
+    <thead><tr><th>الوقت</th><th>بواسطة</th><th>الإجراء</th><th>رقم الطلب</th><th>التفاصيل</th></tr></thead><tbody>
+    ${list.map(x=>{ const r=SEC_RISK[x.action]||0; return `<tr style="${r>=2?'background:#FFF7F7':''}"><td class="dim" style="white-space:nowrap">${x.date} ${oTime(x.at)}</td><td>${oEsc(x.byName||'')}</td>
+      <td><span class="st ${r>=2?'st-rej':r===1?'st-await':'st-gray'}">${SEC_NAMES[x.action]||x.action}</span></td>
+      <td class="no" style="white-space:normal;max-width:220px">${oEsc(x.orderNo||'')}</td><td style="white-space:normal;font-size:12.5px">${oEsc(x.details)}</td></tr>`; }).join('')}
+    </tbody></table></div>` : 'ما فيه نشاط بهذي الفترة';
+}
+
+/* ---------- مطابقة مع سلة (ملف تصدير الطلبات) ---------- */
+function sallaPick(row, pats){ const k=Object.keys(row).find(k=>pats.some(p=>p.test(String(k).trim()))); return k; }
+async function sallaMatch(){
+  const files=[...document.getElementById('sallaFiles').files];
+  if(!files.length){ toast('اختر ملف التصدير من سلة'); return; }
+  if(!SEC.orders.length){ toast('اعرض الفترة أول'); return; }
+  if(typeof XLSX==='undefined'){ toast('مكتبة قراءة Excel ما حمّلت — حدّث الصفحة'); return; }
+  const out=document.getElementById('sallaOut'); out.innerHTML='جاري القراءة...';
+  const salla={}; let cols=null;
+  try{
+    for(const f of files){
+      // CSV نقرأه كنص UTF-8 (عشان العربي)، و Excel كبيانات ثنائية
+      const isCsv=/\.csv$/i.test(f.name);
+      const rd=(m)=>new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.onerror=rej; m==='text'?fr.readAsText(f,'UTF-8'):fr.readAsArrayBuffer(f); });
+      const wb = isCsv ? XLSX.read(String(await rd('text')).replace(/^\uFEFF/,''),{type:'string'}) : XLSX.read(await rd('buf'),{type:'array'});
+      const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''});
+      if(!rows.length) continue;
+      const kNo=sallaPick(rows[0],[/رقم الطلب/,/^order\s*(id|no|number|#)?$/i,/reference/i,/^#$/,/^الرقم$/]);
+      const kCity=sallaPick(rows[0],[/المدينة/,/city/i]);
+      const kStatus=sallaPick(rows[0],[/حالة/,/status/i]);
+      const kShip=sallaPick(rows[0],[/الشحن/,/التوصيل/,/shipping/i]);
+      const kDate=sallaPick(rows[0],[/تاريخ/,/date/i]);
+      const kName=sallaPick(rows[0],[/اسم العميل/,/العميل/,/customer/i]);
+      if(!kNo){ out.innerHTML=`<div class="empty">ما لقيت عمود "رقم الطلب" في ${oEsc(f.name)}. الأعمدة: ${Object.keys(rows[0]).map(oEsc).join('، ')}</div>`; return; }
+      cols={kNo,kCity,kStatus,kShip,kDate};
+      rows.forEach(r=>{ const no=String(r[kNo]).replace(/[^\d]/g,''); if(no) salla[no]={no,city:kCity?String(r[kCity]):'',status:kStatus?String(r[kStatus]):'',ship:kShip?String(r[kShip]):'',date:kDate?String(r[kDate]):'',name:kName?String(r[kName]):'',file:f.name}; });
+    }
+  }catch(e){ console.error(e); out.innerHTML='<div class="empty">تعذّرت قراءة الملف — تأكد إنه Excel أو CSV من سلة</div>'; return; }
+  const mine=SEC.orders.filter(o=>o.type==='doc'||o.type==='ward');
+  const notIn=mine.filter(o=>!salla[String(o.orderNo).replace(/\D/g,'')]);
+  const ok=mine.filter(o=>salla[String(o.orderNo).replace(/\D/g,'')]);
+  const norm=t=>String(t||'').replace(/[أإآ]/g,'ا').replace(/ة/g,'ه').replace(/\s|-/g,'');
+  const cityMis=ok.filter(o=>{ const c=norm(salla[String(o.orderNo).replace(/\D/g,'')].city), a=norm(o.areaName); return c && a && !a.includes(c) && !c.includes(a); });
+  const dispNos=new Set(mine.map(o=>String(o.orderNo).replace(/\D/g,'')));
+  const notDispatched=Object.values(salla).filter(x=>!dispNos.has(x.no) && !/ملغي|cancel|استلام|pickup/i.test(x.status+' '+x.ship));
+  const t=(head,rows)=>`<div class="otable-wrap"><table class="otable" style="min-width:640px"><thead><tr>${head.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>`;
+  out.innerHTML=`
+    <div class="otiles">
+      <div class="otile"><div class="n">${mine.length}</div><div class="l">طلبات سلة سجّلها إبراهيم</div></div>
+      <div class="otile"><div class="n" style="color:var(--green)">${ok.length}</div><div class="l">✓ موجودة في سلة</div></div>
+      <div class="otile ${notIn.length?'hl':''}"><div class="n" style="color:#B23A3A">${notIn.length}</div><div class="l">🔴 مو موجودة في سلة</div></div>
+      <div class="otile"><div class="n">${cityMis.length}</div><div class="l">🟠 المدينة في سلة غير منطقة التوصيل</div></div>
+      <div class="otile"><div class="n">${notDispatched.length}</div><div class="l">في سلة وما انسجل تسليمها</div></div>
+    </div>
+    ${notIn.length?`<h3 style="color:#B23A3A">🔴 طلبات سجّلها إبراهيم وما لقيتها في ملف سلة</h3>${t(['التاريخ','رقم الطلب','النوع','المندوب','المنطقة','السعر'],notIn.map(o=>`<tr><td class="dim">${o.date}</td><td class="no">${oEsc(o.orderNo)}</td><td>${R_TYPES[o.type]}</td><td><b>${oEsc(o.repName||'استلام')}</b></td><td>${oEsc(o.areaName)}</td><td>${oRate(o)||'—'} ر.س</td></tr>`).join(''))}<p class="dim">تأكد إنك رفعت ملف البراندين وبنفس الفترة. لو الرقم فعلاً مو في سلة، هذا يحتاج سؤال.</p>`:'<p style="color:var(--green);font-weight:700">✓ كل أرقام سلة اللي سجّلها إبراهيم موجودة في ملف سلة</p>'}
+    ${cityMis.length?`<h3>🟠 المدينة في سلة مختلفة عن منطقة التوصيل المسجلة</h3>${t(['رقم الطلب','المندوب','المنطقة عند إبراهيم','المدينة في سلة','السعر'],cityMis.map(o=>`<tr><td class="no">${oEsc(o.orderNo)}</td><td>${oEsc(o.repName)}</td><td>${oEsc(o.areaName)}</td><td>${oEsc(salla[String(o.orderNo).replace(/\D/g,'')].city)}</td><td>${oRate(o)} ر.س</td></tr>`).join(''))}<p class="dim">بعضها طبيعي (مثلاً حي داخل المدينة)، بس انتبه للي سعر منطقته أعلى.</p>`:''}
+    ${notDispatched.length?`<details><summary style="cursor:pointer;font-weight:700">في سلة وما انسجل تسليمها (${notDispatched.length}) — قد تكون استلام أو ما انشحنت للحين</summary>${t(['رقم الطلب','العميل','المدينة','الحالة','الشحن'],notDispatched.slice(0,300).map(x=>`<tr><td class="no">${x.no}</td><td>${oEsc(x.name)}</td><td>${oEsc(x.city)}</td><td>${oEsc(x.status)}</td><td>${oEsc(x.ship)}</td></tr>`).join(''))}</details>`:''}
+    <p class="dim">الأعمدة المقروءة: رقم الطلب «${oEsc(cols?.kNo||'')}»${cols?.kCity?` · المدينة «${oEsc(cols.kCity)}»`:''}${cols?.kStatus?` · الحالة «${oEsc(cols.kStatus)}»`:''}</p>`;
+}
+
+/* ---------- تصحيح أسعار مندوب ---------- */
+let FIX=null;
+async function fixPreview(){
+  const repId=document.getElementById('fixRep').value, from=document.getElementById('fixFrom').value, to=document.getElementById('fixTo').value;
+  if(!repId){ toast('اختر المندوب'); return; } if(!from||!to||from>to){ toast('تحقق من الفترة'); return; }
+  const out=document.getElementById('fixOut'); out.innerHTML='جاري الحساب...';
+  const rep=(await db.collection('reps').doc(repId).get()).data()||{};
+  const snap=await db.collection('dispatchOrders').where('repPhone','==',repId).get();
+  const orders=snap.docs.map(d=>({id:d.id,...d.data()})).filter(o=>o.date>=from&&o.date<=to&&o.fulfillment!=='pickup'&&!o.noPay);
+  const entryIds=[...new Set(orders.map(o=>o.entryId).filter(Boolean))];
+  const entries={}; for(const id of entryIds){ const e=await db.collection('dailyEntries').doc(id).get(); if(e.exists) entries[id]={id,...e.data()}; }
+  const correct=o=>{ const a=AREAS.find(x=>x.id===o.areaId); if(!a||!(a.rateDoc>0)) return null; const base=o.brand==='ward'?a.rateWard:a.rateDoc; return rep.isAmmar?Math.max(0,base-5):base; };
+  const changes=orders.map(o=>({o, from:o.rate||0, to:correct(o), locked: o.entryId && entries[o.entryId]?.status==='approved'})).filter(c=>c.to!==null && c.to!==c.from);
+  FIX={repId, rep, changes, entries, orders};
+  if(!changes.length){ out.innerHTML=`<div class="empty">كل أسعار ${oEsc(rep.name)} بالفترة صحيحة (حالة عمار: ${rep.isAmmar?'نعم':'لا'})</div>`; return; }
+  const fixable=changes.filter(c=>!c.locked), locked=changes.filter(c=>c.locked);
+  const diff=fixable.reduce((s,c)=>s+(c.to-c.from),0);
+  out.innerHTML=`<p><b>${oEsc(rep.name)}</b> — حالة عمار الحالية: <b>${rep.isAmmar?'نعم (−5)':'لا'}</b>. ${fixable.length} طلب بيتصحح، والفرق <b>${diff>0?'+':''}${diff} ر.س</b>.</p>
+    <div class="otable-wrap"><table class="otable" style="min-width:560px"><thead><tr><th>التاريخ</th><th>رقم الطلب</th><th>المنطقة</th><th>السعر الحالي</th><th>الصحيح</th><th>الحالة</th></tr></thead><tbody>
+    ${changes.map(c=>`<tr><td class="dim">${c.o.date}</td><td class="no">${oEsc(c.o.orderNo)}</td><td>${oEsc(c.o.areaName)}</td><td>${c.from} ر.س</td><td><b>${c.to} ر.س</b></td><td>${c.locked?'<span class="st st-rej">معتمد — ما يتغير</span>':(c.o.entryId?'<span class="st st-await">مؤكد — يتصحح قيده</span>':'<span class="st st-gray">ما أكده — يتصحح</span>')}</td></tr>`).join('')}
+    </tbody></table></div>
+    ${locked.length?`<p class="dim">${locked.length} طلب معتمد ما بيتغير. لو تبيه يتصحح: "إرجاع للمندوب" من الطلبات والاعتماد، وبعدها صحح.</p>`:''}
+    ${fixable.length?`<button class="btn-a g" style="margin-top:8px" onclick="fixApply()">✓ طبّق التصحيح (${fixable.length} طلب)</button>`:''}`;
+}
+async function fixApply(){
+  if(!FIX) return;
+  const fixable=FIX.changes.filter(c=>!c.locked);
+  if(!confirm(`تصحيح ${fixable.length} طلب لـ ${FIX.rep.name}؟`)) return;
+  try{
+    const wb=db.batch();
+    const newRate={}; fixable.forEach(c=>{ newRate[c.o.id]=c.to; wb.update(db.collection('dispatchOrders').doc(c.o.id), {rate:c.to, isAmmar:!!FIX.rep.isAmmar}); });
+    // إعادة بناء القيود اللي تأثرت (غير المعتمدة) من طلباتها
+    const touched=[...new Set(fixable.map(c=>c.o.entryId).filter(Boolean))];
+    for(const eid of touched){
+      const e=FIX.entries[eid]; if(!e || e.status==='approved') continue;
+      const its=(e.orderIds||[]).map(id=>FIX.orders.find(o=>o.id===id)).filter(Boolean);
+      if(!its.length) continue;
+      const agg={};
+      its.forEach(o=>{ const r=newRate[o.id]!==undefined?newRate[o.id]:(o.rate||0); const k=o.areaId+'|'+o.source+'|'+r;
+        agg[k]=agg[k]||{areaId:o.areaId,areaName:o.areaName,source:o.source,count:0,rate:r,amount:0}; agg[k].count++; agg[k].amount+=r; });
+      const entries=Object.values(agg);
+      wb.update(db.collection('dailyEntries').doc(eid), {entries, totalCount:its.length, totalAmount:entries.reduce((s,x)=>s+x.amount,0)});
+    }
+    const d=fixable.reduce((s,c)=>s+(c.to-c.from),0);
+    wb.set(db.collection('auditLog').doc(), {action:'recalc', orderNo:fixable.map(c=>c.o.orderNo).join('، '), details:`إعادة احتساب أسعار ${FIX.rep.name} (${fixable.length} طلب، الفرق ${d} ر.س) — عمار: ${FIX.rep.isAmmar?'نعم':'لا'}`, by:currentUser.uid, byName:currentUser.email, at:firebase.firestore.FieldValue.serverTimestamp(), date:oRiyadh()});
+    await wb.commit();
+    toast('تم التصحيح ✅'); fixPreview();
+  }catch(e){ console.error(e); toast('ما انحفظ — تحقق من الاتصال'); }
 }
 </script>
 </body>
