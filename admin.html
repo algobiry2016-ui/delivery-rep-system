@@ -731,6 +731,32 @@
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
 
 <script>
+/* ===== نوافذ تأكيد/إدخال داخل الصفحة (بدل نوافذ المتصفح اللي بعض الجوالات والمتصفحات تمنعها بصمت) ===== */
+function uiDialog(kind, msg, def){
+  return new Promise(res=>{
+    const bg=document.createElement('div');
+    bg.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;font-family:inherit';
+    const box=document.createElement('div');
+    box.style.cssText='background:#fff;border-radius:14px;padding:20px;width:100%;max-width:420px;box-shadow:0 10px 30px rgba(0,0,0,.2);direction:rtl;text-align:right';
+    const p=document.createElement('div'); p.style.cssText='white-space:pre-line;font-size:14.5px;line-height:1.7;margin-bottom:14px;color:#2B2420'; p.textContent=msg;
+    box.appendChild(p);
+    let inp=null;
+    if(kind==='prompt'){ inp=document.createElement('input'); inp.value=def??''; inp.style.cssText='width:100%;padding:10px 12px;border:1.5px solid #E8E0D8;border-radius:8px;font-family:inherit;font-size:15px;margin-bottom:14px;box-sizing:border-box'; box.appendChild(inp); }
+    const row=document.createElement('div'); row.style.cssText='display:flex;gap:8px';
+    const ok=document.createElement('button'); ok.textContent=kind==='alert'?'تمام':'موافق';
+    ok.style.cssText='flex:1;background:#000;color:#fff;border:none;border-radius:8px;padding:11px;font-family:inherit;font-size:15px;font-weight:700;cursor:pointer';
+    row.appendChild(ok);
+    let no=null;
+    if(kind!=='alert'){ no=document.createElement('button'); no.textContent='إلغاء'; no.style.cssText='background:#fff;border:1.5px solid #E8E0D8;border-radius:8px;padding:11px 16px;font-family:inherit;font-size:15px;font-weight:700;cursor:pointer;color:#2B2420'; row.appendChild(no); }
+    box.appendChild(row); bg.appendChild(box); document.body.appendChild(bg);
+    const done=v=>{ bg.remove(); res(v); };
+    ok.onclick=()=>done(kind==='prompt'?inp.value:(kind==='confirm'?true:undefined));
+    if(no) no.onclick=()=>done(kind==='prompt'?null:false);
+    if(inp){ inp.focus(); inp.select(); inp.onkeydown=e=>{ if(e.key==='Enter') ok.click(); }; } else ok.focus();
+  });
+}
+const uiConfirm=(m)=>uiDialog('confirm',m), uiPrompt=(m,d)=>uiDialog('prompt',m,d), uiAlert=(m)=>uiDialog('alert',m);
+
 /* =========================================================
    FIREBASE CONFIG — نفس مشروع شاشة المندوب
    ========================================================= */
@@ -969,7 +995,7 @@ function priceArea(id){
 
 async function deleteArea(id){
   if(myRole !== 'admin'){ noPermissionToast(); return; }
-  if(!confirm('تأكيد حذف المنطقة؟')) return;
+  if(!await uiConfirm('تأكيد حذف المنطقة؟')) return;
   await db.collection('settings').doc('areas').collection('list').doc(id).delete();
   toast('تم الحذف');
   loadAreasTable();
@@ -1018,7 +1044,7 @@ async function loadReps(){
 
 async function deleteRep(id){
   if(myRole !== 'admin'){ noPermissionToast(); return; }
-  if(!confirm('تأكيد حذف المندوب من النظام؟ (لن يُحذف من Authentication)')) return;
+  if(!await uiConfirm('تأكيد حذف المندوب من النظام؟ (لن يُحذف من Authentication)')) return;
   await db.collection('reps').doc(id).delete();
   toast('تم الحذف');
   loadReps();
@@ -1338,7 +1364,7 @@ async function releaseOrdersOfEntries(ids, wb){
 }
 async function deleteEntry(id){
   if(myRole !== 'admin'){ noPermissionToast(); return; }
-  if(!confirm('تأكيد حذف هذا القيد؟\nلو فيه طلبات من سجل المشرف (إبراهيم) بترجع للمندوب يأكدها من جديد.')) return;
+  if(!await uiConfirm('تأكيد حذف هذا القيد؟\nلو فيه طلبات من سجل المشرف (إبراهيم) بترجع للمندوب يأكدها من جديد.')) return;
   try{
     const wb = db.batch();
     await releaseOrdersOfEntries([id], wb);
@@ -1406,7 +1432,7 @@ async function setDiffStatus(id, status){
 
 async function deleteDiff(id){
   if(myRole !== 'admin'){ noPermissionToast(); return; }
-  if(!confirm('تأكيد حذف هذا الفارق نهائياً؟')) return;
+  if(!await uiConfirm('تأكيد حذف هذا الفارق نهائياً؟')) return;
   await db.collection('deliveryDiffs').doc(id).delete();
   toast('تم الحذف');
   loadDiffs();
@@ -1474,7 +1500,7 @@ async function loadPenalties(){
 
 async function deletePenalty(id){
   if(myRole !== 'admin'){ noPermissionToast(); return; }
-  if(!confirm('تأكيد الحذف؟')) return;
+  if(!await uiConfirm('تأكيد الحذف؟')) return;
   await db.collection('penalties').doc(id).delete();
   toast('تم الحذف');
   loadPenalties();
@@ -1591,7 +1617,7 @@ async function loadPayoutHistory(){
 
 async function deletePayout(id){
   if(myRole !== 'admin'){ noPermissionToast(); return; }
-  if(!confirm('تأكيد حذف هذه الدفعة؟')) return;
+  if(!await uiConfirm('تأكيد حذف هذه الدفعة؟')) return;
   await db.collection('payouts').doc(id).delete();
   toast('تم الحذف');
   loadBalances();
@@ -1757,7 +1783,7 @@ function bulkSetEntryStatus(idsCsv, status){
 
 async function bulkDeleteEntries(idsCsv){
   if(myRole !== 'admin'){ noPermissionToast(); return; }
-  if(!confirm('تأكيد حذف كل قيود هذا اليوم لهذا المندوب؟\nلو فيه طلبات من سجل المشرف (إبراهيم) بترجع للمندوب يأكدها من جديد.')) return;
+  if(!await uiConfirm('تأكيد حذف كل قيود هذا اليوم لهذا المندوب؟\nلو فيه طلبات من سجل المشرف (إبراهيم) بترجع للمندوب يأكدها من جديد.')) return;
   const ids = idsCsv.split(',');
   try{
     const batch = db.batch();
@@ -2168,7 +2194,7 @@ function renderOrdersTab(){
     const orig = o.redeliveryOf ? O_ORDERS.find(x=>x.id===o.redeliveryOf) : null;
     let df = oDiffOf(o);
     if(df){ const k=o.repPhone+'|'+o.orderNo; if(diffShown.has(k)) df=null; else diffShown.add(k); }
-    const flags=[o.noPay?`<span class="fl fl-ret">↩︎ رجع بدون توصيل ثاني — ما تنحسب</span>${o.entryId&&O_ENTRIES[o.entryId]&&myRole==='admin'?` <button class="btn-a r" style="padding:3px 8px;font-size:11px" onclick="oExclude('${o.id}')">استبعاد من الحساب</button>`:''}`:'',
+    const flags=[o.noPay?`<span class="fl fl-ret">↩︎ رجع بدون توصيل ثاني — ما تنحسب</span>${o.entryId&&O_ENTRIES[o.entryId]&&myRole==='admin'?` <button class="btn-a r" style="padding:4px 8px;font-size:11.5px;white-space:nowrap;display:inline-block;margin-top:3px" onclick="oExclude('${o.id}')">استبعاد من الحساب</button>`:''}`:'',
       o.proofImage?`<span class="fl fl-re" style="cursor:zoom-in" onclick="oViewImg('${o.id}')">🧾 إثبات تحويل التوصيل الثاني</span>`:'',
       (o.needsRepProof&&!o.proofImage)?'<span class="fl fl-ret">بانتظار إثبات المندوب</span>':'',
       o.redeliveryOf?`<span class="fl fl-re">🔁 توصيل ثاني${orig?` · الأول مع ${oEsc(orig.repName)}`:''}</span>`:'',
@@ -2183,7 +2209,7 @@ function renderOrdersTab(){
       <td class="no">${oEsc(o.orderNo)}${myRole==='admin'?` <a href="#" title="تصحيح رقم الطلب" style="text-decoration:none;font-size:12px" onclick="oFixNo('${o.id}');return false">✎</a>`:''}</td>
       <td><span class="tp tp-${o.type}">${O_TYPES[o.type]||o.type}</span></td>
       <td>${oEsc(o.fulfillment==='pickup'?'—':o.areaName)}${(myRole==='admin'&&o.fulfillment!=='pickup')?` <a href="#" title="تعديل المنطقة" style="text-decoration:none;font-size:12px" onclick="oFixArea('${o.id}');return false">✎</a>`:''}${o.areaBefore?`<div class="dim">كانت ${oEsc(o.areaBefore)}</div>`:''}</td>
-      <td style="font-weight:900;white-space:nowrap">${o.fulfillment==='pickup'?'—':(r?r+' ر.س':'<span class="st st-await">بدون سعر</span>')}</td>
+      <td style="font-weight:900;white-space:nowrap">${o.fulfillment==='pickup'?'—':o.noPay?`<s class="dim">${o.rate||0}</s> 0 ر.س`:(r?r+' ر.س':'<span class="st st-await">بدون سعر</span>')}</td>
       <td style="white-space:nowrap">${df?`<b>+${df.amount} ر.س</b><div class="dim">${df.status==='approved'?'معتمد':'بانتظار المراجعة'}${df.area?' · '+oEsc(df.area):''}</div>`:'<span class="dim">—</span>'}</td>
       <td class="dim">${oTime(o.handedAt)}${o.departedAt?' ← '+oTime(o.departedAt):''}${o.contactedAt?`<div>📞 تواصل ${oTime(o.contactedAt)}</div>`:''}</td>
       <td>${oRepCell(o)}</td>
@@ -2222,17 +2248,17 @@ function renderOrdersTab(){
 async function oFixNo(id){
   if(myRole!=='admin'){ noPermissionToast(); return; }
   const o=O_ORDERS.find(x=>x.id===id); if(!o) return;
-  const nv=prompt(`تصحيح رقم الطلب\nالرقم الحالي: ${o.orderNo}\n\nاكتب الرقم الصحيح:`, o.orderNo); if(nv===null) return;
+  const nv=await uiPrompt(`تصحيح رقم الطلب\nالرقم الحالي: ${o.orderNo}\n\nاكتب الرقم الصحيح:`, o.orderNo); if(nv===null) return;
   let no=String(nv).replace(/[٠-٩]/g,d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/\D/g,'');
   if(/^9665\d{8}$/.test(no)) no='0'+no.slice(3);
   if(!no || no===o.orderNo){ return; }
   const isPhone=o.type==='wa'||o.type==='shop';
   if(isPhone && !/^05\d{8}$/.test(no)){ toast('رقم الجوال لازم يكون 05xxxxxxxx'); return; }
-  if(!isPhone && no.length!==9){ if(!confirm(`الرقم ${no} طوله ${no.length} — أرقام سلة عادة 9. تكمل؟`)) return; }
-  const why=prompt('سبب التصحيح (ينسجل في سجل الرقابة):','رقم زايد بالغلط'); if(why===null) return;
+  if(!isPhone && no.length!==9){ if(!await uiConfirm(`الرقم ${no} طوله ${no.length} — أرقام سلة عادة 9. تكمل؟`)) return; }
+  const why=await uiPrompt('سبب التصحيح (ينسجل في سجل الرقابة):','رقم زايد بالغلط'); if(why===null) return;
   try{
     const ex=await db.collection('dispatchOrders').where('orderNo','==',no).get();
-    if(!ex.empty && !confirm(`الرقم ${no} مسجّل قبل لطلب ثاني (${ex.docs[0].data().repName||'استلام'}). تكمل؟`)) return;
+    if(!ex.empty && !await uiConfirm(`الرقم ${no} مسجّل قبل لطلب ثاني (${ex.docs[0].data().repName||'استلام'}). تكمل؟`)) return;
     const wb=db.batch();
     wb.update(db.collection('dispatchOrders').doc(o.id), {orderNo:no, orderNoBefore:o.orderNo, orderNoFixedAt:firebase.firestore.FieldValue.serverTimestamp()});
     const e=o.entryId&&O_ENTRIES[o.entryId];
@@ -2248,7 +2274,7 @@ async function oExclude(id){
   const o=O_ORDERS.find(x=>x.id===id); if(!o||!o.entryId) return;
   const e=O_ENTRIES[o.entryId]; if(!e){ toast('القيد مو موجود'); return; }
   const rate=(typeof o.rate==='number'&&o.rate>0)?o.rate:0;
-  if(!confirm(`استبعاد الطلب ${o.orderNo} من حساب ${o.repName}؟\nينقص ${rate} ر.س${e.status==='approved'?' من المعتمد':''}.`)) return;
+  if(!await uiConfirm(`استبعاد الطلب ${o.orderNo} من حساب ${o.repName}؟\nينقص ${rate} ر.س${e.status==='approved'?' من المعتمد':''}.`)) return;
   try{
     const entries=(e.entries||[]).map(x=>({...x}));
     let idx=entries.findIndex(x=>x.areaId===o.areaId && x.source===o.source && x.rate===rate);
@@ -2389,7 +2415,7 @@ async function applyAreaChange(wb, o, toAreaId, note){
 async function areaReqDecide(id, ok){
   if(myRole!=='admin'){ noPermissionToast(); return; }
   const q=AREQ_A.find(x=>x.id===id); if(!q) return;
-  const note = ok ? '' : prompt('سبب الرفض (يظهر للمشرف):','المنطقة صحيحة');
+  const note = ok ? '' : await uiPrompt('سبب الرفض (يظهر للمشرف):','المنطقة صحيحة');
   if(!ok && note===null) return;
   try{
     const wb=db.batch();
@@ -2408,10 +2434,10 @@ async function oFixArea(id){
   if(myRole!=='admin'){ noPermissionToast(); return; }
   const o=O_ORDERS.find(x=>x.id===id); if(!o) return;
   const opts=AREAS.filter(a=>a.rateDoc>0).map((a,i)=>`${i+1}) ${a.name}`).join('\n');
-  const pick=prompt(`تعديل منطقة الطلب ${o.orderNo}\nالحالية: ${o.areaName} (${o.rate||0} ر.س)\n\nاكتب رقم المنطقة الصحيحة:\n${opts}`); if(pick===null) return;
+  const pick=await uiPrompt(`تعديل منطقة الطلب ${o.orderNo}\nالحالية: ${o.areaName} (${o.rate||0} ر.س)\n\nاكتب رقم المنطقة الصحيحة:\n${opts}`); if(pick===null) return;
   const list=AREAS.filter(a=>a.rateDoc>0); const a=list[Number(String(pick).replace(/[٠-٩]/g,d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d)))-1];
   if(!a){ toast('رقم غير صحيح'); return; } if(a.id===o.areaId) return;
-  const why=prompt('السبب (ينسجل في سجل الرقابة):','موقع التسليم طلع '+a.name); if(why===null) return;
+  const why=await uiPrompt('السبب (ينسجل في سجل الرقابة):','موقع التسليم طلع '+a.name); if(why===null) return;
   try{ const wb=db.batch(); const nr=await applyAreaChange(wb,o,a.id,why); await wb.commit(); toast(`تم — ${a.name} · ${nr} ر.س ✅`); loadOrdersTab(); }
   catch(e){ console.error(e); toast('ما انحفظ'); }
 }
@@ -2430,7 +2456,7 @@ function renderDupReqs(list){
 async function dupDecide(id, ok){
   if(myRole!=='admin'){ noPermissionToast(); return; }
   const q=DUPQ.find(x=>x.id===id); if(!q) return;
-  const note = ok ? '' : prompt('سبب الرفض (يظهر لالمشرف (إبراهيم)):','مكرر');
+  const note = ok ? '' : await uiPrompt('سبب الرفض (يظهر لالمشرف (إبراهيم)):','مكرر');
   if(!ok && note===null) return;
   try{
     const TSv=firebase.firestore.FieldValue.serverTimestamp;
@@ -2494,8 +2520,8 @@ async function oApprove(){
 async function oReject(){
   if(myRole!=='admin'){ noPermissionToast(); return; }
   if(!O_SEL.size) return;
-  const reason=prompt('سبب الرفض (يظهر للمندوب):'); if(reason===null) return;
-  if(!confirm(`رفض ${oSelOrders().filter(o=>oStage(o)==='awaiting').length} طلب نهائياً؟ ما بينحسب للمندوب.\nلو فيه غلط يتصحح استخدم "إرجاع للتصحيح" بدل الرفض.`)) return;
+  const reason=await uiPrompt('سبب الرفض (يظهر للمندوب):'); if(reason===null) return;
+  if(!await uiConfirm(`رفض ${oSelOrders().filter(o=>oStage(o)==='awaiting').length} طلب نهائياً؟ ما بينحسب للمندوب.\nلو فيه غلط يتصحح استخدم "إرجاع للتصحيح" بدل الرفض.`)) return;
   try{ await oSetStatus('rejected', {rejectReason: reason.trim()}); toast('تم الرفض'); await loadOrdersTab(); loadDashboard(); }
   catch(e){ console.error(e); toast('ما انحفظ'); }
 }
@@ -2503,10 +2529,10 @@ async function oReject(){
 async function oReturnToRep(){
   if(myRole!=='admin'){ noPermissionToast(); return; }
   if(!O_SEL.size) return;
-  const reason=prompt('وش المطلوب تصحيحه؟ (يظهر للمندوب والمشرف (إبراهيم))'); if(reason===null) return;
+  const reason=await uiPrompt('وش المطلوب تصحيحه؟ (يظهر للمندوب والمشرف (إبراهيم))'); if(reason===null) return;
   const withEntry=oSelOrders().filter(o=>['awaiting','approved','rejected'].includes(oStage(o)));
   const orphans=oSelOrders().filter(o=>oStage(o)==='orphan');
-  if(oSelOrders().some(o=>oStage(o)==='approved') && !confirm('فيه طلبات معتمدة بالمحدد — إرجاعها يلغي اعتمادها. أكمل؟')) return;
+  if(oSelOrders().some(o=>oStage(o)==='approved') && !await uiConfirm('فيه طلبات معتمدة بالمحدد — إرجاعها يلغي اعتمادها. أكمل؟')) return;
   try{
     const wb=db.batch();
     oDetach(wb, withEntry);   // باقي طلبات القيد تبقى زي ما هي
@@ -2521,7 +2547,7 @@ async function oReturnToRep(){
 async function oDelete(){
   if(myRole!=='admin'){ noPermissionToast(); return; }
   const sel=oSelOrders(); if(!sel.length) return;
-  if(!confirm(`حذف ${sel.length} طلب نهائياً؟\nينحذف الطلب من سجل المشرف (إبراهيم) ومن شاشة المندوب، ومعه قيد الاعتماد لو موجود. ما ينفع التراجع.`)) return;
+  if(!await uiConfirm(`حذف ${sel.length} طلب نهائياً؟\nينحذف الطلب من سجل المشرف (إبراهيم) ومن شاشة المندوب، ومعه قيد الاعتماد لو موجود. ما ينفع التراجع.`)) return;
   try{
     const wb=db.batch();
     oDetach(wb, sel);   // نشيل المحذوف من قيده، وباقي طلبات القيد ما تتأثر
@@ -2680,7 +2706,16 @@ function secRenderAlerts(){
   const badEnt=(SEC.entries||[]).filter(e=>e.fromDispatch && Array.isArray(e.orderIds) && e.orderIds.every(id=>ordById[id])).filter(e=>{
     const sum=e.orderIds.reduce((s2,id)=>s2+(ordById[id].noPay?0:(ordById[id].rate||0)),0);
     return Math.abs(sum-(e.totalAmount||0))>0.01 || e.orderIds.length!==(e.totalCount||0); });
-  if(badEnt.length) add(3,`🔴 ${badEnt.length} قيد مبلغه ما يساوي مجموع طلباته`, badEnt.map(e=>`${oEsc(e.repName)} · ${e.date}: القيد ${e.totalAmount} ر.س / ${e.totalCount} — الطلبات ${e.orderIds.reduce((s2,id)=>s2+(ordById[id].noPay?0:(ordById[id].rate||0)),0)} ر.س / ${e.orderIds.length}`).join('<br>')+'<br><span class="dim">لا تعتمده قبل ما تتأكد — استخدم "إرجاع للمندوب".</span>');
+  if(badEnt.length) add(3,`🔴 ${badEnt.length} قيد مبلغه ما يساوي مجموع طلباته`, badEnt.map(e=>{
+      const ords=e.orderIds.map(id=>ordById[id]);
+      const sum=ords.reduce((s2,o)=>s2+(o.noPay?0:(o.rate||0)),0);
+      const np=ords.filter(o=>o.noPay);
+      // السبب الغالب: طلب رجع بدون توصيل ثاني بعد ما أكده المندوب — لسا داخل قيده
+      const why = np.length
+        ? `السبب: ${np.length} طلب رجع بدون توصيل ثاني بعد ما أكده المندوب، وهو لسا داخل حسابه (${np.map(o=>`<b>${oEsc(o.orderNo)}</b> · ${o.rate||0} ر.س`).join('، ')}).<br>👈 الحل: "الطلبات والاعتماد" ← الحالة: <b>رجعت وتحتاج استبعاد</b> ← زر <b>استبعاد من الحساب</b> على الطلب.`
+        : `السبب: سعر طلب أو أكثر تغيّر بعد ما أكده المندوب.<br>👈 الحل: "تصحيح أسعار مندوب" تحت، أو "إرجاع للمندوب" من الطلبات والاعتماد.`;
+      return `<b>${oEsc(e.repName)}</b> · ${e.date}: القيد ${e.totalAmount} ر.س / ${e.totalCount} طلب — مجموع الطلبات الصحيح ${sum} ر.س<br>${why}`;
+    }).join('<hr style="border:none;border-top:1px dashed var(--line);margin:6px 0">')+'<br><span class="dim">لا تعتمد القيد قبل ما تصلحه.</span>');
   // قيد يدوي (من النظام القديم) لمندوب عنده طلبات من سجل التسليم بنفس اليوم = خطر انحساب مرتين
   const strayEnt=(SEC.entries||[]).filter(e=>!e.fromDispatch && e.status!=='rejected' && O.some(o=>o.repPhone===e.repUid && o.date===e.date));
   if(strayEnt.length) add(3,`🔴 ${strayEnt.length} قيد يدوي لمندوب عنده طلبات من سجل التسليم بنفس اليوم — خطر تكرار`, strayEnt.map(e=>`${oEsc(e.repName)} · ${e.date}: ${e.totalCount} طلب · ${e.totalAmount} ر.س (${e.status==='approved'?'معتمد':'بانتظار'})`).join('<br>')+'<br><span class="dim">الإدخال اليدوي متوقف عند المناديب، فقيد مثل هذا غالباً مكرر. راجعه قبل ما تعتمد.</span>');
@@ -2806,7 +2841,7 @@ async function fixPreview(){
 async function fixApply(){
   if(!FIX) return;
   const fixable=FIX.changes.filter(c=>!c.locked);
-  if(!confirm(`تصحيح ${fixable.length} طلب لـ ${FIX.rep.name}؟`)) return;
+  if(!await uiConfirm(`تصحيح ${fixable.length} طلب لـ ${FIX.rep.name}؟`)) return;
   try{
     const wb=db.batch();
     const newRate={}; fixable.forEach(c=>{ newRate[c.o.id]=c.to; wb.update(db.collection('dispatchOrders').doc(c.o.id), {rate:c.to, isAmmar:!!FIX.rep.isAmmar}); });

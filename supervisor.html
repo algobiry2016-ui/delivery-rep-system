@@ -389,7 +389,7 @@ function renderOrders(){
       <td class="dim">${o.date}</td><td><b>${esc(o.repName||'استلام من المتجر')}</b></td>
       <td class="no">${esc(o.orderNo)}</td><td><span class="tp tp-${o.type}">${TYPES[o.type]||o.type}</span></td>
       <td>${o.fulfillment==='pickup'?'—':esc(o.areaName)}</td>
-      <td style="font-weight:900;white-space:nowrap">${o.fulfillment==='pickup'?'—':(r?r+' ر.س':'<span class="st st-await">بدون سعر</span>')}</td>
+      <td style="font-weight:900;white-space:nowrap">${o.fulfillment==='pickup'?'—':o.noPay?`<s class="dim">${o.rate||0}</s> 0 ر.س`:(r?r+' ر.س':'<span class="st st-await">بدون سعر</span>')}</td>
       <td style="white-space:nowrap">${df?`<b>+${df.amount} ر.س</b><div class="dim">${df.status==='approved'?'معتمد':'بانتظار'}${df.area?' · '+esc(df.area):''}</div>`:'<span class="dim">—</span>'}</td>
       <td class="dim">${tm(o.handedAt)}${o.departedAt?' ← '+tm(o.departedAt):''}${o.contactedAt?`<div>📞 تواصل ${tm(o.contactedAt)}</div>`:''}</td>
       <td>${repCell(o)}</td><td>${STAGE_UI[s]}</td>

@@ -381,6 +381,32 @@
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
 <script>
+/* ===== نوافذ تأكيد/إدخال داخل الصفحة (بدل نوافذ المتصفح اللي بعض الجوالات والمتصفحات تمنعها بصمت) ===== */
+function uiDialog(kind, msg, def){
+  return new Promise(res=>{
+    const bg=document.createElement('div');
+    bg.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;font-family:inherit';
+    const box=document.createElement('div');
+    box.style.cssText='background:#fff;border-radius:14px;padding:20px;width:100%;max-width:420px;box-shadow:0 10px 30px rgba(0,0,0,.2);direction:rtl;text-align:right';
+    const p=document.createElement('div'); p.style.cssText='white-space:pre-line;font-size:14.5px;line-height:1.7;margin-bottom:14px;color:#2B2420'; p.textContent=msg;
+    box.appendChild(p);
+    let inp=null;
+    if(kind==='prompt'){ inp=document.createElement('input'); inp.value=def??''; inp.style.cssText='width:100%;padding:10px 12px;border:1.5px solid #E8E0D8;border-radius:8px;font-family:inherit;font-size:15px;margin-bottom:14px;box-sizing:border-box'; box.appendChild(inp); }
+    const row=document.createElement('div'); row.style.cssText='display:flex;gap:8px';
+    const ok=document.createElement('button'); ok.textContent=kind==='alert'?'تمام':'موافق';
+    ok.style.cssText='flex:1;background:#000;color:#fff;border:none;border-radius:8px;padding:11px;font-family:inherit;font-size:15px;font-weight:700;cursor:pointer';
+    row.appendChild(ok);
+    let no=null;
+    if(kind!=='alert'){ no=document.createElement('button'); no.textContent='إلغاء'; no.style.cssText='background:#fff;border:1.5px solid #E8E0D8;border-radius:8px;padding:11px 16px;font-family:inherit;font-size:15px;font-weight:700;cursor:pointer;color:#2B2420'; row.appendChild(no); }
+    box.appendChild(row); bg.appendChild(box); document.body.appendChild(bg);
+    const done=v=>{ bg.remove(); res(v); };
+    ok.onclick=()=>done(kind==='prompt'?inp.value:(kind==='confirm'?true:undefined));
+    if(no) no.onclick=()=>done(kind==='prompt'?null:false);
+    if(inp){ inp.focus(); inp.select(); inp.onkeydown=e=>{ if(e.key==='Enter') ok.click(); }; } else ok.focus();
+  });
+}
+const uiConfirm=(m)=>uiDialog('confirm',m), uiPrompt=(m,d)=>uiDialog('prompt',m,d), uiAlert=(m)=>uiDialog('alert',m);
+
 const firebaseConfig = {
   apiKey: "AIzaSyAIKJSzGuRIYeCAnxq2M-qAxOcoed5XiOo",
   authDomain: "dmflower-delivery-reps.firebaseapp.com",
@@ -809,7 +835,7 @@ async function saveHandover(){
     let dupReqs=[];
     if(samePhone.length){
       const nos=[...new Set(samePhone.map(o=>o.orderNo))];
-      const why=prompt(`⛔ غير مسموح بتكرار رقم الجوال بنفس اليوم:\n${nos.join('\n')}\n\nلو هو طلب جديد فعلاً، اكتب السبب ونرسله للإدارة توافق عليه.\n(لو الطلب رجع ويبي توصيل ثاني: استخدم زر "رجع" من سجل اليوم)`, '');
+      const why=await uiPrompt(`⛔ غير مسموح بتكرار رقم الجوال بنفس اليوم:\n${nos.join('\n')}\n\nلو هو طلب جديد فعلاً، اكتب السبب ونرسله للإدارة توافق عليه.\n(لو الطلب رجع ويبي توصيل ثاني: استخدم زر "رجع" من سجل اليوم)`, '');
       if(why===null || !why.trim()){ toast('ما انحفظ — التكرار يحتاج سبب وموافقة الإدارة'); btn.disabled=false; btn.textContent=btnTxt; return; }
       dupReqs = nos.map(no=>({orderNo:no, reason:why.trim(), orders: orders.filter(o=>o.orderNo===no)}));
       for(let i=orders.length-1;i>=0;i--) if(nos.includes(orders[i].orderNo)) orders.splice(i,1);
@@ -822,10 +848,10 @@ async function saveHandover(){
       if(others.length>=3){ const sorted=others.sort((a,b)=>a-b), med=sorted[Math.floor(sorted.length/2)];
         if(Math.abs(Number(o.orderNo)-med)>50000) far.push(o); }
     }
-    if(far.length && !confirm(`تأكد من أرقام الطلبات هذي — بعيدة عن أرقام طلبات اليوم:\n${far.map(o=>o.orderNo).join('\n')}\n\nإذا متأكد إنها صحيحة اضغط موافق (بتنسجل للإدارة).`)){ btn.disabled=false; btn.textContent=btnTxt; return; }
+    if(far.length && !await uiConfirm(`تأكد من أرقام الطلبات هذي — بعيدة عن أرقام طلبات اليوم:\n${far.map(o=>o.orderNo).join('\n')}\n\nإذا متأكد إنها صحيحة اضغط موافق (بتنسجل للإدارة).`)){ btn.disabled=false; btn.textContent=btnTxt; return; }
     far.forEach(o=>o.farNumber=true);
     if(dups.length){
-      alert(`هذي الطلبات مسجّلة قبل:\n${dups.join('\n')}\n\n• لو الطلب رجع والعميل طلب يعاد توصيله: افتح "سجل اليوم" واضغط "رجع" على الطلب الأصلي.\n• لو نفس الطلب لأكثر من مستلم بمناطق مختلفة: سجّله مرة وحدة واضغط "＋ منطقة توصيل ثانية لنفس الطلب".`);
+      await uiAlert(`هذي الطلبات مسجّلة قبل:\n${dups.join('\n')}\n\n• لو الطلب رجع والعميل طلب يعاد توصيله: افتح "سجل اليوم" واضغط "رجع" على الطلب الأصلي.\n• لو نفس الطلب لأكثر من مستلم بمناطق مختلفة: سجّله مرة وحدة واضغط "＋ منطقة توصيل ثانية لنفس الطلب".`);
       btn.disabled=false; btn.textContent=btnTxt; return;
     }
 
@@ -1126,7 +1152,7 @@ async function searchOrder(){
 
 async function markDeparted(batchId){
   const noContact=Object.values(DAY_ORDERS).filter(o=>o.batchId===batchId && !isPickup(o) && !o.contactedAt);
-  if(noContact.length && !confirm(`فيه ${noContact.length} طلب ما انسجل له وقت تواصل المندوب مع المستلم:\n${noContact.map(o=>o.orderNo).join('، ')}\n\nتسجّل خروج المندوب كذا؟`)) return;
+  if(noContact.length && !await uiConfirm(`فيه ${noContact.length} طلب ما انسجل له وقت تواصل المندوب مع المستلم:\n${noContact.map(o=>o.orderNo).join('، ')}\n\nتسجّل خروج المندوب كذا؟`)) return;
   try{
     const oSnap = await db.collection('dispatchOrders').where('batchId','==',batchId).get();
     const wb = db.batch();
@@ -1139,7 +1165,7 @@ async function markDeparted(batchId){
 async function deleteOrder(orderId,batchId){
   const o = DAY_ORDERS[orderId];
   if(repStatusOf(o)==='confirmed'){ toast('المندوب أكد هذا الطلب — التعديل صار من لوحة الإدارة'); return; }
-  if(!confirm(`حذف الطلب ${o.orderNo}؟${o.prepId?'\n(يرجع لقائمة الجاهز عند المنسقين)':''}`)) return;
+  if(!await uiConfirm(`حذف الطلب ${o.orderNo}؟${o.prepId?'\n(يرجع لقائمة الجاهز عند المنسقين)':''}`)) return;
   try{
     const remaining = Object.values(DAY_ORDERS).filter(x=>x.batchId===batchId && x.id!==orderId).length;
     const wb = db.batch();
@@ -1152,7 +1178,7 @@ async function deleteOrder(orderId,batchId){
   }catch(e){ console.error(e); toast('ما انحذف'); }
 }
 async function deleteBatch(batchId){
-  if(!confirm('حذف التسليم كامل بكل طلباته؟')) return;
+  if(!await uiConfirm('حذف التسليم كامل بكل طلباته؟')) return;
   try{
     const oSnap = await db.collection('dispatchOrders').where('batchId','==',batchId).get();
     if(oSnap.docs.some(d=>repStatusOf(d.data())==='confirmed')){ toast('فيه طلبات أكدها المندوب بهذا التسليم — احذف غير المؤكدة وحدة وحدة'); return; }
@@ -1338,7 +1364,7 @@ function renderRecon(){
     : '<div class="muted">كل الطلبات السابقة مؤكدة 👍</div>';
 }
 async function keepOrder(id){
-  const note = prompt('ملاحظة للمندوب (ليش الطلب صحيح):','راجعت الطلب وهو صحيح');
+  const note = await uiPrompt('ملاحظة للمندوب (ليش الطلب صحيح):','راجعت الطلب وهو صحيح');
   if(note===null) return;
   try{
     await db.collection('dispatchOrders').doc(id).update({repStatus:'pending', ibrahimNote:note.trim()||'راجعت الطلب وهو صحيح', disputeResolvedAt:TS(), disputeResolvedBy:currentUser.uid});
@@ -1348,7 +1374,7 @@ async function keepOrder(id){
 }
 async function deleteDisputed(id){
   const o=DISPUTES.find(x=>x.id===id); if(!o) return;
-  if(!confirm(`حذف الطلب ${o.orderNo} من تسليم ${o.repName}؟`)) return;
+  if(!await uiConfirm(`حذف الطلب ${o.orderNo} من تسليم ${o.repName}؟`)) return;
   try{
     const rest = await db.collection('dispatchOrders').where('batchId','==',o.batchId).get();
     const remaining = rest.docs.filter(d=>d.id!==id).length;
@@ -1374,7 +1400,7 @@ function addMissing(id){
   toast('عبّينا بيانات البلاغ — اختر المنسق واحفظ');
 }
 async function rejectMissing(id){
-  const note=prompt('سبب الرفض (يظهر للمندوب):','الطلب ما انسلّم لك');
+  const note=await uiPrompt('سبب الرفض (يظهر للمندوب):','الطلب ما انسلّم لك');
   if(note===null) return;
   try{ await db.collection('missingReports').doc(id).update({status:'rejected', resolveNote:note.trim(), resolvedAt:TS(), resolvedBy:currentUser.uid});
     const m=MISSING.find(x=>x.id===id); audit('rejectMissing', {orderNo:m?m.orderNo:null}, `بلاغ ${m?m.repName:''} مرفوض: ${note.trim()}`); toast('تم الرفض'); }
@@ -1550,7 +1576,7 @@ async function addFlorist(){
   }catch(e){ toast('ما انحفظ'); }
 }
 async function removeFlorist(n){
-  if(!confirm(`حذف ${n} من القائمة؟ (طلباته السابقة ما تتأثر)`)) return;
+  if(!await uiConfirm(`حذف ${n} من القائمة؟ (طلباته السابقة ما تتأثر)`)) return;
   try{
     await db.collection('settings').doc('florists').update({names:firebase.firestore.FieldValue.arrayRemove(n)});
     FLORISTS=FLORISTS.filter(x=>x!==n); renderFlorists();
