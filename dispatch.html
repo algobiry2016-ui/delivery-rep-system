@@ -16,7 +16,7 @@
 <script>
 // تنبيه "فيه نسخة جديدة": لو انرفع تحديث والصفحة مفتوحة من قبل، يطلع شريط يطلب التحديث (عشان ما يشتغل أحد على نسخة قديمة)
 (function(){
-  const APP_V='2026-10-03-1';
+  const APP_V='2026-10-03-2';
   async function chk(){
     try{ const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'}); if(!r.ok) return; const j=await r.json();
       if(j.v && j.v!==APP_V && !document.getElementById('updBar')){
@@ -902,7 +902,10 @@ async function saveHandover(){
       pendingMissingId=null; PENDING_REDEL=null; resetForm(); btn.disabled=false; btn.textContent=btnTxt; return;
     }
     const batchRef = db.collection('dispatchBatches').doc();
-    const wb = db.batch();
+    // الحفظ على دفعات صغيرة (كل 5 طلبات): قاعدة البيانات لها حد لعدد الفحوصات في العملية الوحدة،
+    // والتسليم الكبير كان ممكن ينرفض كامل. لو دفعة فشلت، اللي قبلها يبقى محفوظ ونوضح وش انحفظ.
+    const chunks=[]; let wb=db.batch(); let inChunk=0; const chunkNos=[[]];
+    const flush=()=>{ chunks.push(wb); wb=db.batch(); inChunk=0; chunkNos.push([]); };
     wb.set(batchRef, pickup ? {
       date, repPhone:null, repName:'استلام من المتجر', isPickup:true,
       orderCount:orders.length, handedAt:TS(), departedAt:null,
@@ -913,6 +916,8 @@ async function saveHandover(){
       createdBy:currentUser.uid, createdByName:myName, createdAt:TS()
     });
     orders.forEach(o=>{
+      if(inChunk>=5) flush();
+      inChunk++; chunkNos[chunkNos.length-1].push(o.orderNo);
       if(o.prepId) wb.update(db.collection('prepOrders').doc(o.prepId), {status:'dispatched', dispatchedAt:TS(), batchId:batchRef.id, repName:pickup?'استلام':rep.name});
       const ref = db.collection('dispatchOrders').doc();
       const pr2 = (o.redeliveryOf && PENDING_REDEL && PENDING_REDEL.origId===o.redeliveryOf) ? PENDING_REDEL : null;
@@ -937,14 +942,27 @@ async function saveHandover(){
       pickup ? `${orders.length} طلب استلام من المتجر` : `${orders.length} توصيلة لـ ${rep.name} · ${orders.map(o=>`${o.orderNo} (${TYPES[o.type].label}${o.areaName?' · '+o.areaName:''}${o.rate?' · '+o.rate+' ر.س':''})`).join(' | ')}`,
       {count:orders.length, amount: orders.reduce((s,o)=>s+(o.rate||0),0), repPhone: pickup?null:rep.id, repName: pickup?null:rep.name, fromMissing: !!pendingMissingId}));
     if(pendingMissingId){ wb.update(db.collection('missingReports').doc(pendingMissingId), {status:'resolved', resolvedAt:TS(), resolvedBy:currentUser.uid, resolvedOrderNo:orders[0].orderNo}); }
-    await wb.commit();
+    chunks.push(wb);
+    const savedNos=[];
+    for(let ci=0; ci<chunks.length; ci++){
+      try{ await chunks[ci].commit(); savedNos.push(...(chunkNos[ci]||[])); }
+      catch(err){
+        console.error(err);
+        const why = err && err.code==='permission-denied' ? 'قاعدة البيانات رفضت الحفظ (صلاحيات)' : err && err.code==='unavailable' ? 'ما فيه اتصال بالإنترنت' : (err && (err.code||err.message)) || 'خطأ غير معروف';
+        // نشيل من النموذج اللي انحفظ، ونخلي الباقي عشان يعيد المحاولة
+        document.querySelectorAll('.orow').forEach(row=>{ if(savedNos.includes(normOrderNo(row.querySelector('.o-no').value))) row.remove(); });
+        renumber();
+        await uiAlert(`⚠️ ما انحفظ كل شي.\nالسبب: ${why}\n\n${savedNos.length?`انحفظ: ${savedNos.join('، ')}\n`:''}ما انحفظ: ${orders.map(x=>x.orderNo).filter(n=>!savedNos.includes(n)).join('، ')}\n\nالطلبات اللي ما انحفظت باقية في النموذج — جرّب الحفظ مرة ثانية. ولو تكرر صوّر هذي الرسالة للإدارة.`);
+        btn.disabled=false; btn.textContent=btnTxt; return;
+      }
+    }
     pendingMissingId = null; PENDING_REDEL = null;
     const codes = '';
     const nU=new Set(orders.map(o=>o.orderNo)).size, extraTxt = orders.length>nU ? ` (${orders.length} توصيلة)` : '';
     const dupTxt = dupReqs.length ? ` — و${dupReqs.length} رقم مكرر انرسل للإدارة` : '';
     toast(pickup ? `تم تسجيل ${nU} طلب استلام ✅${dupTxt}` : `تم تسليم ${nU} طلب${extraTxt} لـ ${rep.name} ✅${dupTxt}`);
     resetForm();
-  }catch(e){ console.error(e); toast('ما انحفظ — تحقق من الاتصال أو الصلاحيات'); }
+  }catch(e){ console.error(e); await uiAlert(`ما انحفظ.\nالسبب: ${e&&e.code==='permission-denied'?'قاعدة البيانات رفضت (صلاحيات)':e&&e.code==='unavailable'?'ما فيه اتصال':(e&&(e.code||e.message))||'غير معروف'}\n\nصوّر هذي الرسالة للإدارة.`); }
   btn.disabled=false; btn.textContent=btnTxt;
 }
 
