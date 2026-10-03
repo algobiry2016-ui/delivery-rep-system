@@ -3,7 +3,18 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>لوحة المشرف — مناديب التوصيل</title>
+<!-- PWA -->
+<link rel="manifest" href="manifest-supervisor.json">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#FFFFFF">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="مشرف المناديب">
+<script>if('serviceWorker' in navigator){ window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{})); }</script>
+<!-- /PWA -->
+<title>لوحة مشرف المناديب — مناديب التوصيل</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;900&display=swap" rel="stylesheet">
@@ -82,7 +93,7 @@
 
 <div id="loginScreen" class="screen">
   <div class="login-wrap"><div class="login-card">
-    <h2>لوحة المشرف</h2>
+    <h2>لوحة مشرف المناديب</h2>
     <p>مشرف المناديب — مراجعة الطلبات والمتابعة</p>
     <div id="loginError" class="err"></div>
     <div style="margin-bottom:12px"><label class="l">البريد</label><input id="loginEmail" type="email" dir="ltr" autocomplete="username"></div>
@@ -100,7 +111,7 @@
 
 <div id="mainScreen" class="screen">
   <div class="topbar" id="topbar">
-    <div><div class="t">لوحة المشرف</div><div class="s" id="whoami"></div></div>
+    <div><div class="t">لوحة مشرف المناديب</div><div class="s" id="whoami"></div></div>
     <button onclick="auth.signOut()">خروج</button>
   </div>
   <div class="tabs">
@@ -167,7 +178,7 @@
 
     <!-- الاعتراضات والبلاغات -->
     <div id="pane-issues" class="pane">
-      <div class="note">الاعتراضات والبلاغات يعالجها مشرف الإنتاج من لوحته. هنا تتابعها وتتواصل مع المندوب لو احتاج.</div>
+      <div class="note">الاعتراضات والبلاغات يعالجها المشرف من لوحته. هنا تتابعها وتتواصل مع المندوب لو احتاج.</div>
       <div class="card"><h3>اعتراضات المناديب المفتوحة <span id="cntDisp" class="muted"></span></h3><div id="dispBox"></div></div>
       <div class="card"><h3>بلاغات طلبات وصّلوها وما انسجلت <span id="cntMiss" class="muted"></span></h3><div id="missBox"></div></div>
       <div class="card"><h3>طلبات ما أكدها المندوب من أيام سابقة</h3><div id="staleBox"></div></div>
@@ -278,7 +289,7 @@ async function loadAll(){
     const [o,e,df,ds,ms,pend] = await Promise.all([
       db.collection('dispatchOrders').where('date','>=',from).where('date','<=',to).get(),
       db.collection('dailyEntries').where('date','>=',from).where('date','<=',to).get(),
-      db.collection('deliveryDiffs').where('createdAt','>=',f).where('createdAt','<',t).get(),
+      db.collection('deliveryDiffs').where('createdAt','>=',f).get(),   // لين اليوم: فارق طلب قديم ممكن ينرفع متأخر
       db.collection('dispatchOrders').where('repStatus','==','disputed').get(),
       db.collection('missingReports').where('status','==','open').get(),
       db.collection('dispatchOrders').where('repStatus','==','pending').get()
@@ -309,7 +320,7 @@ function diffOf(o){ return DIFFMAP[(o.repPhone||'')+'|'+norm(o.orderNo)]||null; 
 // مراحل الطلب من منظور المشرف
 function stage(o){
   if(o.fulfillment==='pickup') return 'pickup';
-  if(o.noPay && !o.entryId) return 'nopay';
+  if(o.noPay) return 'nopay';   // رجع بدون توصيل ثاني — ما يحتاج مراجعة (الإدارة تستبعده)
   const st=o.repStatus||'pending';
   if(st==='disputed') return 'disputed';
   if(st!=='confirmed') return 'unconfirmed';
@@ -480,7 +491,9 @@ function renderReps(){
 /* ---------- diffs ---------- */
 function renderDiffs(){
   const r=document.getElementById('fRep').value;
-  const list=DIFFS.filter(x=>!r||x.repUid===r).sort((a,b)=>(b.createdAt?.toMillis?.()||0)-(a.createdAt?.toMillis?.()||0));
+  const tEnd=new Date(document.getElementById('fTo').value+'T00:00:00+03:00'); tEnd.setDate(tEnd.getDate()+1);
+  // جدول الفوارق: اللي انرفعت بالفترة، أو اللي تخص طلبات الفترة حتى لو انرفعت بعدها
+  const list=DIFFS.filter(x=>!r||x.repUid===r).filter(x=>(x.createdAt?.toDate?x.createdAt.toDate()<tEnd:true) || ORDERS.some(o=>norm(o.orderNo)===norm(x.orderNo))).sort((a,b)=>(b.createdAt?.toMillis?.()||0)-(a.createdAt?.toMillis?.()||0));
   document.getElementById('diffsBody').innerHTML = list.length ? list.map(x=>{
     const no=norm(x.orderNo), mine=ORDERS.find(o=>norm(o.orderNo)===no && o.repPhone===x.repUid), other=ORDERS.find(o=>norm(o.orderNo)===no);
     const match = mine ? '<span class="st st-appr">✓ مسلّم له</span>' : other ? `<span class="st st-rej">⚠️ مسلّم لـ ${esc(other.repName)}</span>` : '<span class="st st-await">مو بسجل التسليم</span>';

@@ -3,6 +3,17 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- PWA -->
+<link rel="manifest" href="manifest-rep.json">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#FFFFFF">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="مناديب دوكمنتيشن">
+<script>if('serviceWorker' in navigator){ window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{})); }</script>
+<!-- /PWA -->
 <title>شاشة المندوب — نظام مناديب التوصيل</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -217,7 +228,7 @@
   .screen{display:none;}
   .screen.active{display:block;}
 
-  /* ---------- طلباتي من مشرف الإنتاج ---------- */
+  /* ---------- طلباتي من المشرف ---------- */
   .batch{border:1px solid var(--line);border-radius:12px;margin-top:12px;overflow:hidden;}
   .batch-head{display:flex;justify-content:space-between;align-items:center;gap:8px;background:var(--cream);padding:10px 12px;}
   .batch-head .bt{font-size:13px;font-weight:700;}
@@ -324,8 +335,8 @@
         <div id="pendingNotice" class="source-label" style="display:none;margin-bottom:14px;"></div>
 
         <div class="card" id="myOrdersCard">
-          <h3>طلباتي من مشرف الإنتاج</h3>
-          <div class="muted">كل طلب يسلّمه لك مشرف الإنتاج يظهر هنا مباشرة بمنطقته وسعره. راجعها واضغط <b>تأكيد</b>، أو <b>اعتراض</b> لو فيه غلط.</div>
+          <h3>طلباتي من المشرف</h3>
+          <div class="muted">كل طلب يسلّمه لك المشرف يظهر هنا مباشرة بمنطقته وسعره. راجعها واضغط <b>تأكيد</b>، أو <b>اعتراض</b> لو فيه غلط.</div>
           <label>التاريخ</label>
           <input type="date" id="ordersDate" onchange="listenMyOrders()">
           <div id="ordersSummary" class="source-label" style="display:none"></div>
@@ -334,7 +345,7 @@
           <div id="myMissingList"></div>
         </div>
 
-        <!-- الإدخال اليدوي القديم: مخفي — الأعداد صارت تجي من سجل مشرف الإنتاج (MANUAL_ENTRY) -->
+        <!-- الإدخال اليدوي القديم: مخفي — الأعداد صارت تجي من سجل المشرف (MANUAL_ENTRY) -->
         <div class="card" id="manualEntryCard" style="display:none">
           <h3>إدخال طلبات اليوم</h3>
           <label>البراند</label>
@@ -447,7 +458,7 @@
 <div class="modal-bg" id="disputeModal" onclick="if(event.target===this)closeModal('disputeModal')">
   <div class="modal">
     <h3>اعتراض على الطلب <span id="dispNo" style="direction:ltr;unicode-bidi:isolate"></span></h3>
-    <div class="muted">يوصل اعتراضك لمشرف الإنتاج، وما ينحسب الطلب لين يتعدّل أو تأكده.</div>
+    <div class="muted">يوصل اعتراضك لالمشرف، وما ينحسب الطلب لين يتعدّل أو تأكده.</div>
     <label>السبب</label>
     <div class="chips" id="dispReasons">
       <button type="button" class="chip" data-r="ما استلمت الطلب">ما استلمت الطلب</button>
@@ -467,7 +478,7 @@
 <div class="modal-bg" id="missingModal" onclick="if(event.target===this)closeModal('missingModal')">
   <div class="modal">
     <h3>طلب وصّلته وما هو في القائمة</h3>
-    <div class="muted">يوصل بلاغك لمشرف الإنتاج، ولما يسجّله يظهر عندك في القائمة وتأكده.</div>
+    <div class="muted">يوصل بلاغك لالمشرف، ولما يسجّله يظهر عندك في القائمة وتأكده.</div>
     <label>رقم الطلب (أو جوال العميل لطلبات الواتس والمحل)</label>
     <input id="missNo" inputmode="numeric" placeholder="رقم سلة، أو جوال العميل 05xxxxxxxx">
     <label>النوع</label>
@@ -619,7 +630,7 @@ async function loadRepProfile(){
 /* ---------------- LOAD AREAS ---------------- */
 async function loadAreas(){
   const snap = await db.collection('settings').doc('areas').collection('list').orderBy('order').get();
-  // المناطق اللي أضافها مشرف الإنتاج وما انحط لها سعر من الإدارة ما تظهر للمندوب
+  // المناطق اللي أضافها المشرف وما انحط لها سعر من الإدارة ما تظهر للمندوب
   AREAS = snap.docs.map(d=>({id:d.id, ...d.data()})).filter(a=>a.rateDoc>0 && a.rateWard>0);
   if(AREAS.length === 0){
     // fallback محلي لو الإعدادات ما جُهزت بعد بلوحة الإدارة
@@ -1108,7 +1119,7 @@ function attachNotificationListeners(){
 }
 
 /* ================================================================
-   طلباتي من مشرف الإنتاج — تأكيد / اعتراض / بلاغ طلب ناقص
+   طلباتي من المشرف — تأكيد / اعتراض / بلاغ طلب ناقص
    ================================================================ */
 const TS = () => firebase.firestore.FieldValue.serverTimestamp();
 const OTYPES = {
@@ -1164,15 +1175,15 @@ function stageCell(o){
   const k=orderStage(o).k;
   if(k==='nopay') return '<span class="sp rej">↩︎ رجع للمحل — ما تنحسب</span>';
   if(k==='proof') return `<button class="btn-ok" style="background:#3A6EA5" onclick="pickProof('${o.id}')">📎 ارفع إثبات التحويل</button><div class="stxt">مطلوب قبل التأكيد</div>`;
-  if(k==='disp') return '<span class="sp rej">اعترضت — عند مشرف الإنتاج</span>';
+  if(k==='disp') return '<span class="sp rej">اعترضت — عند المشرف</span>';
   if(k==='nop') return '<span class="sp gray">المنطقة بانتظار التسعير</span>';
   if(o.noPay && k!=='rej') return '<span class="sp rej">↩︎ رجع — الإدارة بتستبعدها من الحساب</span>';
   if(k==='rej') return `<span class="sp rej">رفضته الإدارة</span>${ENTRY_REASON[o.entryId]?`<div class="sub" style="color:#B23A3A">${escH(ENTRY_REASON[o.entryId])}</div>`:''}`;
   const step=(label,state)=>`<span class="stp ${state}">${state==='on'?'✓ ':''}${label}</span>`;
   const s2 = k==='rev'||k==='appr' ? 'on' : 'cur';
   const s3 = k==='appr' ? 'on' : (k==='rev' ? 'cur' : '');
-  const txt = k==='appr' ? '<b style="color:var(--green)">تم الاعتماد — انضاف لرصيدك</b>' : k==='rev' ? 'بانتظار اعتماد الإدارة' : 'بانتظار مراجعة المشرف';
-  return `<div class="stps">${step('أكدت','on')}${step('المشرف',s2)}${step('الإدارة',s3)}</div><div class="stxt">${txt}</div>`;
+  const txt = k==='appr' ? '<b style="color:var(--green)">تم الاعتماد — انضاف لرصيدك</b>' : k==='rev' ? 'بانتظار اعتماد الإدارة' : 'بانتظار مراجعة مشرف المناديب';
+  return `<div class="stps">${step('أكدت','on')}${step('المراجعة',s2)}${step('الإدارة',s3)}</div><div class="stxt">${txt}</div>`;
 }
 function renderMyOrders(){
   const box = document.getElementById('myOrdersList');
@@ -1193,7 +1204,7 @@ function renderMyOrders(){
     `${new Set(MY_ORDERS.map(o=>o.orderNo)).size} طلب · ${MY_ORDERS.length} توصيلة`,
     n.appr ? `✓ معتمد ${n.appr} (${a.appr} ر.س)` : '',
     n.rev ? `بانتظار الإدارة ${n.rev} (${a.rev} ر.س)` : '',
-    n.conf ? `بانتظار المشرف ${n.conf} (${a.conf} ر.س)` : '',
+    n.conf ? `بانتظار مشرف المناديب ${n.conf} (${a.conf} ر.س)` : '',
     n.pend ? `⏳ تحتاج تأكيدك ${n.pend} (${a.pend} ر.س)` : '',
     n.disp ? `⚠️ معترض ${n.disp}` : '',
     n.rej ? `مرفوض ${n.rej}` : ''
@@ -1242,7 +1253,7 @@ function renderMyOrders(){
         <tfoot><tr><td colspan="3">المجموع</td><td class="price">${bAmt} ر.س</td><td></td></tr></tfoot>
       </table></div>
     </div>`;
-  }).join('') + `<div class="legend">✓ = تأكيد إنك استلمت الطلب والبيانات صحيحة · ✕ = اعتراض لو فيه غلط.<br>بعد تأكيدك يمر الطلب بمرحلتين: <b>مراجعة المشرف</b> ثم <b>اعتماد الإدارة</b>، وبعدها ينضاف لرصيدك.</div>`;
+  }).join('') + `<div class="legend">✓ = تأكيد إنك استلمت الطلب والبيانات صحيحة · ✕ = اعتراض لو فيه غلط.<br>بعد تأكيدك يمر الطلب بمرحلتين: <b>مراجعة مشرف المناديب</b> ثم <b>اعتماد الإدارة</b>، وبعدها ينضاف لرصيدك.</div>`;
 }
 
 // التأكيد: يحوّل الطلبات المؤكدة لقيد يومي (dailyEntries) بنفس الشكل القديم، فيوصل للإدارة
@@ -1327,7 +1338,7 @@ async function submitDispute(){
       disputeCount:(o.disputeCount||0)+1, repActionAt:TS()
     }));
     await wb.commit();
-    closeModal('disputeModal'); toast('وصل اعتراضك لمشرف الإنتاج');
+    closeModal('disputeModal'); toast('وصل اعتراضك لالمشرف');
   }catch(e){ console.error(e); toast('ما انرسل — تحقق من الإنترنت'); }
   btn.disabled=false;
 }
@@ -1357,7 +1368,7 @@ async function submitMissing(){
       orderNo: no, type, areaId, areaName: area?area.name:'', note: document.getElementById('missNote').value.trim(),
       status:'open', createdAt: TS()
     });
-    closeModal('missingModal'); toast('وصل بلاغك لمشرف الإنتاج');
+    closeModal('missingModal'); toast('وصل بلاغك لالمشرف');
   }catch(e){ console.error(e); toast('ما انرسل — تحقق من الإنترنت'); }
   btn.disabled=false;
 }
@@ -1367,7 +1378,7 @@ function renderMyMissing(list){
   box.innerHTML = '<label style="margin-top:14px">بلاغاتي عن طلبات ناقصة</label>' + list.map(m=>{
     const st = m.status==='resolved' ? '<span class="badge approved">انضاف للقائمة</span>'
       : m.status==='rejected' ? `<span class="badge rejected">مرفوض</span>${m.resolveNote?` <span class="muted">${escH(m.resolveNote)}</span>`:''}`
-      : '<span class="badge pending">عند مشرف الإنتاج</span>';
+      : '<span class="badge pending">عند المشرف</span>';
     return `<div class="log-item"><div><div class="desc" style="direction:ltr;unicode-bidi:isolate;text-align:right">${escH(m.orderNo||'—')}</div>
       <div class="date">${OTYPES[m.type]?.label||''} · ${escH(m.areaName)}</div></div><div>${st}</div></div>`;
   }).join('');

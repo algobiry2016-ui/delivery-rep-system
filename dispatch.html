@@ -3,7 +3,18 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>تسليم الطلبات للمناديب — نظام مناديب التوصيل</title>
+<!-- PWA -->
+<link rel="manifest" href="manifest-dispatch.json">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#FFFFFF">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="تسليم الطلبات">
+<script>if('serviceWorker' in navigator){ window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{})); }</script>
+<!-- /PWA -->
+<title>لوحة المشرف — تسليم الطلبات</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;900&display=swap" rel="stylesheet">
@@ -142,8 +153,8 @@
 <!-- LOGIN -->
 <div id="loginScreen" class="screen">
   <div class="login-wrap"><div class="login-card">
-    <h2>تسليم الطلبات للمناديب</h2>
-    <p>دخول مشرف الإنتاج — برقم الجوال (أو بريد الإدارة)</p>
+    <h2>لوحة المشرف</h2>
+    <p>دخول المشرف — برقم الجوال (أو بريد الإدارة)</p>
     <div id="loginError" class="err"></div>
     <div class="field"><label>رقم الجوال أو البريد</label><input id="loginId" inputmode="tel" autocomplete="username"></div>
     <div class="field"><label>كلمة المرور</label><input id="loginPass" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()"></div>
@@ -163,7 +174,7 @@
 <!-- MAIN -->
 <div id="mainScreen" class="screen">
   <div class="topbar">
-    <div><div class="t">تسليم الطلبات للمناديب</div><div class="s" id="whoami"></div></div>
+    <div><div class="t">لوحة المشرف</div><div class="s" id="whoami"></div></div>
     <button onclick="doLogout()">خروج</button>
   </div>
   <div class="tabs">
@@ -242,6 +253,7 @@
       <div class="note" style="background:#F2EEE9;color:var(--ink)">كل طلب تسلّمه يظهر للمندوب فوراً. المندوب <b>يأكد</b> الطلب فيروح للإدارة للاعتماد، أو <b>يعترض</b> فيوصلك هنا. وإذا وصّل طلب ما سجّلته، يرفع لك <b>بلاغ طلب ناقص</b>.</div>
       <div class="card"><h3>⚠️ اعتراضات المناديب <span id="dispCount"></span></h3><div id="disputesBox" class="muted">جاري التحميل...</div></div>
       <div class="card"><h3>📦 طلبات ناقصة بلّغ عنها المناديب <span id="missCount"></span></h3><div id="missingBox" class="muted">جاري التحميل...</div></div>
+      <div class="card"><h3>🔁 طلبات تكرار رقم الجوال (موافقة الإدارة)</h3><div id="dupBox" class="muted">—</div></div>
       <div class="card"><h3>⏳ طلبات من أيام سابقة ما أكدها المندوب</h3><div id="staleBox" class="muted">جاري التحميل...</div></div>
       <div class="card" id="auditCard" style="display:none"><h3>🔒 سجل التعديلات (للإدارة فقط) <button class="ghost" style="padding:4px 10px;margin-inline-start:6px" onclick="loadAudit()">تحديث</button></h3>
         <div class="muted" style="margin-bottom:8px;font-size:12px">كل تعديل أو حذف أو تحويل أو رجوع يسويه أي أحد في لوحة التسليم، مع الوقت والسبب. ما يقدر أحد يعدّله أو يحذفه.</div>
@@ -256,8 +268,8 @@
         <button class="ghost w100 wbtn" style="margin-top:12px" onclick="openRepModal()">+ إضافة مندوب</button>
       </div>
       <div class="card">
-        <h3>المناطق وأسعار التوصيل</h3>
-        <div class="scroll"><table><thead><tr><th>المنطقة</th><th>دوكمنتيشن / واتس</th><th>ورد إكسبرس</th></tr></thead><tbody id="areasBody"></tbody></table></div>
+        <h3 id="areasTitle">المناطق وأسعار التوصيل</h3>
+        <div class="scroll"><table><thead id="areasHead"><tr><th>المنطقة</th><th>دوكمنتيشن / واتس</th><th>ورد إكسبرس</th></tr></thead><tbody id="areasBody"></tbody></table></div>
         <button class="ghost w100 wbtn" style="margin-top:12px" onclick="openAreaModal()">+ إضافة منطقة</button>
       </div>
       <div class="card">
@@ -313,6 +325,19 @@
       <button class="primary" id="retSaveBtn" onclick="saveReturn()">حفظ</button>
       <button class="ghost" onclick="closeModal('returnModal')">إلغاء</button>
     </div>
+  </div>
+</div>
+
+<!-- AREA CHANGE REQUEST MODAL -->
+<div class="modal-bg" id="areaReqModal">
+  <div class="modal">
+    <h3 style="margin-top:0">تعديل منطقة الطلب <span id="arNo" style="direction:ltr;unicode-bidi:isolate"></span></h3>
+    <div class="muted" style="margin-bottom:10px">المندوب أكد الطلب، فالتعديل يروح للإدارة توافق عليه. بعد الموافقة يتعدّل السعر وحساب المندوب تلقائياً.</div>
+    <div class="field"><label>المنطقة المسجّلة</label><input id="arFrom" disabled></div>
+    <div class="field"><label>المنطقة الصحيحة</label><select id="arTo"></select></div>
+    <div class="field"><label>السبب</label><input id="arWhy" placeholder="مثال: الموقع اللي أرسله العميل طلع تندحة"></div>
+    <div class="field"><label>صورة الموقع (اختياري)</label><input type="file" id="arPic" accept="image/*"></div>
+    <div style="display:flex;gap:8px"><button class="primary" style="flex:1" onclick="sendAreaReq()">إرسال للإدارة</button><button class="ghost" onclick="closeModal('areaReqModal')">إلغاء</button></div>
   </div>
 </div>
 
@@ -379,9 +404,11 @@ const TYPES = {
 const AMMAR_DISCOUNT = 5;
 // طلبات الواتس والمحل ما لها رقم سلة: رقم الطلب = جوال العميل (05xxxxxxxx)
 const PHONE_TYPES = ['wa','shop'];
+// أرقام طلبات سلة (دوكمنتيشن وورد إكسبرس) طولها 9 أرقام — أي رقم أطول أو أقصر غالباً فيه رقم زايد أو ناقص
+const SALLA_LEN = 9;
 const AUTO_PREFIX = {};   // الأرقام التلقائية (W/M) موقفة — صار المعتمد جوال العميل
 const RETURN_REASONS = ['العميل ما رد','العميل مو موجود','العنوان غلط','العميل أجّل الاستلام','سبب آخر'];
-// ربط شاشة المنسقين (florist.html): مطفي حالياً — الدورة تبدأ من مشرف الإنتاج.
+// ربط شاشة المنسقين (florist.html): مطفي حالياً — الدورة تبدأ من المشرف.
 // لما نفعّل المنسقين نغيرها إلى true وكل شي يشتغل بدون تعديل ثاني.
 const FLORIST_FLOW = false;
 const DEFAULT_FLORISTS = ['حسن','طارق','سيام','نور','مؤمن','جيلي'];
@@ -407,7 +434,7 @@ function rateFor(area, type, rep){
 function idToEmail(id){
   id = id.trim();
   if(id.includes('@')) return id;                       // حساب إدارة بالبريد
-  return id.replace(/\D/g,'') + '@dispatch.dmflower1.local'; // مشرف الإنتاج بالجوال
+  return id.replace(/\D/g,'') + '@dispatch.dmflower1.local'; // المشرف بالجوال
 }
 function doLogin(){
   const id=document.getElementById('loginId').value, pass=document.getElementById('loginPass').value;
@@ -420,7 +447,7 @@ function doLogin(){
 function doLogout(){ auth.signOut(); }
 function showScreen(id){ ['loginScreen','deniedScreen','mainScreen'].forEach(s=>document.getElementById(s).classList.toggle('active',s===id)); }
 
-// الصلاحيات: مشرف الإنتاج (dispatchers/{uid} active) أو أدمن كامل = إضافة وتعديل.
+// الصلاحيات: المشرف (dispatchers/{uid} active) أو أدمن كامل = إضافة وتعديل.
 // باقي أدوار الإدارة (مشرف/مراجع) = ما لهم دخول. إضافة الحسابات تتم يدوياً من لوحة Firebase.
 auth.onAuthStateChanged(async user=>{
   if(!user){ showScreen('loginScreen'); return; }
@@ -432,11 +459,11 @@ auth.onAuthStateChanged(async user=>{
     ]);
     const isDispatcher = dSnap && dSnap.exists && dSnap.data().active !== false;
     const adminRole = aSnap && aSnap.exists ? (aSnap.data().role||'reviewer') : null;
-    // خاصة بمشرف الإنتاج والأدمن الكامل فقط — المشرف والمراجع ما لهم دخول
+    // خاصة بالمشرف والأدمن الكامل فقط — المشرف والمراجع ما لهم دخول
     if(!isDispatcher && adminRole!=='admin'){ showScreen('deniedScreen'); return; }
     isFullAdmin = adminRole === 'admin';
     canWrite = isDispatcher || isFullAdmin;
-    myName = isDispatcher ? (dSnap.data().name||'مشرف الإنتاج') : (aSnap.data().name||user.email);
+    myName = isDispatcher ? (dSnap.data().name||'المشرف') : (aSnap.data().name||user.email);
     document.getElementById('whoami').textContent = myName + (canWrite ? '' : ' — عرض فقط');
     document.getElementById('readOnlyNote').style.display = canWrite ? 'none' : 'block';
     if(!canWrite){
@@ -554,8 +581,12 @@ async function saveArea(){
 
 function renderLists(){
   const bl={both:'الكل',documentation:'دوكمنتيشن',ward:'ورد إكسبرس'};
-  document.getElementById('repsBody').innerHTML = REPS.map(r=>`<tr><td><b>${esc(r.name)}</b>${r.isAmmar?' <span class="muted">(خصم 5)</span>':''}${r.addedByDispatcher?'<span class="new-tag">مضاف من مشرف الإنتاج</span>':''}</td><td>${esc(r.phone||r.id)}</td><td>${bl[r.brand]||'الكل'}</td></tr>`).join('');
-  document.getElementById('areasBody').innerHTML = AREAS.map(a=>`<tr><td><b>${esc(a.name)}</b>${a.addedByDispatcher?'<span class="new-tag">مضافة من مشرف الإنتاج</span>':''}</td>${isPriced(a)?`<td>${a.rateDoc} ر.س</td><td>${a.rateWard} ر.س</td>`:'<td colspan="2"><span class="new-tag">بانتظار السعر من الإدارة</span></td>'}</tr>`).join('');
+  document.getElementById('repsBody').innerHTML = REPS.map(r=>`<tr><td><b>${esc(r.name)}</b>${(r.isAmmar&&isFullAdmin)?' <span class="muted">(خصم 5)</span>':''}${r.addedByDispatcher?'<span class="new-tag">مضاف من المشرف</span>':''}</td><td>${esc(r.phone||r.id)}</td><td>${bl[r.brand]||'الكل'}</td></tr>`).join('');
+  // المشرف ما يشوف أي مبالغ — الأسعار للإدارة فقط
+  if(!isFullAdmin){ document.getElementById('areasTitle').textContent='المناطق'; document.getElementById('areasHead').innerHTML='<tr><th>المنطقة</th><th>الحالة</th></tr>'; }
+  document.getElementById('areasBody').innerHTML = AREAS.map(a=>`<tr><td><b>${esc(a.name)}</b>${a.addedByDispatcher?'<span class="new-tag">مضافة من المشرف</span>':''}</td>${
+    !isFullAdmin ? (isPriced(a)?'<td><span class="rs rs-confirmed">✓ جاهزة</span></td>':'<td><span class="new-tag">بانتظار الإدارة</span></td>')
+    : (isPriced(a)?`<td>${a.rateDoc} ر.س</td><td>${a.rateWard} ر.س</td>`:'<td colspan="2"><span class="new-tag">بانتظار السعر من الإدارة</span></td>')}</tr>`).join('');
 }
 function isPriced(a){ return a && a.rateDoc>0 && a.rateWard>0; }
 function repServes(rep,type){ const b=rep.brand||'both'; return b==='both' || b===TYPES[type].brand; }
@@ -733,7 +764,7 @@ async function saveHandover(){
     } else if(!isRedel){
       if(!no){ toast(`طلب ${n}: اكتب رقم الطلب`); return; }
       if(/^05\d{8}$/.test(no)){ toast(`طلب ${n}: هذا رقم جوال — لو الطلب واتس أو محل اختر النوع الصحيح`); return; }
-      if(no.length<6 || no.length>12){ toast(`طلب ${n}: رقم الطلب غير منطقي (${no})`); return; }
+      if(no.length!==SALLA_LEN){ toast(`طلب ${n}: رقم طلب سلة لازم يكون ${SALLA_LEN} أرقام — كتبت ${no.length} (${no}). تأكد ما فيه رقم زايد أو ناقص`); return; }
     }
     if(r.dataset.prepId && !prep){ toast(`الطلب ${no} ما عاد في قائمة الجاهز — شيله وحدّث`); return; }
     if(no && seen.has(no)){ toast(`الطلب ${no} مكرر في نفس التسليم — لو لمستلم ثاني استخدم "＋ منطقة توصيل ثانية" في نفس السطر`); return; }
@@ -774,10 +805,25 @@ async function saveHandover(){
         if(s.docs.some(d=>d.data().date===today)) samePhone.push(o);
       } else dups.push(o.orderNo);
     }
-    if(samePhone.length && !confirm(`فيه طلب مسجّل اليوم لنفس جوال العميل:\n${samePhone.map(o=>o.orderNo).join('\n')}\n\nهل هذا طلب جديد ثاني لنفس العميل؟ (ينسجل في سجل التعديلات)\nلو الطلب رجع ويبي توصيل ثاني استخدم زر "رجع" بدل هذا.`)){
-      btn.disabled=false; btn.textContent=btnTxt; return;
+    // تكرار نفس جوال العميل بنفس اليوم: غير مسموح لالمشرف — ينرسل طلب للإدارة توافق عليه
+    let dupReqs=[];
+    if(samePhone.length){
+      const nos=[...new Set(samePhone.map(o=>o.orderNo))];
+      const why=prompt(`⛔ غير مسموح بتكرار رقم الجوال بنفس اليوم:\n${nos.join('\n')}\n\nلو هو طلب جديد فعلاً، اكتب السبب ونرسله للإدارة توافق عليه.\n(لو الطلب رجع ويبي توصيل ثاني: استخدم زر "رجع" من سجل اليوم)`, '');
+      if(why===null || !why.trim()){ toast('ما انحفظ — التكرار يحتاج سبب وموافقة الإدارة'); btn.disabled=false; btn.textContent=btnTxt; return; }
+      dupReqs = nos.map(no=>({orderNo:no, reason:why.trim(), orders: orders.filter(o=>o.orderNo===no)}));
+      for(let i=orders.length-1;i>=0;i--) if(nos.includes(orders[i].orderNo)) orders.splice(i,1);
     }
-    samePhone.forEach(o=>o.samePhoneSameDay=true);
+    // رقم بعيد جداً عن أرقام طلبات نفس البراند اليوم (مثلاً رقم متبدل بالغلط) — نطلب تأكيد وينسجل
+    const far=[];
+    let todayAll=[]; try{ todayAll=(await db.collection('dispatchOrders').where('date','==',localDate()).get()).docs.map(d=>d.data()); }catch(e){}
+    for(const o of orders.filter(x=>x.orderNo && !PHONE_TYPES.includes(x.type) && !x.redeliveryOf)){
+      const others=todayAll.filter(x=>x.brand===o.brand && !PHONE_TYPES.includes(x.type) && /^\d+$/.test(x.orderNo) && x.orderNo!==o.orderNo).map(x=>Number(x.orderNo));
+      if(others.length>=3){ const sorted=others.sort((a,b)=>a-b), med=sorted[Math.floor(sorted.length/2)];
+        if(Math.abs(Number(o.orderNo)-med)>50000) far.push(o); }
+    }
+    if(far.length && !confirm(`تأكد من أرقام الطلبات هذي — بعيدة عن أرقام طلبات اليوم:\n${far.map(o=>o.orderNo).join('\n')}\n\nإذا متأكد إنها صحيحة اضغط موافق (بتنسجل للإدارة).`)){ btn.disabled=false; btn.textContent=btnTxt; return; }
+    far.forEach(o=>o.farNumber=true);
     if(dups.length){
       alert(`هذي الطلبات مسجّلة قبل:\n${dups.join('\n')}\n\n• لو الطلب رجع والعميل طلب يعاد توصيله: افتح "سجل اليوم" واضغط "رجع" على الطلب الأصلي.\n• لو نفس الطلب لأكثر من مستلم بمناطق مختلفة: سجّله مرة وحدة واضغط "＋ منطقة توصيل ثانية لنفس الطلب".`);
       btn.disabled=false; btn.textContent=btnTxt; return;
@@ -794,6 +840,21 @@ async function saveHandover(){
         tx.set(cRef, {n: n0 + list.length}); return n0;
       });
       list.forEach((o,i)=>{ o.orderNo = `${prefix}${mmdd}-${String(start+i+1).padStart(2,'0')}`; });
+    }
+    if(dupReqs.length){
+      const rb=db.batch();
+      dupReqs.forEach(q=>{
+        rb.set(db.collection('dupRequests').doc(), {orderNo:q.orderNo, reason:q.reason, status:'open', date,
+          pickup, repPhone: pickup?null:rep.id, repName: pickup?null:rep.name, isAmmar: pickup?false:!!rep.isAmmar,
+          orders: q.orders.map(o=>({...o, floristReceivedAt:null, floristReadyAt:null})),
+          requestedBy: currentUser.uid, requestedByName: myName, requestedAt: TS()});
+        rb.set(db.collection('auditLog').doc(), auditRow('dupRequest', {orderNo:q.orderNo}, `طلب موافقة على تكرار الجوال · ${pickup?'استلام':rep.name} · السبب: ${q.reason}`));
+      });
+      await rb.commit();
+    }
+    if(!orders.length){
+      toast(`⛔ الرقم مكرر — انرسل طلب للإدارة للموافقة (${dupReqs.map(q=>q.orderNo).join('، ')})`);
+      pendingMissingId=null; PENDING_REDEL=null; resetForm(); btn.disabled=false; btn.textContent=btnTxt; return;
     }
     const batchRef = db.collection('dispatchBatches').doc();
     const wb = db.batch();
@@ -818,8 +879,8 @@ async function saveHandover(){
         handedAt:TS(), departedAt:null, repStatus: pickup?'na':'pending',
         createdBy:currentUser.uid, createdAt:TS()
       });
+      if(o.farNumber) wb.set(db.collection('auditLog').doc(), auditRow('farNumber', {id:ref.id, orderNo:o.orderNo}, `رقم بعيد عن أرقام طلبات اليوم — إبراهيم أكد إنه صحيح · ${pickup?'استلام':rep.name}`));
       if(o.multiDelivery) wb.set(db.collection('auditLog').doc(), auditRow('multi', {id:ref.id, orderNo:o.orderNo}, `توصيل إضافي لنفس الطلب · ${pickup?'استلام':rep.name} · ${o.areaName}`));
-      if(o.samePhoneSameDay) wb.set(db.collection('auditLog').doc(), auditRow('samePhone', {id:ref.id, orderNo:o.orderNo}, `طلب ثاني لنفس العميل بنفس اليوم · ${pickup?'استلام':rep.name}`));
       if(o.redeliveryOf){
         const pr = (PENDING_REDEL && PENDING_REDEL.origId===o.redeliveryOf) ? PENDING_REDEL : null;
         wb.update(db.collection('dispatchOrders').doc(o.redeliveryOf), {redeliveryId: ref.id, returned:true, returnedAt:TS(), returnReason: pr?pr.reason:'رجع — توصيل ثاني', secondFeePaid:true});
@@ -835,7 +896,8 @@ async function saveHandover(){
     pendingMissingId = null; PENDING_REDEL = null;
     const codes = '';
     const nU=new Set(orders.map(o=>o.orderNo)).size, extraTxt = orders.length>nU ? ` (${orders.length} توصيلة)` : '';
-    toast(pickup ? `تم تسجيل ${nU} طلب استلام ✅${codes}` : `تم تسليم ${nU} طلب${extraTxt} لـ ${rep.name} ✅${codes}`);
+    const dupTxt = dupReqs.length ? ` — و${dupReqs.length} رقم مكرر انرسل للإدارة` : '';
+    toast(pickup ? `تم تسجيل ${nU} طلب استلام ✅${dupTxt}` : `تم تسليم ${nU} طلب${extraTxt} لـ ${rep.name} ✅${dupTxt}`);
     resetForm();
   }catch(e){ console.error(e); toast('ما انحفظ — تحقق من الاتصال أو الصلاحيات'); }
   btn.disabled=false; btn.textContent=btnTxt;
@@ -846,6 +908,34 @@ function auditRow(action, o, details, extra){
   return {action, orderId:o.id||null, orderNo:o.orderNo||null, details:details||'', by:currentUser.uid, byName:myName, at:TS(), date:localDate(), ...(extra||{})};
 }
 function audit(action, o, details, extra){ return db.collection('auditLog').add(auditRow(action, o, details, extra)).catch(e=>console.warn('audit',e)); }
+// طلبات تعديل المنطقة على طلب مؤكد (توافق عليها الإدارة)
+let AREQ=[], arId=null;
+function openAreaReq(id){
+  const o=DAY_ORDERS[id]; if(!o) return; arId=id;
+  document.getElementById('arNo').textContent=o.orderNo;
+  document.getElementById('arFrom').value=o.areaName||'';
+  document.getElementById('arTo').innerHTML='<option value="">اختر المنطقة الصحيحة...</option>'+AREAS.filter(a=>a.id!==o.areaId).map(a=>`<option value="${esc(a.id)}">${esc(a.name)}</option>`).join('');
+  document.getElementById('arWhy').value=''; document.getElementById('arPic').value='';
+  document.getElementById('areaReqModal').classList.add('show');
+}
+async function sendAreaReq(){
+  const o=DAY_ORDERS[arId]; if(!o) return;
+  const to=document.getElementById('arTo').value, why=document.getElementById('arWhy').value.trim();
+  if(!to){ toast('اختر المنطقة الصحيحة'); return; }
+  if(!why){ toast('اكتب السبب'); return; }
+  const a=AREAS.find(x=>x.id===to); let pic=null;
+  const f=document.getElementById('arPic').files[0];
+  if(f){ try{ pic=await compressImage(f); }catch(e){ toast('تعذّر قراءة الصورة'); return; } }
+  try{
+    const wb=db.batch();
+    wb.set(db.collection('areaRequests').doc(), {orderId:o.id, orderNo:o.orderNo, repPhone:o.repPhone, repName:o.repName, date:o.date,
+      fromAreaId:o.areaId, fromAreaName:o.areaName, toAreaId:to, toAreaName:a?a.name:'', reason:why, photo:pic,
+      status:'open', requestedBy:currentUser.uid, requestedByName:myName, requestedAt:TS()});
+    wb.set(db.collection('auditLog').doc(), auditRow('areaRequest', o, `${o.repName}: ${o.areaName} ← ${a?a.name:''} · ${why}`));
+    await wb.commit(); closeModal('areaReqModal'); toast('انرسل للإدارة ✅'); loadDay();
+  }catch(e){ console.error(e); toast('ما انرسل'); }
+}
+
 let returnId=null;
 function retModeChanged(){
   const redel=document.querySelector('input[name=retMode]:checked').value==='redel';
@@ -954,7 +1044,7 @@ async function loadAudit(){
   const box=document.getElementById('auditBox'); if(!box) return;
   try{
     const snap=await db.collection('auditLog').orderBy('at','desc').limit(100).get();
-    const names={create:'تسليم جديد',depart:'خروج مندوب',contact:'وقت التواصل',pickedUp:'استلام عميل',addRep:'إضافة مندوب',addArea:'إضافة منطقة',rejectMissing:'رفض بلاغ',exclude:'استبعاد من الحساب',recalc:'إعادة احتساب',multi:'توصيل إضافي لنفس الطلب',adminDelete:'حذف من الإدارة',samePhone:'طلب ثاني لنفس الجوال',edit:'تعديل',delete:'حذف طلب',deleteBatch:'حذف تسليم',transfer:'تحويل لمندوب',return:'رجوع للمحل',redelivery:'توصيل ثاني',keep:'رفض اعتراض (الطلب صحيح)',rejectMissing:'رفض بلاغ'};
+    const names={areaRequest:'طلب تعديل منطقة',areaChange:'تعديل منطقة (الإدارة)',farNumber:'رقم طلب غير معتاد',fixOrderNo:'تصحيح رقم طلب (الإدارة)',dupRequest:'طلب موافقة تكرار',dupApproved:'موافقة الإدارة على تكرار',dupRejected:'رفض الإدارة للتكرار',create:'تسليم جديد',depart:'خروج مندوب',contact:'وقت التواصل',pickedUp:'استلام عميل',addRep:'إضافة مندوب',addArea:'إضافة منطقة',rejectMissing:'رفض بلاغ',exclude:'استبعاد من الحساب',recalc:'إعادة احتساب',multi:'توصيل إضافي لنفس الطلب',adminDelete:'حذف من الإدارة',samePhone:'طلب ثاني لنفس الجوال',edit:'تعديل',delete:'حذف طلب',deleteBatch:'حذف تسليم',transfer:'تحويل لمندوب',return:'رجوع للمحل',redelivery:'توصيل ثاني',keep:'رفض اعتراض (الطلب صحيح)',rejectMissing:'رفض بلاغ'};
     box.innerHTML = snap.empty ? '<div class="muted">ما فيه تعديلات.</div>' : `<div class="scroll"><table>
       <thead><tr><th>الوقت</th><th>بواسطة</th><th>الإجراء</th><th>رقم الطلب</th><th>التفاصيل</th></tr></thead>
       <tbody>${snap.docs.map(d=>{const a=d.data(); return `<tr><td style="white-space:nowrap">${a.date||''} ${fmtTime(a.at)}</td><td>${esc(a.byName)}</td><td><b>${names[a.action]||a.action}</b></td><td style="direction:ltr;unicode-bidi:isolate">${esc(a.orderNo||'')}</td><td>${esc(a.details)}</td></tr>`;}).join('')}</tbody></table></div>`;
@@ -1075,8 +1165,8 @@ async function deleteBatch(batchId){
   }catch(e){ console.error(e); toast('ما انحذف'); }
 }
 
-// وقت تواصل المندوب مع المستلم (عشان يرسل الموقع) — يسجله المندوب من تطبيقه أو مشرف الإنتاج من هنا
-// وقت تواصل المندوب مع المستلم (عشان يرسل الموقع) — يسجله مشرف الإنتاج وقت التسليم أو بعده من هنا
+// وقت تواصل المندوب مع المستلم (عشان يرسل الموقع) — يسجله المندوب من تطبيقه أو المشرف من هنا
+// وقت تواصل المندوب مع المستلم (عشان يرسل الموقع) — يسجله المشرف وقت التسليم أو بعده من هنا
 function contactTs(date, hhmm){ return firebase.firestore.Timestamp.fromDate(new Date(`${date}T${hhmm}:00+03:00`)); }
 // وقت التواصل: إبراهيم يكتبه كتابة (مثل 2:30 أو 230 أو 14:30)، والنظام يحدد ص/م تلقائياً
 // على أقرب وقت لـ"الحين" (التواصل يكون قريب من وقت التسجيل)، ويعرض المعنى جنبه عشان يتأكد.
@@ -1174,7 +1264,11 @@ function orderActions(o,b){
   if(st!=='confirmed') h+=`<button class="mini" onclick="openEdit('${o.id}')">تعديل</button> <button class="mini" onclick="openTransfer('${o.id}')">تحويل</button> `;
   if(!o.returned) h+=`<button class="mini" onclick="openReturn('${o.id}')">↩︎ رجع</button> `;
   if(st!=='confirmed') h+=`<button class="danger" onclick="deleteOrder('${o.id}','${b.id}')">حذف</button>`;
-  else h+='<span class="muted" style="font-size:11.5px">مؤكد</span>';
+  else {
+    const pend = AREQ.find(q=>q.orderId===o.id && q.status==='open');
+    h += pend ? '<span class="rs rs-pending">📍 طلب تعديل المنطقة عند الإدارة</span>'
+              : `<button class="mini" onclick="openAreaReq('${o.id}')">📍 المنطقة غلط</button>`;
+  }
   return h;
 }
 
@@ -1192,12 +1286,23 @@ function listenRecon(){
   db.collection('dispatchOrders').where('repStatus','==','disputed').onSnapshot(s=>{
     DISPUTES=s.docs.map(d=>({id:d.id,...d.data()})); DISPUTES.forEach(o=>DAY_ORDERS[o.id]=DAY_ORDERS[o.id]||o); renderRecon();
   }, e=>console.error(e));
+  db.collection('areaRequests').where('status','==','open').onSnapshot(s=>{ AREQ=s.docs.map(d=>({id:d.id,...d.data()})); }, e=>console.error(e));
+  db.collection('dupRequests').where('date','>=',new Date(Date.now()-14*864e5).toLocaleDateString('en-CA',{timeZone:'Asia/Riyadh'})).onSnapshot(s=>{
+    DUPS=s.docs.map(d=>({id:d.id,...d.data()})); renderDups();
+  }, e=>console.error(e));
   db.collection('missingReports').where('status','==','open').onSnapshot(s=>{
     MISSING=s.docs.map(d=>({id:d.id,...d.data()})); renderRecon();
   }, e=>console.error(e));
   db.collection('dispatchOrders').where('repStatus','==','pending').onSnapshot(s=>{
     const today=localDate(); STALE=s.docs.map(d=>({id:d.id,...d.data()})).filter(o=>o.date<today); renderRecon();
   }, e=>console.error(e));
+}
+let DUPS=[];
+function renderDups(){
+  const box=document.getElementById('dupBox'); if(!box) return;
+  const l=[...DUPS].sort((a,b)=>(b.requestedAt?.toMillis?.()||0)-(a.requestedAt?.toMillis?.()||0)).slice(0,30);
+  box.innerHTML = l.length ? `<div class="scroll"><table><thead><tr><th>التاريخ</th><th>الجوال</th><th>المندوب</th><th>السبب</th><th>الحالة</th></tr></thead><tbody>${l.map(q=>`<tr><td>${q.date}</td><td style="direction:ltr;unicode-bidi:isolate"><b>${esc(q.orderNo)}</b></td><td>${esc(q.repName||'استلام')}</td><td>${esc(q.reason)}</td>
+    <td>${q.status==='approved'?'<span class="rs rs-confirmed">✓ وافقت الإدارة — انسجل</span>':q.status==='rejected'?`<span class="rs rs-disputed">رفضت الإدارة</span>${q.decisionNote?`<div class="muted" style="font-size:11px">${esc(q.decisionNote)}</div>`:''}`:'<span class="rs rs-pending">بانتظار الإدارة</span>'}</td></tr>`).join('')}</tbody></table></div>` : '<div class="muted">ما فيه طلبات.</div>';
 }
 function renderRecon(){
   const n = DISPUTES.length + MISSING.length;
@@ -1395,9 +1500,9 @@ async function loadReports(){
       <div class="stat"><div class="v">${dayCount?Math.round(orders.length/dayCount*10)/10:'—'}</div><div class="l">متوسط الطلبات باليوم</div></div>
       <div class="stat"><div class="v">${avg(allWaits)}</div><div class="l">متوسط الانتظار قبل الخروج (د)</div></div>
     </div>
-    ${table('المناديب (توصيل)','المندوب',reps,deliv,'<th>أكد</th><th>ما أكد</th><th>اعترض</th><th>رجع</th><th>متوسط الانتظار قبل الخروج (د)</th><th>متوسط من التواصل للخروج (د)</th><th>المستحق التقديري</th>',
-      (k,v)=>{ const l=deliv.filter(o=>o.repPhone===k); const cg=l.map(o=>minsBetween(o.contactedAt,o.departedAt)).filter(x=>x!==null&&x>=0); return `${stCols(l)}<td>${l.filter(o=>o.returned).length}</td><td>${avg(waits[k])}</td><td>${avg(cg)}</td><td><b>${v.amount} ر.س</b>${v.unpriced?`<br><span class="new-tag">+${v.unpriced} طلب بدون سعر</span>`:''}</td>`; },
-      `${stCols(deliv)}<td>${returned.length}</td><td>${avg(allWaits)}</td><td>${avg(deliv.map(o=>minsBetween(o.contactedAt,o.departedAt)).filter(x=>x!==null&&x>=0))}</td><td>${totalAmount} ر.س</td>`)}
+    ${table('المناديب (توصيل)','المندوب',reps,deliv,'<th>أكد</th><th>ما أكد</th><th>اعترض</th><th>رجع</th><th>متوسط الانتظار قبل الخروج (د)</th><th>متوسط من التواصل للخروج (د)</th>'+(isFullAdmin?'<th>المستحق التقديري</th>':''),
+      (k,v)=>{ const l=deliv.filter(o=>o.repPhone===k); const cg=l.map(o=>minsBetween(o.contactedAt,o.departedAt)).filter(x=>x!==null&&x>=0); return `${stCols(l)}<td>${l.filter(o=>o.returned).length}</td><td>${avg(waits[k])}</td><td>${avg(cg)}</td>${isFullAdmin?`<td><b>${v.amount} ر.س</b>${v.unpriced?`<br><span class="new-tag">+${v.unpriced} طلب بدون سعر</span>`:''}</td>`:''}`; },
+      `${stCols(deliv)}<td>${returned.length}</td><td>${avg(allWaits)}</td><td>${avg(deliv.map(o=>minsBetween(o.contactedAt,o.departedAt)).filter(x=>x!==null&&x>=0))}</td>${isFullAdmin?`<td>${totalAmount} ر.س</td>`:''}`)}
     ${dayCount>1 ? dailyTable : ''}
     ${table('المناطق (توصيل)','المنطقة',areas,deliv)}
     ${!FLORIST_FLOW ? table('المنسقين','المنسق',florists,orders) : table('المنسقين','المنسق',florists,orders,'<th>متوسط التجهيز (د)</th><th>متوسط انتظار الجاهز (د)</th><th>يدوي</th>',
@@ -1412,8 +1517,8 @@ async function loadReports(){
       <thead><tr><th>التاريخ</th><th>رقم الطلب</th><th>المندوب</th><th>الحالة</th><th>التفاصيل</th></tr></thead>
       <tbody>${returned.map(o=>`<tr><td>${o.date}</td><td style="direction:ltr;unicode-bidi:isolate"><b>${esc(o.orderNo)}</b></td><td>${esc(o.repName)}</td><td><span class="flag f-ret">رجع</span>${o.redeliveryId?' <span class="flag f-re">أُعيد توصيله</span>':''}</td><td>${esc(o.returnReason||'')}${o.secondFeePaid===false?' · <b>بدون رسوم توصيل ثاني</b>':''}</td></tr>`).join('')}
         ${transferred.map(o=>`<tr><td>${o.date}</td><td style="direction:ltr;unicode-bidi:isolate"><b>${esc(o.orderNo)}</b></td><td>${esc(o.repName)}</td><td><span class="flag f-tr">محوّل من ${esc(o.transferredFrom)}</span></td><td>${esc(o.transferNote||'')}</td></tr>`).join('')}</tbody></table></div></div>`:''}
-    ${unpricedTotal?`<div class="note">فيه ${unpricedTotal} طلب على مناطق بانتظار السعر — ما انحسبت في المستحق.</div>`:''}
-    <div class="muted">المستحق التقديري = التوصيل فقط حسب أسعار المناطق (مع خصم عمار). التوصيل الثاني لطلب راجع ينحسب توصيلة مستقلة. الاستلام من المتجر ما عليه رسوم.</div>`;
+    ${isFullAdmin && unpricedTotal?`<div class="note">فيه ${unpricedTotal} طلب على مناطق بانتظار السعر — ما انحسبت في المستحق.</div>`:''}
+    ${isFullAdmin?'<div class="muted">المستحق التقديري = التوصيل فقط حسب أسعار المناطق (مع خصم عمار). التوصيل الثاني لطلب راجع ينحسب توصيلة مستقلة. الاستلام من المتجر ما عليه رسوم.</div>':''}`;
 }
 
 function exportCSV(){
