@@ -13,6 +13,25 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="تسليم الطلبات">
 <script>if('serviceWorker' in navigator){ window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{})); }</script>
+<script>
+// تنبيه "فيه نسخة جديدة": لو انرفع تحديث والصفحة مفتوحة من قبل، يطلع شريط يطلب التحديث (عشان ما يشتغل أحد على نسخة قديمة)
+(function(){
+  const APP_V='2026-10-03-1';
+  async function chk(){
+    try{ const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'}); if(!r.ok) return; const j=await r.json();
+      if(j.v && j.v!==APP_V && !document.getElementById('updBar')){
+        const b=document.createElement('div'); b.id='updBar';
+        b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:99999;background:#B23A3A;color:#fff;padding:12px 14px;padding-top:calc(12px + env(safe-area-inset-top,0px));display:flex;gap:10px;align-items:center;justify-content:center;font-family:Tajawal,system-ui,sans-serif;font-weight:700;font-size:14px;direction:rtl';
+        b.innerHTML='فيه تحديث جديد للنظام — لازم تحدّث الصفحة <button style="background:#fff;color:#B23A3A;border:none;border-radius:8px;padding:7px 14px;font-family:inherit;font-weight:900;cursor:pointer">تحديث الحين</button>';
+        b.querySelector('button').onclick=()=>location.reload();
+        document.body.appendChild(b);
+      }
+    }catch(e){}
+  }
+  window.addEventListener('load',()=>{ chk(); setInterval(chk,3*60*1000); });
+  document.addEventListener('visibilitychange',()=>{ if(!document.hidden) chk(); });
+})();
+</script>
 <!-- /PWA -->
 <title>لوحة المشرف — تسليم الطلبات</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
