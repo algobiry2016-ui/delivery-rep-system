@@ -1230,6 +1230,7 @@ function renderMyOrders(){
           const gPend = g.filter(x=>orderStage(x).k==='pend').map(x=>x.id);
           const sub = [
             multi ? `<div class="sub" style="color:#3A6EA5">➕ طلب لمستلمين مختلفين (${g.length} توصيلات)</div>` : '',
+            (!multi && o.multiDelivery) ? '<div class="sub" style="color:#3A6EA5">➕ توصيلة إضافية لنفس الطلب (مستلم آخر) — تنحسب لك</div>' : '',
             o.redeliveryOf ? '<div class="sub" style="color:#3A6EA5">🔁 توصيل ثاني — توصيلة مستقلة تنحسب لك</div>' : '',
             o.transferredFrom ? `<div class="sub" style="color:var(--ink-soft)">محوّل من ${escH(o.transferredFrom)}</div>` : '',
             (!multi && o.returned) ? `<div class="sub" style="color:#B23A3A">↩︎ رجع: ${escH(o.returnReason||'')}${o.noPay?' — ما تنحسب':' — العميل طلب توصيل ثاني'}</div>` : '',

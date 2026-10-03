@@ -2215,7 +2215,7 @@ function renderOrdersTab(){
       <td>${oRepCell(o)}</td>
       <td>${O_STAGE_UI[stg](o)}</td>
       <td class="dim">${oEsc(o.florist||'')}</td>
-      <td>${flags}${o.notes?`<div class="dim" style="white-space:normal">${oEsc(o.notes)}</div>`:''}</td>
+      <td>${flags}${o.notes?`<div class="dim" style="white-space:normal">${oEsc(o.notes)}</div>`:''}${myRole==='admin'&&o.fulfillment!=='pickup'?`<div style="margin-top:4px;white-space:nowrap">${o.returned&&!o.redeliveryId?`<button class="btn-a b" style="padding:3px 8px;font-size:11px" onclick="oUndoReturn('${o.id}')">↶ إلغاء الرجوع</button> `:''}<button class="btn-a b" style="padding:3px 8px;font-size:11px" onclick="oAddDelivery('${o.id}')">➕ توصيلة لنفس الطلب</button></div>`:''}</td>
     </tr>`;
   }).join('');
   oRenderBulk();
@@ -2265,6 +2265,48 @@ async function oFixNo(id){
     if(e && Array.isArray(e.orderNos)){ const nos=[...e.orderNos]; const i=nos.indexOf(o.orderNo); if(i>=0){ nos[i]=no; wb.update(db.collection('dailyEntries').doc(e.id), {orderNos:nos}); } }
     wb.set(db.collection('auditLog').doc(), {action:'fixOrderNo', orderNo:no, details:`${o.orderNo} ← ${no} · ${o.repName||'استلام'} · ${why.trim()}`, by:currentUser.uid, byName:currentUser.email, at:firebase.firestore.FieldValue.serverTimestamp(), date:oRiyadh()});
     await wb.commit(); toast('تم تصحيح الرقم ✅'); loadOrdersTab();
+  }catch(err){ console.error(err); toast('ما انحفظ'); }
+}
+// إلغاء "رجع" اللي انسجل بالغلط: الطلب يرجع ينحسب للمندوب
+async function oUndoReturn(id){
+  if(myRole!=='admin'){ noPermissionToast(); return; }
+  const o=O_ORDERS.find(x=>x.id===id); if(!o) return;
+  const why=await uiPrompt(`إلغاء رجوع الطلب ${o.orderNo} (${o.repName})؟\nبيرجع ينحسب للمندوب بسعره ${o.rate||0} ر.س.\n\nالسبب:`, 'انسجل رجوع بالغلط'); if(why===null) return;
+  try{
+    const wb=db.batch();
+    const upd={returned:false, noPay:false, returnReason:null, returnUndoneAt:firebase.firestore.FieldValue.serverTimestamp()};
+    // لو كان انشال من قيد المندوب (استبعاد)، يرجع للمندوب يأكده من جديد
+    if(!o.entryId && (o.repStatus==='na')) Object.assign(upd,{repStatus:'pending', ibrahimNote:'الإدارة ألغت الرجوع — أكد الطلب'});
+    wb.update(db.collection('dispatchOrders').doc(o.id), upd);
+    // لو لسا داخل قيده: نعيد حساب القيد بسعره الكامل
+    const e=o.entryId&&O_ENTRIES[o.entryId];
+    if(e){ const its=(e.orderIds||[]).map(x=>x===o.id?{...o,...upd}:O_ORDERS.find(z=>z.id===x)).filter(Boolean); wb.update(db.collection('dailyEntries').doc(e.id), oBuildEntry(its)); }
+    wb.set(db.collection('auditLog').doc(), {action:'undoReturn', orderNo:o.orderNo, details:`${o.repName} · ${why}`, by:currentUser.uid, byName:currentUser.email, at:firebase.firestore.FieldValue.serverTimestamp(), date:oRiyadh()});
+    await wb.commit(); toast('تم إلغاء الرجوع ✅'); loadOrdersTab();
+  }catch(err){ console.error(err); toast('ما انحفظ'); }
+}
+// إضافة توصيلة ثانية لنفس رقم الطلب (مستلم آخر) — من الإدارة
+async function oAddDelivery(id){
+  if(myRole!=='admin'){ noPermissionToast(); return; }
+  const o=O_ORDERS.find(x=>x.id===id); if(!o) return;
+  let reps=[]; try{ reps=(await db.collection('reps').get()).docs.map(d=>({id:d.id,...d.data()})).filter(r=>r.active!==false).sort((a,b)=>(a.name||'').localeCompare(b.name||'','ar')); }catch(e){}
+  const rp=await uiPrompt(`توصيلة جديدة لنفس الطلب ${o.orderNo}\n\nاكتب رقم المندوب:\n${reps.map((r,i)=>`${i+1}) ${r.name}${r.id===o.repPhone?' (نفس المندوب)':''}`).join('\n')}`, String(reps.findIndex(r=>r.id===o.repPhone)+1)); if(rp===null) return;
+  const rep=reps[Number(String(rp).replace(/[٠-٩]/g,d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d)))-1]; if(!rep){ toast('رقم المندوب غير صحيح'); return; }
+  const list=AREAS.filter(a=>a.rateDoc>0);
+  const ap=await uiPrompt(`منطقة التوصيلة الجديدة — اكتب رقمها:\n${list.map((a,i)=>`${i+1}) ${a.name}`).join('\n')}`, String(list.findIndex(a=>a.id===o.areaId)+1)); if(ap===null) return;
+  const area=list[Number(String(ap).replace(/[٠-٩]/g,d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d)))-1]; if(!area){ toast('رقم المنطقة غير صحيح'); return; }
+  const note=await uiPrompt('ملاحظة (مثلاً: المستلم الثاني):','المستلم الثاني'); if(note===null) return;
+  const base=o.brand==='ward'?area.rateWard:area.rateDoc, rate=rep.isAmmar?Math.max(0,base-5):base;
+  if(!await uiConfirm(`تأكيد: توصيلة جديدة للطلب ${o.orderNo}\nالمندوب: ${rep.name}\nالمنطقة: ${area.name} · ${rate} ر.س\n\nتطلع عند المندوب يأكدها.`)) return;
+  try{
+    const TSv=firebase.firestore.FieldValue.serverTimestamp, date=oRiyadh();
+    const wb=db.batch(); const bref=db.collection('dispatchBatches').doc();
+    wb.set(bref,{date, repPhone:rep.id, repName:rep.name, isAmmar:!!rep.isAmmar, orderCount:1, handedAt:TSv(), departedAt:null, createdBy:currentUser.uid, createdByName:'الإدارة', createdAt:TSv()});
+    wb.set(db.collection('dispatchOrders').doc(), {orderNo:o.orderNo, florist:o.florist||'', type:o.type, brand:o.brand, source:o.source, fulfillment:'delivery',
+      areaId:area.id, areaName:area.name, rate, notes:note, multiDelivery:true, addedByAdmin:true, linkedTo:o.id,
+      date, batchId:bref.id, repPhone:rep.id, repName:rep.name, isAmmar:!!rep.isAmmar, handedAt:TSv(), departedAt:null, repStatus:'pending', createdBy:currentUser.uid, createdAt:TSv()});
+    wb.set(db.collection('auditLog').doc(), {action:'adminAddDelivery', orderNo:o.orderNo, details:`توصيلة إضافية · ${rep.name} · ${area.name} ${rate} ر.س · ${note}`, by:currentUser.uid, byName:currentUser.email, at:TSv(), date});
+    await wb.commit(); toast('انضافت التوصيلة ✅ — تطلع عند المندوب يأكدها'); loadOrdersTab();
   }catch(err){ console.error(err); toast('ما انحفظ'); }
 }
 function oViewImg(id){ const o=O_ORDERS.find(x=>x.id===id); if(!o||!o.proofImage) return; const w=window.open(); if(w) w.document.write(`<img src="${o.proofImage}" style="max-width:100%">`); }
@@ -2578,7 +2620,7 @@ function oExport(){
 /* =====================================================================
    الرقابة والتنبيهات
    ===================================================================== */
-const SEC_NAMES={areaRequest:'طلب تعديل منطقة',areaChange:'تعديل منطقة (الإدارة)',farNumber:'رقم طلب غير معتاد',fixOrderNo:'تصحيح رقم طلب (الإدارة)',dupRequest:'طلب موافقة تكرار جوال',dupApproved:'موافقة على تكرار',dupRejected:'رفض تكرار',create:'تسليم جديد',depart:'خروج مندوب',contact:'وقت التواصل',pickedUp:'استلام عميل',addRep:'إضافة مندوب',addArea:'إضافة منطقة',
+const SEC_NAMES={undoReturn:'إلغاء رجوع (الإدارة)',adminAddDelivery:'توصيلة إضافية (الإدارة)',areaRequest:'طلب تعديل منطقة',areaChange:'تعديل منطقة (الإدارة)',farNumber:'رقم طلب غير معتاد',fixOrderNo:'تصحيح رقم طلب (الإدارة)',dupRequest:'طلب موافقة تكرار جوال',dupApproved:'موافقة على تكرار',dupRejected:'رفض تكرار',create:'تسليم جديد',depart:'خروج مندوب',contact:'وقت التواصل',pickedUp:'استلام عميل',addRep:'إضافة مندوب',addArea:'إضافة منطقة',
   edit:'تعديل طلب',delete:'حذف طلب',deleteBatch:'حذف تسليم كامل',transfer:'تحويل لمندوب',return:'رجوع للمحل',redelivery:'توصيل ثاني',multi:'توصيل إضافي لنفس الطلب',
   samePhone:'طلب ثاني لنفس الجوال',keep:'رفض اعتراض مندوب',rejectMissing:'رفض بلاغ مندوب',adminDelete:'حذف من الإدارة',exclude:'استبعاد من الحساب',recalc:'إعادة احتساب أسعار'};
 const SEC_RISK={areaRequest:1,areaChange:1,farNumber:2,dupRequest:1,delete:2,deleteBatch:2,keep:2,rejectMissing:1,edit:1,transfer:1,addRep:1,samePhone:1,multi:1,return:0,redelivery:0};
