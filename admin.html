@@ -16,7 +16,7 @@
 <script>
 // تنبيه "فيه نسخة جديدة": لو انرفع تحديث والصفحة مفتوحة من قبل، يطلع شريط يطلب التحديث (عشان ما يشتغل أحد على نسخة قديمة)
 (function(){
-  const APP_V='2026-10-03-2';
+  const APP_V='2026-10-04-1';
   async function chk(){
     try{ const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'}); if(!r.ok) return; const j=await r.json();
       if(j.v && j.v!==APP_V && !document.getElementById('updBar')){
@@ -347,8 +347,8 @@
           <div id="dupList"></div>
         </div>
         <div class="card" id="areaReqCard" style="display:none;border:2px solid #E8C9A0;background:#FFFBF4">
-          <h3>📍 طلبات تعديل منطقة — تنتظر موافقتك</h3>
-          <p class="page-sub" style="margin-top:-6px">طلبات أكدها المندوب، وطلع موقع التسليم في منطقة ثانية. الموافقة تعدّل المنطقة والسعر وحساب المندوب تلقائياً.</p>
+          <h3>📍 طلبات نقل / تعديل منطقة — تنتظر موافقتك</h3>
+          <p class="page-sub" style="margin-top:-6px">طلبات معتمدة طلب المشرف نقلها لمندوب ثاني أو تعديل منطقتها. الموافقة تعدّل الطلب والسعر وحساب المندوب تلقائياً.</p>
           <div id="areaReqList"></div>
         </div>
         <div class="otiles" id="oTiles"></div>
@@ -2446,8 +2446,8 @@ function renderAreaReqs(list){
   AREQ_A=list;
   const c=document.getElementById('areaReqCard'); c.style.display=list.length?'':'none'; if(!list.length) return;
   document.getElementById('areaReqList').innerHTML=`<div class="otable-wrap"><table class="otable" style="min-width:760px"><thead><tr><th>التاريخ</th><th>رقم الطلب</th><th>المندوب</th><th>من</th><th>إلى</th><th>السعر</th><th>السبب</th><th></th></tr></thead><tbody>
-  ${list.map(q=>{ const o=O_ORDERS.find(x=>x.id===q.orderId)||{brand:'documentation',isAmmar:false,rate:0}; const nr=areaRateFor(o,q.toAreaId);
-    return `<tr><td class="dim">${q.date}</td><td class="no">${oEsc(q.orderNo)}</td><td><b>${oEsc(q.repName)}</b></td><td>${oEsc(q.fromAreaName)}</td><td><b>${oEsc(q.toAreaName)}</b></td>
+  ${list.map(q=>{ const o=O_ORDERS.find(x=>x.id===q.orderId)||{brand:'documentation',isAmmar:false,rate:0}; const nr=areaRateFor(q.kind==='move'?{...o,isAmmar:!!(SEC.reps||[]).find(r=>r.id===q.toRepPhone)?.isAmmar}:o,q.toAreaId);
+    return `<tr><td class="dim">${q.date}</td><td class="no">${oEsc(q.orderNo)}</td><td><b>${oEsc(q.repName)}</b>${q.kind==='move'?`<div style="color:#3A6EA5;font-weight:700">← نقل إلى ${oEsc(q.toRepName)}</div>`:''}</td><td>${oEsc(q.fromAreaName)}</td><td><b>${oEsc(q.toAreaName)}</b></td>
     <td>${o.rate||'—'} ← <b>${nr??'بدون سعر'}</b> ر.س</td><td style="white-space:normal">${oEsc(q.reason)}${q.photo?` <a href="#" onclick="(()=>{const w=window.open();if(w)w.document.write('<img src=&quot;'+AREQ_A.find(x=>x.id==='${q.id}').photo+'&quot; style=&quot;max-width:100%&quot;>');})();return false">🖼️ الموقع</a>`:''}<div class="dim">${oEsc(q.requestedByName||'')} ${oTime(q.requestedAt)}</div></td>
     <td style="white-space:nowrap">${myRole==='admin'?`<button class="btn-a g" style="padding:6px 10px" onclick="areaReqDecide('${q.id}',true)">✓ موافقة</button> <button class="btn-a r" style="padding:6px 10px" onclick="areaReqDecide('${q.id}',false)">رفض</button>`:''}</td></tr>`; }).join('')}
   </tbody></table></div>`;
@@ -2473,6 +2473,23 @@ async function applyAreaChange(wb, o, toAreaId, note){
   wb.set(db.collection('auditLog').doc(), {action:'areaChange', orderNo:o.orderNo, details:`${o.repName}: ${o.areaName} ← ${a.name} · ${o.rate||0} ← ${nr} ر.س${e&&e.status==='approved'?' (كان معتمد)':''} · ${note||''}`, oldRate:o.rate||0, newRate:nr, repPhone:o.repPhone, repName:o.repName, by:currentUser.uid, byName:currentUser.email, at:firebase.firestore.FieldValue.serverTimestamp(), date:oRiyadh()});
   return nr;
 }
+// نقل طلب (معتمد) لمندوب ثاني بموافقة الإدارة
+async function applyMove(wb, o, q){
+  const rep=(await db.collection('reps').doc(q.toRepPhone).get()).data()||{name:q.toRepName,isAmmar:false};
+  const a=AREAS.find(x=>x.id===q.toAreaId); const base=a?(o.brand==='ward'?a.rateWard:a.rateDoc):0; const nr=rep.isAmmar?Math.max(0,base-5):base;
+  const TSv=firebase.firestore.FieldValue.serverTimestamp;
+  const nb=db.collection('dispatchBatches').doc();
+  wb.set(nb,{date:oRiyadh(), repPhone:q.toRepPhone, repName:rep.name, isAmmar:!!rep.isAmmar, orderCount:1, handedAt:TSv(), departedAt:null, transferIn:true, createdBy:currentUser.uid, createdByName:'الإدارة', createdAt:TSv()});
+  const upd={repPhone:q.toRepPhone, repName:rep.name, isAmmar:!!rep.isAmmar, batchId:nb.id, handedAt:TSv(), departedAt:null, areaId:q.toAreaId, areaName:a?a.name:o.areaName, rate:nr,
+    repStatus:'pending', entryId:null, transferredFrom:o.repName, transferNote:q.reason, transferCount:(o.transferCount||0)+1, transferredAt:TSv()};
+  wb.update(db.collection('dispatchOrders').doc(o.id), upd);
+  const e=o.entryId&&O_ENTRIES[o.entryId];
+  if(e){
+    const its=[]; for(const id of (e.orderIds||[])){ if(id===o.id) continue; let x=O_ORDERS.find(z=>z.id===id); if(!x){ const d=await db.collection('dispatchOrders').doc(id).get(); if(d.exists) x={id:d.id,...d.data()}; } if(x) its.push(x); }
+    if(!its.length) wb.delete(db.collection('dailyEntries').doc(e.id)); else wb.update(db.collection('dailyEntries').doc(e.id), oBuildEntry(its));
+  }
+  wb.set(db.collection('auditLog').doc(), {action:'moveApproved', orderNo:o.orderNo, details:`نقل معتمد من ${o.repName} إلى ${rep.name} · ${q.reason}`, by:currentUser.uid, byName:currentUser.email, at:TSv(), date:oRiyadh()});
+}
 async function areaReqDecide(id, ok){
   if(myRole!=='admin'){ noPermissionToast(); return; }
   const q=AREQ_A.find(x=>x.id===id); if(!q) return;
@@ -2484,7 +2501,8 @@ async function areaReqDecide(id, ok){
       let o=O_ORDERS.find(x=>x.id===q.orderId);
       if(!o){ const d=await db.collection('dispatchOrders').doc(q.orderId).get(); if(!d.exists){ toast('الطلب ما عاد موجود'); return; } o={id:d.id,...d.data()}; }
       if(o.entryId && !O_ENTRIES[o.entryId]){ const e=await db.collection('dailyEntries').doc(o.entryId).get(); if(e.exists) O_ENTRIES[e.id]={id:e.id,...e.data()}; }
-      await applyAreaChange(wb, o, q.toAreaId, 'موافقة على طلب المشرف: '+q.reason);
+      if(q.kind==='move') await applyMove(wb, o, q);
+      else await applyAreaChange(wb, o, q.toAreaId, 'موافقة على طلب المشرف: '+q.reason);
     }
     wb.update(db.collection('areaRequests').doc(id), {status:ok?'approved':'rejected', decisionNote:note||'', decidedAt:firebase.firestore.FieldValue.serverTimestamp(), decidedBy:currentUser.uid});
     await wb.commit(); toast(ok?'تم تعديل المنطقة والسعر ✅':'تم الرفض'); loadOrdersTab();
@@ -2639,10 +2657,10 @@ function oExport(){
 /* =====================================================================
    الرقابة والتنبيهات
    ===================================================================== */
-const SEC_NAMES={undoReturn:'إلغاء رجوع (الإدارة)',adminAddDelivery:'توصيلة إضافية (الإدارة)',areaRequest:'طلب تعديل منطقة',areaChange:'تعديل منطقة (الإدارة)',farNumber:'رقم طلب غير معتاد',fixOrderNo:'تصحيح رقم طلب (الإدارة)',dupRequest:'طلب موافقة تكرار جوال',dupApproved:'موافقة على تكرار',dupRejected:'رفض تكرار',create:'تسليم جديد',depart:'خروج مندوب',contact:'وقت التواصل',pickedUp:'استلام عميل',addRep:'إضافة مندوب',addArea:'إضافة منطقة',
+const SEC_NAMES={moveDirect:'نقل طلب لمندوب ثاني (المشرف)',areaDirect:'تعديل منطقة مباشر (المشرف)',moveRequest:'طلب نقل معتمد',moveApproved:'موافقة نقل (الإدارة)',undoReturn:'إلغاء رجوع (الإدارة)',adminAddDelivery:'توصيلة إضافية (الإدارة)',areaRequest:'طلب تعديل منطقة',areaChange:'تعديل منطقة (الإدارة)',farNumber:'رقم طلب غير معتاد',fixOrderNo:'تصحيح رقم طلب (الإدارة)',dupRequest:'طلب موافقة تكرار جوال',dupApproved:'موافقة على تكرار',dupRejected:'رفض تكرار',create:'تسليم جديد',depart:'خروج مندوب',contact:'وقت التواصل',pickedUp:'استلام عميل',addRep:'إضافة مندوب',addArea:'إضافة منطقة',
   edit:'تعديل طلب',delete:'حذف طلب',deleteBatch:'حذف تسليم كامل',transfer:'تحويل لمندوب',return:'رجوع للمحل',redelivery:'توصيل ثاني',multi:'توصيل إضافي لنفس الطلب',
   samePhone:'طلب ثاني لنفس الجوال',keep:'رفض اعتراض مندوب',rejectMissing:'رفض بلاغ مندوب',adminDelete:'حذف من الإدارة',exclude:'استبعاد من الحساب',recalc:'إعادة احتساب أسعار'};
-const SEC_RISK={areaRequest:1,areaChange:1,farNumber:2,dupRequest:1,delete:2,deleteBatch:2,keep:2,rejectMissing:1,edit:1,transfer:1,addRep:1,samePhone:1,multi:1,return:0,redelivery:0};
+const SEC_RISK={moveDirect:1,areaDirect:1,moveRequest:1,areaRequest:1,areaChange:1,farNumber:2,dupRequest:1,delete:2,deleteBatch:2,keep:2,rejectMissing:1,edit:1,transfer:1,addRep:1,samePhone:1,multi:1,return:0,redelivery:0};
 let SEC={from:null,to:null,log:[],orders:[]};
 function secLastSeen(){ try{ return Number(localStorage.getItem('secLastSeen')||0); }catch(e){ return 0; } }
 function secMarkSeen(){ try{ localStorage.setItem('secLastSeen', String(Date.now())); }catch(e){} updateNavBadge('navBadgeSecurity',0); }
@@ -2785,8 +2803,10 @@ function secRenderAlerts(){
   const del=L.filter(x=>x.action==='delete'||x.action==='deleteBatch');
   if(del.length) add(2,`🟠 ${del.length} عملية حذف من المشرف (إبراهيم)`, del.map(x=>`${oTime(x.at)} · ${oEsc(x.orderNo||'')} — ${oEsc(x.details)}`).join('<br>'));
   // ٣) تعديل رفع السعر
-  const up=L.filter(x=>x.action==='edit' && (x.newRate||0)>(x.oldRate||0));
+  const up=L.filter(x=>['edit','areaDirect','moveDirect'].includes(x.action) && (x.newRate||0)>(x.oldRate||0));
   if(up.length) add(2,`🟠 ${up.length} تعديل رفع سعر التوصيل`, up.map(x=>`${oEsc(x.orderNo)} · ${oEsc(x.repName||'')}: ${x.oldRate} ← ${x.newRate} ر.س`).join('<br>'));
+  const moves=L.filter(x=>x.action==='moveDirect'||x.action==='areaDirect');
+  if(moves.length) add(1,`🟡 ${moves.length} نقل/تعديل منطقة سواه المشرف مباشرة`, moves.map(x=>`${oTime(x.at)} · <b>${oEsc(x.orderNo)}</b> · ${SEC_NAMES[x.action]} — ${oEsc(x.details)}`).join('<br>'));
   // ٤) رفض اعتراض المندوب
   const keep=L.filter(x=>x.action==='keep');
   if(keep.length) add(2,`🟠 ${keep.length} اعتراض مندوب رفضه المشرف (إبراهيم)`, keep.map(x=>`${oEsc(x.orderNo)} — ${oEsc(x.details)}`).join('<br>'));

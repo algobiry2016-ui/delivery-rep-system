@@ -16,7 +16,7 @@
 <script>
 // تنبيه "فيه نسخة جديدة": لو انرفع تحديث والصفحة مفتوحة من قبل، يطلع شريط يطلب التحديث (عشان ما يشتغل أحد على نسخة قديمة)
 (function(){
-  const APP_V='2026-10-03-2';
+  const APP_V='2026-10-04-1';
   async function chk(){
     try{ const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'}); if(!r.ok) return; const j=await r.json();
       if(j.v && j.v!==APP_V && !document.getElementById('updBar')){
@@ -108,6 +108,12 @@
   .tpk{display:flex;gap:4px;align-items:center;flex-wrap:wrap;}
   .tpk select{width:auto;padding:7px 6px;font-size:14px;}
   .tpk .now{background:var(--cream);border:1px solid var(--line);border-radius:7px;padding:6px 9px;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;}
+  .exist-box:empty{display:none;}
+  .exist-box{background:#FFF8EE;border:1.5px solid #E8C9A0;border-radius:10px;padding:10px 12px;margin:-2px 0 10px;font-size:13px;}
+  .exist-box .eh{font-weight:900;color:#A9762F;margin-bottom:6px;}
+  .exist-box label.opt{display:flex;gap:8px;align-items:flex-start;padding:5px 0;cursor:pointer;line-height:1.5;}
+  .exist-box label.opt input{width:17px;height:17px;margin-top:2px;flex-shrink:0;}
+  .exist-box .dv{background:#fff;border:1px solid var(--line);border-radius:8px;padding:6px 8px;margin:4px 0;}
   .rowtag{font-size:12px;font-weight:700;color:#3A6EA5;margin:4px 0 8px;}
 
   .badge{display:inline-block;padding:2px 9px;border-radius:10px;font-size:11.5px;font-weight:700;color:#fff;}
@@ -351,7 +357,7 @@
 <div class="modal-bg" id="areaReqModal">
   <div class="modal">
     <h3 style="margin-top:0">تعديل منطقة الطلب <span id="arNo" style="direction:ltr;unicode-bidi:isolate"></span></h3>
-    <div class="muted" style="margin-bottom:10px">المندوب أكد الطلب، فالتعديل يروح للإدارة توافق عليه. بعد الموافقة يتعدّل السعر وحساب المندوب تلقائياً.</div>
+    <div class="muted" style="margin-bottom:10px">يتعدّل مباشرة مع سعره وحساب المندوب. لو الطلب معتمد، يروح للإدارة توافق.</div>
     <div class="field"><label>المنطقة المسجّلة</label><input id="arFrom" disabled></div>
     <div class="field"><label>المنطقة الصحيحة</label><select id="arTo"></select></div>
     <div class="field"><label>السبب</label><input id="arWhy" placeholder="مثال: الموقع اللي أرسله العميل طلع تندحة"></div>
@@ -682,7 +688,8 @@ function addRow(prep, redel){
     <div class="seg" style="margin-top:8px">
       ${Object.keys(TYPES).map(t=>`<button data-t="${t}" class="${t===prevType?'on':''}" onclick="pickType('${id}','${t}')">${TYPES[t].label}</button>`).join('')}
     </div>
-    <div class="field"><input class="o-no" inputmode="tel" placeholder="${noPlaceholder(prevType)}" ${(prep||redel)?`value="${esc((prep||redel).orderNo)}" readonly style="background:#fff;font-weight:900;direction:ltr;text-align:right"`:''}></div>
+    <div class="field"><input class="o-no" inputmode="tel" placeholder="${noPlaceholder(prevType)}" ${(prep||redel)?`value="${esc((prep||redel).orderNo)}" readonly style="background:#fff;font-weight:900;direction:ltr;text-align:right"`:'onchange="checkExisting(this)" onblur="checkExisting(this)"'}></div>
+    <div class="exist-box"></div>
     <div class="row2">
       <div class="field"><select class="o-florist" ${prep?'disabled':''}>${floristOptions(prep?prep.floristName:(redel?redel.florist:''))}</select></div>
       <div class="field o-area-field" style="${MODE==='pickup'?'display:none':''}"><select class="o-area" onchange="onAreaSelect(this)">${areaOptions(redel?redel.areaId:prevArea)}</select></div>
@@ -698,6 +705,105 @@ function addRow(prep, redel){
   if(prep||redel) div.querySelector('.seg').style.pointerEvents = redel?'none':'';
   if(!prep && !redel) div.querySelector('.o-no').focus();
 }
+// ===== رقم طلب مسجّل قبل: نوضح لإبراهيم لمين مسجّل، ويختار من نفس الشاشة: نقل / تعديل منطقة / توصيل ثاني =====
+const EXIST={};   // rowId -> قائمة التوصيلات الموجودة بنفس الرقم
+async function checkExisting(inp){
+  const row=inp.closest('.orow'), box=row.querySelector('.exist-box');
+  const type=row.dataset.type||'doc', no=normOrderNo(inp.value);
+  if(PHONE_TYPES.includes(type) || !no || no.length!==SALLA_LEN){ box.innerHTML=''; delete EXIST[row.id]; return; }
+  if(box.dataset.no===no) return;   // نفس الرقم — لا نعيد البناء
+  box.dataset.no=no;
+  let list=[];
+  try{ list=(await db.collection('dispatchOrders').where('orderNo','==',no).get()).docs.map(d=>({id:d.id,...d.data()})).filter(o=>o.fulfillment!=='pickup'); }catch(e){ return; }
+  if(normOrderNo(inp.value)!==no) return;
+  if(!list.length){ box.innerHTML=''; delete EXIST[row.id]; return; }
+  // حالة الاعتماد لكل توصيلة (عشان نعرف إذا يحتاج موافقة الإدارة)
+  for(const o of list){ o._approved=false; if(o.entryId){ try{ const e=await db.collection('dailyEntries').doc(o.entryId).get(); o._approved = e.exists && e.data().status==='approved'; }catch(err){} } }
+  EXIST[row.id]=list;
+  const st=o=> o.noPay?'رجع — ما تنحسب' : o._approved?'معتمد' : o.repStatus==='confirmed'?'أكده المندوب' : o.repStatus==='disputed'?'اعترض' : 'ما أكده';
+  box.innerHTML=`<div class="eh">⚠️ هذا الطلب مسجّل قبل${list.length>1?' (أكثر من توصيلة)':''} — اختر التوصيلة ووش تبي تسوي:</div>
+    ${list.map((o,i)=>`<label class="opt dv"><input type="radio" name="ex_${row.id}" value="${o.id}" ${i===0?'checked':''}> <span><b>${esc(o.repName||'—')}</b> · ${esc(o.areaName||'')} · ${o.date} · <span class="muted">${st(o)}</span>${o.multiDelivery?' · مستلم إضافي':''}${o.returned?' · رجع':''}</span></label>`).join('')}
+    <label class="opt"><input type="radio" name="ac_${row.id}" value="move"> <span><b>انقله لهذا التسليم</b> — ينشال من المندوب الأول ويصير للمندوب المختار فوق، بالمنطقة المختارة تحت</span></label>
+    <label class="opt"><input type="radio" name="ac_${row.id}" value="area"> <span><b>عدّل منطقته بس</b> — يبقى مع نفس المندوب، والمنطقة تصير المختارة تحت (والسعر يتعدّل)</span></label>
+    <label class="opt"><input type="radio" name="ac_${row.id}" value="redel"> <span><b>توصيل ثاني</b> — المندوب الأول راح ورجع والعميل دفع رسوم توصيل ثاني. المندوب الجديد يرفع الإيصال قبل ما يأكد</span></label>
+    <input class="ex-why" placeholder="السبب (إلزامي) — مثال: الموقع طلع أبها مو أحد رفيدة" style="margin-top:6px">
+    ${list.some(o=>o._approved)?'<div class="muted" style="font-size:12px;margin-top:6px">ملاحظة: التوصيلة المعتمدة — النقل وتعديل المنطقة يروح للإدارة توافق عليه.</div>':''}`;
+}
+function rowExisting(row){
+  const list=EXIST[row.id]; if(!list||!list.length) return null;
+  const pick=row.querySelector(`input[name="ex_${row.id}"]:checked`), ac=row.querySelector(`input[name="ac_${row.id}"]:checked`);
+  return {list, target: pick?list.find(o=>o.id===pick.value):list[0], action: ac?ac.value:null, why: (row.querySelector('.ex-why')?.value||'').trim()};
+}
+// تنفيذ النقل / تعديل المنطقة: مباشر إذا الطلب ما انعتمد، وإذا معتمد يروح للإدارة توافق
+async function processExOps(ops, rep){
+  const msgs=[];
+  for(const op of ops){
+    const d=await db.collection('dispatchOrders').doc(op.target.id).get(); if(!d.exists){ msgs.push(`${op.target.orderNo}: الطلب ما عاد موجود`); continue; }
+    const o={id:d.id,...d.data()};
+    let approved=false; if(o.entryId){ const e=await db.collection('dailyEntries').doc(o.entryId).get(); approved = e.exists && e.data().status==='approved'; }
+    const area=AREAS.find(a=>a.id===op.areaId);
+    const toRep = op.action==='move' ? rep : (REPS.find(x=>x.id===o.repPhone)||{id:o.repPhone,name:o.repName,isAmmar:o.isAmmar});
+    if(op.action==='move' && toRep.id===o.repPhone && op.areaId===o.areaId){ msgs.push(`${o.orderNo}: نفس المندوب ونفس المنطقة — ما تغيّر شي`); continue; }
+    const newRate = isPriced(area) ? rateFor(area,o.type,toRep) : null;
+    try{
+      if(approved){
+        // معتمد: طلب موافقة من الإدارة
+        const wb=db.batch();
+        wb.set(db.collection('areaRequests').doc(), {kind:op.action, orderId:o.id, orderNo:o.orderNo, repPhone:o.repPhone, repName:o.repName, date:o.date,
+          fromAreaId:o.areaId, fromAreaName:o.areaName, toAreaId:op.areaId, toAreaName:area?area.name:'', toRepPhone:toRep.id, toRepName:toRep.name,
+          reason:op.why, status:'open', requestedBy:currentUser.uid, requestedByName:myName, requestedAt:TS()});
+        wb.set(db.collection('auditLog').doc(), auditRow(op.action==='move'?'moveRequest':'areaRequest', o, `${o.repName}${op.action==='move'?' ← '+toRep.name:''} · ${o.areaName} ← ${area?area.name:''} · معتمد — للإدارة · ${op.why}`));
+        await wb.commit();
+        msgs.push(`📨 ${o.orderNo}: معتمد — انرسل للإدارة توافق`);
+        continue;
+      }
+      const wb=db.batch();
+      if(op.action==='area'){
+        const upd={areaId:op.areaId, areaName:area?area.name:'', rate:newRate, isAmmar:!!toRep.isAmmar, areaBefore:o.areaName, areaChangedAt:TS()};
+        wb.update(db.collection('dispatchOrders').doc(o.id), upd);
+        if(o.entryId) await rebuildEntry(wb, o.entryId, o.id, {...o, ...upd, rate:newRate}, false);
+        wb.set(db.collection('auditLog').doc(), auditRow('areaDirect', o, `${o.repName}: ${o.areaName} ← ${area?area.name:''} · ${o.rate||0} ← ${newRate||0} ر.س · ${op.why}`, {oldRate:o.rate||0, newRate:newRate||0, repPhone:o.repPhone, repName:o.repName}));
+        await wb.commit();
+        msgs.push(`✅ ${o.orderNo}: المنطقة صارت ${area?area.name:''}`);
+      } else {
+        // نقل لمندوب ثاني: تسليم جديد له، والطلب ينشال من الأول (ومن قيده لو كان أكده)
+        const nb=db.collection('dispatchBatches').doc();
+        wb.set(nb, {date:localDate(), repPhone:toRep.id, repName:toRep.name, isAmmar:!!toRep.isAmmar, orderCount:1, handedAt:TS(), departedAt:null, transferIn:true, createdBy:currentUser.uid, createdByName:myName, createdAt:TS()});
+        const upd={repPhone:toRep.id, repName:toRep.name, isAmmar:!!toRep.isAmmar, batchId:nb.id, handedAt:TS(), departedAt:null,
+          areaId:op.areaId, areaName:area?area.name:'', rate:newRate, repStatus:'pending', entryId:null, disputeReason:null, disputeNote:null,
+          transferredFrom:o.repName, transferNote:op.why, transferCount:(o.transferCount||0)+1, transferredAt:TS(), ...(op.areaId!==o.areaId?{areaBefore:o.areaName}:{})};
+        wb.update(db.collection('dispatchOrders').doc(o.id), upd);
+        if(o.entryId) await rebuildEntry(wb, o.entryId, o.id, null, true);
+        const rest=(await db.collection('dispatchOrders').where('batchId','==',o.batchId).get()).docs.filter(x=>x.id!==o.id).length;
+        if(rest===0) wb.delete(db.collection('dispatchBatches').doc(o.batchId)); else wb.update(db.collection('dispatchBatches').doc(o.batchId),{orderCount:rest});
+        wb.set(db.collection('auditLog').doc(), auditRow('moveDirect', o, `من ${o.repName} إلى ${toRep.name}${o.repStatus==='confirmed'?' (كان أكده)':''} · ${o.areaName}${op.areaId!==o.areaId?' ← '+(area?area.name:''):''} · ${op.why}`, {oldRate:o.rate||0, newRate:newRate||0, repPhone:o.repPhone, repName:o.repName}));
+        await wb.commit();
+        msgs.push(`✅ ${o.orderNo}: انتقل من ${o.repName} إلى ${toRep.name}`);
+      }
+    }catch(e){ console.error(e); msgs.push(`⚠️ ${o.orderNo}: ما انحفظ (${e.code||e.message})`); }
+  }
+  return msgs;
+}
+// قيد المندوب من طلباته (نفس طريقة الإدارة)
+function buildEntryFrom(list){
+  const agg={};
+  list.forEach(o=>{ const r=o.noPay?0:(o.rate||0); const k=o.areaId+'|'+o.source+'|'+r; agg[k]=agg[k]||{areaId:o.areaId,areaName:o.areaName,source:o.source,count:0,rate:r,amount:0}; agg[k].count++; agg[k].amount+=r; });
+  const entries=Object.values(agg);
+  return {entries, totalCount:list.length, totalAmount:entries.reduce((s2,x)=>s2+x.amount,0), orderIds:list.map(o=>o.id), orderNos:list.map(o=>o.orderNo)};
+}
+// يعيد حساب قيد الطلب بعد تعديله أو نقله (القيد غير المعتمد فقط)
+async function rebuildEntry(wb, entryId, changedId, changedData, remove){
+  const ed=await db.collection('dailyEntries').doc(entryId).get(); if(!ed.exists) return;
+  const e=ed.data(); if(e.status==='approved') return;
+  const its=[];
+  for(const id of (e.orderIds||[])){
+    if(id===changedId){ if(!remove) its.push({id,...changedData}); continue; }
+    const d=await db.collection('dispatchOrders').doc(id).get(); if(d.exists) its.push({id:d.id,...d.data()});
+  }
+  if(!its.length) wb.delete(db.collection('dailyEntries').doc(entryId));
+  else wb.update(db.collection('dailyEntries').doc(entryId), buildEntryFrom(its));
+}
+
 // نفس رقم الطلب لأكثر من مستلم: كل منطقة إضافية = توصيلة مستقلة بسعر منطقتها
 function addExtraArea(rowId){
   const r=document.getElementById(rowId), box=r.querySelector('.extra-areas');
@@ -784,12 +890,14 @@ async function saveHandover(){
   const pickup = MODE==='pickup';
   let rep=null;
   if(!pickup){
-    rep = REPS.find(r=>r.id===document.getElementById('repSelect').value);
-    if(!rep){ toast('اختر المندوب'); return; }
+    rep = REPS.find(r=>r.id===document.getElementById('repSelect').value) || null;
+    const allAreaOnly=[...document.querySelectorAll('.orow')].every(r=>{ const e=rowExisting(r); return e && e.action==='area'; });
+    if(!rep && !allAreaOnly){ toast('اختر المندوب'); return; }
   }
   if(!document.querySelectorAll('.orow').length){ toast('أضف طلب واحد على الأقل'); return; }
 
   const orders = [];
+  const exOps = [];   // نقل / تعديل منطقة لطلبات موجودة
   const seen = new Set();
   for(const [i,r] of [...document.querySelectorAll('.orow')].entries()){
     const no = normOrderNo(r.querySelector('.o-no').value);
@@ -798,6 +906,22 @@ async function saveHandover(){
     const areaId = pickup ? '' : r.querySelector('.o-area').value;
     const n = i+1;
     const type = r.dataset.type||'doc';
+    // رقم مسجّل قبل واختار إبراهيم إجراء من نفس الشاشة
+    const ex = (!pickup && !r.dataset.redeliveryOf && !r.dataset.prepId) ? rowExisting(r) : null;
+    if(ex){
+      if(!ex.action){ toast(`طلب ${n}: الرقم مسجّل قبل — اختر: نقل أو تعديل منطقة أو توصيل ثاني`); return; }
+      if(!ex.why){ toast(`طلب ${n}: اكتب السبب`); return; }
+      const exArea = r.querySelector('.o-area').value;
+      if((ex.action==='move'||ex.action==='area') && !exArea){ toast(`طلب ${n}: اختر المنطقة`); return; }
+      if(ex.action==='area' && exArea===ex.target.areaId){ toast(`طلب ${n}: المنطقة نفسها ما تغيّرت`); return; }
+      if(ex.action==='redel'){
+        // يمشي كتوصيل ثاني عادي (التوصيلة الأولى تبقى للأول، والجديد يرفع الإيصال)
+        r.dataset.redeliveryOf = ex.target.id; r.dataset.exReason = ex.why;
+      } else {
+        exOps.push({...ex, areaId:exArea, n, florist:r.querySelector('.o-florist').value});
+        continue;
+      }
+    }
     const isRedel = !!r.dataset.redeliveryOf;
     const multi = false;
     const cTime = pickup ? '' : readTime(r.querySelector('.o-contact-field .tpk'));
@@ -824,6 +948,7 @@ async function saveHandover(){
       rate: (!pickup && isPriced(area)) ? rateFor(area,type,rep) : null,   // السعر وقت التسليم — ما يتغير لو تغيّرت الأسعار بعدين
       notes:r.querySelector('.o-notes').value.trim(),
       redeliveryOf: r.dataset.redeliveryOf || null,
+      exReason: r.dataset.exReason || null,
       contactTime: cTime || null,
       multiDelivery: multi,
       manual: FLORIST_FLOW && !prep, prepId: prep?prep.id:null,
@@ -870,7 +995,7 @@ async function saveHandover(){
     if(far.length && !await uiConfirm(`تأكد من أرقام الطلبات هذي — بعيدة عن أرقام طلبات اليوم:\n${far.map(o=>o.orderNo).join('\n')}\n\nإذا متأكد إنها صحيحة اضغط موافق (بتنسجل للإدارة).`)){ btn.disabled=false; btn.textContent=btnTxt; return; }
     far.forEach(o=>o.farNumber=true);
     if(dups.length){
-      await uiAlert(`هذي الطلبات مسجّلة قبل:\n${dups.join('\n')}\n\n• لو الطلب رجع والعميل طلب يعاد توصيله: افتح "سجل اليوم" واضغط "رجع" على الطلب الأصلي.\n• لو نفس الطلب لأكثر من مستلم بمناطق مختلفة: سجّله مرة وحدة واضغط "＋ منطقة توصيل ثانية لنفس الطلب".`);
+      await uiAlert(`هذي الطلبات مسجّلة قبل:\n${dups.join('\n')}\n\nتحت الرقم يطلع لك لمين مسجّل — اختر: نقل، أو تعديل منطقة، أو توصيل ثاني، واكتب السبب.\n(لو ما طلع، اضغط برا خانة الرقم)`);
       btn.disabled=false; btn.textContent=btnTxt; return;
     }
 
@@ -897,10 +1022,14 @@ async function saveHandover(){
       });
       await rb.commit();
     }
+    // نقل / تعديل منطقة لطلبات موجودة
+    const exMsgs = exOps.length ? await processExOps(exOps, rep) : [];
     if(!orders.length){
-      toast(`⛔ الرقم مكرر — انرسل طلب للإدارة للموافقة (${dupReqs.map(q=>q.orderNo).join('، ')})`);
+      const parts=[...exMsgs]; if(dupReqs.length) parts.push(`⛔ رقم مكرر انرسل للإدارة (${dupReqs.map(q=>q.orderNo).join('، ')})`);
+      await uiAlert(parts.join('\n')||'ما فيه شي ينحفظ');
       pendingMissingId=null; PENDING_REDEL=null; resetForm(); btn.disabled=false; btn.textContent=btnTxt; return;
     }
+    if(exMsgs.length) await uiAlert(exMsgs.join('\n')+'\n\nوالحين بنحفظ باقي الطلبات.');
     const batchRef = db.collection('dispatchBatches').doc();
     // الحفظ على دفعات صغيرة (كل 5 طلبات): قاعدة البيانات لها حد لعدد الفحوصات في العملية الوحدة،
     // والتسليم الكبير كان ممكن ينرفض كامل. لو دفعة فشلت، اللي قبلها يبقى محفوظ ونوضح وش انحفظ.
@@ -924,7 +1053,7 @@ async function saveHandover(){
       wb.set(ref, {
         ...o, date, batchId:batchRef.id,
         ...(o.contactTime ? {contactedAt: contactTs(date,o.contactTime), contactedBy:'dispatcher'} : {}),
-        ...(o.redeliveryOf ? {proofImage: pr2?pr2.proof:null, needsRepProof: pr2?(!!pr2.byRep && !pr2.proof):false} : {}),
+        ...(o.redeliveryOf ? {proofImage: pr2?pr2.proof:null, needsRepProof: pr2?(!!pr2.byRep && !pr2.proof):true} : {}),
         repPhone: pickup?null:rep.id, repName: pickup?null:rep.name, isAmmar: pickup?false:!!rep.isAmmar,
         handedAt:TS(), departedAt:null, repStatus: pickup?'na':'pending',
         createdBy:currentUser.uid, createdAt:TS()
@@ -933,7 +1062,7 @@ async function saveHandover(){
       if(o.multiDelivery) wb.set(db.collection('auditLog').doc(), auditRow('multi', {id:ref.id, orderNo:o.orderNo}, `توصيل إضافي لنفس الطلب · ${pickup?'استلام':rep.name} · ${o.areaName}`));
       if(o.redeliveryOf){
         const pr = (PENDING_REDEL && PENDING_REDEL.origId===o.redeliveryOf) ? PENDING_REDEL : null;
-        wb.update(db.collection('dispatchOrders').doc(o.redeliveryOf), {redeliveryId: ref.id, returned:true, returnedAt:TS(), returnReason: pr?pr.reason:'رجع — توصيل ثاني', secondFeePaid:true});
+        wb.update(db.collection('dispatchOrders').doc(o.redeliveryOf), {redeliveryId: ref.id, returned:true, returnedAt:TS(), returnReason: pr?pr.reason:(o.exReason||'رجع — توصيل ثاني'), secondFeePaid:true});
         wb.set(db.collection('auditLog').doc(), auditRow('redelivery', {id:ref.id, orderNo:o.orderNo}, `توصيل ثاني مع ${rep.name}`));
       }
     });
@@ -987,6 +1116,9 @@ async function sendAreaReq(){
   if(!to){ toast('اختر المنطقة الصحيحة'); return; }
   if(!why){ toast('اكتب السبب'); return; }
   const a=AREAS.find(x=>x.id===to); let pic=null;
+  // الطلب اللي ما انعتمد يتعدّل مباشرة، والمعتمد يروح للإدارة
+  let appr=false; if(o.entryId){ try{ const e=await db.collection('dailyEntries').doc(o.entryId).get(); appr=e.exists&&e.data().status==='approved'; }catch(err){} }
+  if(!appr){ const m=await processExOps([{action:'area', target:o, areaId:to, why}], null); closeModal('areaReqModal'); await uiAlert(m.join('\n')); loadDay(); return; }
   const f=document.getElementById('arPic').files[0];
   if(f){ try{ pic=await compressImage(f); }catch(e){ toast('تعذّر قراءة الصورة'); return; } }
   try{
@@ -1107,7 +1239,7 @@ async function loadAudit(){
   const box=document.getElementById('auditBox'); if(!box) return;
   try{
     const snap=await db.collection('auditLog').orderBy('at','desc').limit(100).get();
-    const names={areaRequest:'طلب تعديل منطقة',areaChange:'تعديل منطقة (الإدارة)',farNumber:'رقم طلب غير معتاد',fixOrderNo:'تصحيح رقم طلب (الإدارة)',dupRequest:'طلب موافقة تكرار',dupApproved:'موافقة الإدارة على تكرار',dupRejected:'رفض الإدارة للتكرار',create:'تسليم جديد',depart:'خروج مندوب',contact:'وقت التواصل',pickedUp:'استلام عميل',addRep:'إضافة مندوب',addArea:'إضافة منطقة',rejectMissing:'رفض بلاغ',exclude:'استبعاد من الحساب',recalc:'إعادة احتساب',multi:'توصيل إضافي لنفس الطلب',adminDelete:'حذف من الإدارة',samePhone:'طلب ثاني لنفس الجوال',edit:'تعديل',delete:'حذف طلب',deleteBatch:'حذف تسليم',transfer:'تحويل لمندوب',return:'رجوع للمحل',redelivery:'توصيل ثاني',keep:'رفض اعتراض (الطلب صحيح)',rejectMissing:'رفض بلاغ'};
+    const names={moveDirect:'نقل طلب لمندوب ثاني',areaDirect:'تعديل منطقة (مباشر)',moveRequest:'طلب نقل (للإدارة)',areaRequest:'طلب تعديل منطقة',areaChange:'تعديل منطقة (الإدارة)',farNumber:'رقم طلب غير معتاد',fixOrderNo:'تصحيح رقم طلب (الإدارة)',dupRequest:'طلب موافقة تكرار',dupApproved:'موافقة الإدارة على تكرار',dupRejected:'رفض الإدارة للتكرار',create:'تسليم جديد',depart:'خروج مندوب',contact:'وقت التواصل',pickedUp:'استلام عميل',addRep:'إضافة مندوب',addArea:'إضافة منطقة',rejectMissing:'رفض بلاغ',exclude:'استبعاد من الحساب',recalc:'إعادة احتساب',multi:'توصيل إضافي لنفس الطلب',adminDelete:'حذف من الإدارة',samePhone:'طلب ثاني لنفس الجوال',edit:'تعديل',delete:'حذف طلب',deleteBatch:'حذف تسليم',transfer:'تحويل لمندوب',return:'رجوع للمحل',redelivery:'توصيل ثاني',keep:'رفض اعتراض (الطلب صحيح)',rejectMissing:'رفض بلاغ'};
     box.innerHTML = snap.empty ? '<div class="muted">ما فيه تعديلات.</div>' : `<div class="scroll"><table>
       <thead><tr><th>الوقت</th><th>بواسطة</th><th>الإجراء</th><th>رقم الطلب</th><th>التفاصيل</th></tr></thead>
       <tbody>${snap.docs.map(d=>{const a=d.data(); return `<tr><td style="white-space:nowrap">${a.date||''} ${fmtTime(a.at)}</td><td>${esc(a.byName)}</td><td><b>${names[a.action]||a.action}</b></td><td style="direction:ltr;unicode-bidi:isolate">${esc(a.orderNo||'')}</td><td>${esc(a.details)}</td></tr>`;}).join('')}</tbody></table></div>`;
