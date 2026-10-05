@@ -16,7 +16,7 @@
 <script>
 // تنبيه "فيه نسخة جديدة": لو انرفع تحديث والصفحة مفتوحة من قبل، يطلع شريط يطلب التحديث (عشان ما يشتغل أحد على نسخة قديمة)
 (function(){
-  const APP_V='2026-10-05-1';
+  const APP_V='2026-10-05-2';
   async function chk(){
     try{ const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'}); if(!r.ok) return; const j=await r.json();
       if(j.v && j.v!==APP_V && !document.getElementById('updBar')){
@@ -758,7 +758,7 @@
 /* ===== نوافذ تأكيد/إدخال داخل الصفحة (بدل نوافذ المتصفح اللي بعض الجوالات والمتصفحات تمنعها بصمت) ===== */
 function uiDialog(kind, msg, def){
   return new Promise(res=>{
-    const bg=document.createElement('div');
+    const bg=document.createElement('div'); bg.className='uidlg';
     bg.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;font-family:inherit';
     const box=document.createElement('div');
     box.style.cssText='background:#fff;border-radius:14px;padding:20px;width:100%;max-width:420px;box-shadow:0 10px 30px rgba(0,0,0,.2);direction:rtl;text-align:right';
@@ -2194,6 +2194,24 @@ async function loadOrdersTab(){
   keep('oArea','<option value="">الكل</option>'+areas.map(([i,n])=>`<option value="${oEsc(i)}">${oEsc(n)}</option>`).join(''));
   renderOrdersTab();
   updateNavBadge('navBadgeOrders', O_ORDERS.filter(o=>oStage(o)==='awaiting').length);
+  oLiveStart(from,to);
+}
+// ===== تحديث مباشر: أي تغيير (المندوب أكد، المشرف سلّم، مهند راجع...) يطلع بدون ما تحدّث الصفحة =====
+function uiBusy(){ const a=document.activeElement; return !!(document.querySelector('.uidlg, .modal-bg.show') || (a && /INPUT|TEXTAREA|SELECT/.test(a.tagName) && a.closest('table'))); }
+let O_LIVE={key:'',unsub:[],timer:null,first:{}};
+function oLiveStart(from,to){
+  const key=from+'|'+to; if(O_LIVE.key===key) return;
+  O_LIVE.unsub.forEach(u=>{ try{u();}catch(e){} }); O_LIVE.unsub=[]; O_LIVE.key=key; O_LIVE.first={o:true,e:true,a:true,d:true};
+  const on=(q,k,fn)=>O_LIVE.unsub.push(q.onSnapshot(s=>{ if(O_LIVE.first[k]){ O_LIVE.first[k]=false; return; } fn(s); oLiveRender(); }, e=>console.warn('live',e)));
+  on(db.collection('dispatchOrders').where('date','>=',from).where('date','<=',to),'o',s=>{ O_ORDERS=s.docs.map(d=>({id:d.id,...d.data()})); });
+  on(db.collection('dailyEntries').where('date','>=',from).where('date','<=',to),'e',s=>{ O_ENTRIES=Object.fromEntries(s.docs.map(d=>[d.id,{id:d.id,...d.data()}])); });
+  on(db.collection('areaRequests').where('status','==','open'),'a',s=>renderAreaReqs(s.docs.map(d=>({id:d.id,...d.data()}))));
+  on(db.collection('dupRequests').where('status','==','open'),'d',s=>renderDupReqs(s.docs.map(d=>({id:d.id,...d.data()}))));
+}
+function oLiveRender(){
+  clearTimeout(O_LIVE.timer);
+  O_LIVE.timer=setTimeout(()=>{ if(uiBusy()){ oLiveRender(); return; }
+    renderOrdersTab(); updateNavBadge('navBadgeOrders', O_ORDERS.filter(o=>oStage(o)==='awaiting').length); }, 700);
 }
 function oFiltered(){
   const rep=document.getElementById('oRep').value, st=document.getElementById('oStatus').value,
@@ -2252,7 +2270,7 @@ function renderOrdersTab(){
       <td class="dim">${o.date}</td>
       <td><b>${oEsc(o.repName||'استلام من المتجر')}</b></td>
       <td class="no">${oEsc(o.orderNo)}${myRole==='admin'?` <a href="#" title="تصحيح رقم الطلب" style="text-decoration:none;font-size:12px" onclick="oFixNo('${o.id}');return false">✎</a>`:''}</td>
-      <td><span class="tp tp-${o.type}">${O_TYPES[o.type]||o.type}</span></td>
+      <td><span class="tp tp-${o.type}">${O_TYPES[o.type]||o.type}</span>${myRole==='admin'?` <a href="#" title="تصحيح النوع" style="text-decoration:none;font-size:12px" onclick="oFixType('${o.id}');return false">✎</a>`:''}${o.typeBefore?`<div class="dim">كان ${oEsc(O_TYPES[o.typeBefore]||o.typeBefore)}</div>`:''}</td>
       <td>${oEsc(o.fulfillment==='pickup'?'—':o.areaName)}${(myRole==='admin'&&o.fulfillment!=='pickup')?` <a href="#" title="تعديل المنطقة" style="text-decoration:none;font-size:12px" onclick="oFixArea('${o.id}');return false">✎</a>`:''}${o.areaBefore?`<div class="dim">كانت ${oEsc(o.areaBefore)}</div>`:''}</td>
       <td style="font-weight:900;white-space:nowrap">${o.fulfillment==='pickup'?'—':o.noPay?`<s class="dim">${o.rate||0}</s> 0 ر.س`:(r?r+' ر.س':'<span class="st st-await">بدون سعر</span>')}</td>
       <td style="white-space:nowrap">${df?`<b>+${df.amount} ر.س</b><div class="dim">${df.status==='approved'?'معتمد':'بانتظار المراجعة'}${df.area?' · '+oEsc(df.area):''}</div>`:'<span class="dim">—</span>'}</td>
@@ -2352,6 +2370,28 @@ async function oAddDelivery(id){
       date, batchId:bref.id, repPhone:rep.id, repName:rep.name, isAmmar:!!rep.isAmmar, handedAt:TSv(), departedAt:TSv(), repStatus:'pending', createdBy:currentUser.uid, createdAt:TSv()});
     wb.set(db.collection('auditLog').doc(), {action:'adminAddDelivery', orderNo:o.orderNo, details:`توصيلة إضافية · ${rep.name} · ${area.name} ${rate} ر.س · ${note}`, by:currentUser.uid, byName:currentUser.email, at:TSv(), date});
     await wb.commit(); toast('انضافت التوصيلة ✅ — تطلع عند المندوب يأكدها'); loadOrdersTab();
+  }catch(err){ console.error(err); toast('ما انحفظ'); }
+}
+// تصحيح نوع الطلب من الإدارة (حتى لو معتمد) — السعر وقيد المندوب يتعدّلون
+async function oFixType(id){
+  if(myRole!=='admin'){ noPermissionToast(); return; }
+  const o=O_ORDERS.find(x=>x.id===id); if(!o) return;
+  const PH=['wa','shop'], phone=PH.includes(o.type);
+  const T={doc:['documentation','site'],ward:['ward','site'],wa:['documentation','whatsapp'],shop:['documentation','shop']};
+  const opts=Object.keys(T).filter(t=>t!==o.type && PH.includes(t)===phone);
+  const v=await uiPrompt(`تصحيح نوع الطلب ${o.orderNo}\nالحالي: ${O_TYPES[o.type]}\n\nاكتب رقم النوع الصحيح:\n${opts.map((t,i)=>`${i+1}) ${O_TYPES[t]}`).join('\n')}`,'1'); if(v===null) return;
+  const nt=opts[Number(String(v).replace(/[٠-٩]/g,d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d)))-1]; if(!nt){ toast('رقم غير صحيح'); return; }
+  const why=await uiPrompt('السبب:','انسجل بالنوع الغلط'); if(why===null) return;
+  const a=AREAS.find(x=>x.id===o.areaId); const brand=T[nt][0];
+  const nr = o.fulfillment==='pickup' ? null : (a&&a.rateDoc>0 ? (o.isAmmar?Math.max(0,(brand==='ward'?a.rateWard:a.rateDoc)-5):(brand==='ward'?a.rateWard:a.rateDoc)) : o.rate);
+  const upd={type:nt, brand, source:T[nt][1], rate:nr, typeBefore:o.type};
+  try{
+    const wb=db.batch(); wb.update(db.collection('dispatchOrders').doc(o.id), upd);
+    const e=o.entryId&&O_ENTRIES[o.entryId];
+    if(e){ const its=[]; for(const x of (e.orderIds||[])){ if(x===o.id){ its.push({...o,...upd}); continue; } let z=O_ORDERS.find(q=>q.id===x); if(!z){ const d=await db.collection('dispatchOrders').doc(x).get(); if(d.exists) z={id:d.id,...d.data()}; } if(z) its.push(z); }
+      wb.update(db.collection('dailyEntries').doc(e.id), oBuildEntry(its)); }
+    wb.set(db.collection('auditLog').doc(), {action:'typeFix', orderNo:o.orderNo, details:`${O_TYPES[o.type]} ← ${O_TYPES[nt]}${(o.rate||0)!==(nr||0)?` · ${o.rate||0} ← ${nr||0} ر.س`:''} · ${why}`, oldRate:o.rate||0, newRate:nr||0, repPhone:o.repPhone, repName:o.repName, by:currentUser.uid, byName:currentUser.email, at:firebase.firestore.FieldValue.serverTimestamp(), date:oRiyadh()});
+    await wb.commit(); toast('انصحح النوع ✅'); loadOrdersTab();
   }catch(err){ console.error(err); toast('ما انحفظ'); }
 }
 function oViewImg(id){ const o=O_ORDERS.find(x=>x.id===id); if(!o||!o.proofImage) return; const w=window.open(); if(w) w.document.write(`<img src="${o.proofImage}" style="max-width:100%">`); }
@@ -2684,10 +2724,10 @@ function oExport(){
 /* =====================================================================
    الرقابة والتنبيهات
    ===================================================================== */
-const SEC_NAMES={moveDirect:'نقل طلب لمندوب ثاني (المشرف)',areaDirect:'تعديل منطقة مباشر (المشرف)',moveRequest:'طلب نقل معتمد',moveApproved:'موافقة نقل (الإدارة)',undoReturn:'إلغاء رجوع (الإدارة)',adminAddDelivery:'توصيلة إضافية (الإدارة)',areaRequest:'طلب تعديل منطقة',areaChange:'تعديل منطقة (الإدارة)',farNumber:'رقم طلب غير معتاد',fixOrderNo:'تصحيح رقم طلب (الإدارة)',dupRequest:'طلب موافقة تكرار جوال',dupApproved:'موافقة على تكرار',dupRejected:'رفض تكرار',create:'تسليم جديد',depart:'خروج مندوب',contact:'وقت التواصل',pickedUp:'استلام عميل',addRep:'إضافة مندوب',addArea:'إضافة منطقة',
+const SEC_NAMES={typeFix:'تصحيح نوع الطلب',moveDirect:'نقل طلب لمندوب ثاني (المشرف)',areaDirect:'تعديل منطقة مباشر (المشرف)',moveRequest:'طلب نقل معتمد',moveApproved:'موافقة نقل (الإدارة)',undoReturn:'إلغاء رجوع (الإدارة)',adminAddDelivery:'توصيلة إضافية (الإدارة)',areaRequest:'طلب تعديل منطقة',areaChange:'تعديل منطقة (الإدارة)',farNumber:'رقم طلب غير معتاد',fixOrderNo:'تصحيح رقم طلب (الإدارة)',dupRequest:'طلب موافقة تكرار جوال',dupApproved:'موافقة على تكرار',dupRejected:'رفض تكرار',create:'تسليم جديد',depart:'خروج مندوب',contact:'وقت التواصل',pickedUp:'استلام عميل',addRep:'إضافة مندوب',addArea:'إضافة منطقة',
   edit:'تعديل طلب',delete:'حذف طلب',deleteBatch:'حذف تسليم كامل',transfer:'تحويل لمندوب',return:'رجوع للمحل',redelivery:'توصيل ثاني',multi:'توصيل إضافي لنفس الطلب',
   samePhone:'طلب ثاني لنفس الجوال',keep:'رفض اعتراض مندوب',rejectMissing:'رفض بلاغ مندوب',adminDelete:'حذف من الإدارة',exclude:'استبعاد من الحساب',recalc:'إعادة احتساب أسعار'};
-const SEC_RISK={moveDirect:1,areaDirect:1,moveRequest:1,areaRequest:1,areaChange:1,farNumber:2,dupRequest:1,delete:2,deleteBatch:2,keep:2,rejectMissing:1,edit:1,transfer:1,addRep:1,samePhone:1,multi:1,return:0,redelivery:0};
+const SEC_RISK={typeFix:1,moveDirect:1,areaDirect:1,moveRequest:1,areaRequest:1,areaChange:1,farNumber:2,dupRequest:1,delete:2,deleteBatch:2,keep:2,rejectMissing:1,edit:1,transfer:1,addRep:1,samePhone:1,multi:1,return:0,redelivery:0};
 let SEC={from:null,to:null,log:[],orders:[]};
 function secLastSeen(){ try{ return Number(localStorage.getItem('secLastSeen')||0); }catch(e){ return 0; } }
 function secMarkSeen(){ try{ localStorage.setItem('secLastSeen', String(Date.now())); }catch(e){} updateNavBadge('navBadgeSecurity',0); }
@@ -2843,7 +2883,7 @@ function secRenderAlerts(){
   const del=L.filter(x=>x.action==='delete'||x.action==='deleteBatch');
   if(del.length) add(2,`🟠 ${del.length} عملية حذف من المشرف (إبراهيم)`, del.map(x=>`${oTime(x.at)} · ${oEsc(x.orderNo||'')} — ${oEsc(x.details)}`).join('<br>'));
   // ٣) تعديل رفع السعر
-  const up=L.filter(x=>['edit','areaDirect','moveDirect'].includes(x.action) && (x.newRate||0)>(x.oldRate||0));
+  const up=L.filter(x=>['edit','areaDirect','moveDirect','typeFix'].includes(x.action) && (x.newRate||0)>(x.oldRate||0));
   if(up.length) add(2,`🟠 ${up.length} تعديل رفع سعر التوصيل`, up.map(x=>`${oEsc(x.orderNo)} · ${oEsc(x.repName||'')}: ${x.oldRate} ← ${x.newRate} ر.س`).join('<br>'));
   const moves=L.filter(x=>x.action==='moveDirect'||x.action==='areaDirect');
   if(moves.length) add(1,`🟡 ${moves.length} نقل/تعديل منطقة سواه المشرف مباشرة`, moves.map(x=>`${oTime(x.at)} · <b>${oEsc(x.orderNo)}</b> · ${SEC_NAMES[x.action]} — ${oEsc(x.details)}`).join('<br>'));

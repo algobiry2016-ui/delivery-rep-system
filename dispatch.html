@@ -16,7 +16,7 @@
 <script>
 // تنبيه "فيه نسخة جديدة": لو انرفع تحديث والصفحة مفتوحة من قبل، يطلع شريط يطلب التحديث (عشان ما يشتغل أحد على نسخة قديمة)
 (function(){
-  const APP_V='2026-10-05-1';
+  const APP_V='2026-10-05-2';
   async function chk(){
     try{ const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'}); if(!r.ok) return; const j=await r.json();
       if(j.v && j.v!==APP_V && !document.getElementById('updBar')){
@@ -413,7 +413,7 @@
 /* ===== نوافذ تأكيد/إدخال داخل الصفحة (بدل نوافذ المتصفح اللي بعض الجوالات والمتصفحات تمنعها بصمت) ===== */
 function uiDialog(kind, msg, def){
   return new Promise(res=>{
-    const bg=document.createElement('div');
+    const bg=document.createElement('div'); bg.className='uidlg';
     bg.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;font-family:inherit';
     const box=document.createElement('div');
     box.style.cssText='background:#fff;border-radius:14px;padding:20px;width:100%;max-width:420px;box-shadow:0 10px 30px rgba(0,0,0,.2);direction:rtl;text-align:right';
@@ -812,6 +812,29 @@ async function rebuildEntry(wb, entryId, changedId, changedData, remove){
   else wb.update(db.collection('dailyEntries').doc(entryId), buildEntryFrom(its));
 }
 
+// تصحيح نوع الطلب (مثلاً انسجل دوكمنتيشن وهو ورد إكسبرس، أو واتس وهو محل) — النوع لازم يناسب الرقم
+async function fixType(id){
+  const o=DAY_ORDERS[id]; if(!o) return;
+  const phone=PHONE_TYPES.includes(o.type);
+  const opts=Object.keys(TYPES).filter(t=>t!==o.type && (PHONE_TYPES.includes(t)===phone));
+  if(!opts.length){ toast('ما فيه نوع ثاني يناسب هذا الرقم'); return; }
+  const v=await uiPrompt(`تصحيح نوع الطلب ${o.orderNo}\nالحالي: ${TYPES[o.type].full}\n\n${phone?'(رقمه جوال — يصير واتس أو محل)':'(رقمه رقم سلة — يصير دوكمنتيشن أو ورد إكسبرس)'}\nاكتب رقم النوع الصحيح:\n${opts.map((t,i)=>`${i+1}) ${TYPES[t].full}`).join('\n')}`, '1');
+  if(v===null) return;
+  const nt=opts[Number(String(v).replace(/[٠-٩]/g,d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d)))-1]; if(!nt){ toast('رقم غير صحيح'); return; }
+  const why=await uiPrompt('السبب:','انسجل بالنوع الغلط'); if(why===null) return;
+  try{
+    let approved=false; if(o.entryId){ const e=await db.collection('dailyEntries').doc(o.entryId).get(); approved=e.exists&&e.data().status==='approved'; }
+    if(approved){ await uiAlert('الطلب معتمد — تصحيح نوعه من الإدارة'); return; }
+    const area=AREAS.find(a=>a.id===o.areaId), rep=REPS.find(r=>r.id===o.repPhone)||{isAmmar:o.isAmmar};
+    const nr = isPickup(o) ? null : (isPriced(area) ? rateFor(area,nt,rep) : o.rate);
+    const upd={type:nt, brand:TYPES[nt].brand, source:TYPES[nt].source, rate:nr, typeBefore:o.type};
+    const wb=db.batch();
+    wb.update(db.collection('dispatchOrders').doc(o.id), upd);
+    if(o.entryId) await rebuildEntry(wb, o.entryId, o.id, {...o,...upd}, false);
+    wb.set(db.collection('auditLog').doc(), auditRow('typeFix', o, `${TYPES[o.type].full} ← ${TYPES[nt].full}${(o.rate||0)!==(nr||0)?` · ${o.rate||0} ← ${nr||0} ر.س`:''} · ${why}`, {oldRate:o.rate||0, newRate:nr||0, repPhone:o.repPhone, repName:o.repName}));
+    await wb.commit(); toast('انصحح النوع ✅'); loadDay(true);
+  }catch(e){ console.error(e); toast('ما انحفظ'); }
+}
 // تعديل المنسقين لطلب أكده المندوب (ما يأثر على فلوس المندوب)
 async function fixFlorists(id){
   const o=DAY_ORDERS[id]; if(!o) return;
@@ -1284,7 +1307,7 @@ async function loadAudit(){
   const box=document.getElementById('auditBox'); if(!box) return;
   try{
     const snap=await db.collection('auditLog').orderBy('at','desc').limit(100).get();
-    const names={moveDirect:'نقل طلب لمندوب ثاني',areaDirect:'تعديل منطقة (مباشر)',moveRequest:'طلب نقل (للإدارة)',areaRequest:'طلب تعديل منطقة',areaChange:'تعديل منطقة (الإدارة)',farNumber:'رقم طلب غير معتاد',fixOrderNo:'تصحيح رقم طلب (الإدارة)',dupRequest:'طلب موافقة تكرار',dupApproved:'موافقة الإدارة على تكرار',dupRejected:'رفض الإدارة للتكرار',create:'تسليم جديد',depart:'خروج مندوب',contact:'وقت التواصل',pickedUp:'استلام عميل',addRep:'إضافة مندوب',addArea:'إضافة منطقة',rejectMissing:'رفض بلاغ',exclude:'استبعاد من الحساب',recalc:'إعادة احتساب',multi:'توصيل إضافي لنفس الطلب',adminDelete:'حذف من الإدارة',samePhone:'طلب ثاني لنفس الجوال',edit:'تعديل',delete:'حذف طلب',deleteBatch:'حذف تسليم',transfer:'تحويل لمندوب',return:'رجوع للمحل',redelivery:'توصيل ثاني',keep:'رفض اعتراض (الطلب صحيح)',rejectMissing:'رفض بلاغ'};
+    const names={typeFix:'تصحيح نوع الطلب',moveDirect:'نقل طلب لمندوب ثاني',areaDirect:'تعديل منطقة (مباشر)',moveRequest:'طلب نقل (للإدارة)',areaRequest:'طلب تعديل منطقة',areaChange:'تعديل منطقة (الإدارة)',farNumber:'رقم طلب غير معتاد',fixOrderNo:'تصحيح رقم طلب (الإدارة)',dupRequest:'طلب موافقة تكرار',dupApproved:'موافقة الإدارة على تكرار',dupRejected:'رفض الإدارة للتكرار',create:'تسليم جديد',depart:'خروج مندوب',contact:'وقت التواصل',pickedUp:'استلام عميل',addRep:'إضافة مندوب',addArea:'إضافة منطقة',rejectMissing:'رفض بلاغ',exclude:'استبعاد من الحساب',recalc:'إعادة احتساب',multi:'توصيل إضافي لنفس الطلب',adminDelete:'حذف من الإدارة',samePhone:'طلب ثاني لنفس الجوال',edit:'تعديل',delete:'حذف طلب',deleteBatch:'حذف تسليم',transfer:'تحويل لمندوب',return:'رجوع للمحل',redelivery:'توصيل ثاني',keep:'رفض اعتراض (الطلب صحيح)',rejectMissing:'رفض بلاغ'};
     box.innerHTML = snap.empty ? '<div class="muted">ما فيه تعديلات.</div>' : `<div class="scroll"><table>
       <thead><tr><th>الوقت</th><th>بواسطة</th><th>الإجراء</th><th>رقم الطلب</th><th>التفاصيل</th></tr></thead>
       <tbody>${snap.docs.map(d=>{const a=d.data(); return `<tr><td style="white-space:nowrap">${a.date||''} ${fmtTime(a.at)}</td><td>${esc(a.byName)}</td><td><b>${names[a.action]||a.action}</b></td><td style="direction:ltr;unicode-bidi:isolate">${esc(a.orderNo||'')}</td><td>${esc(a.details)}</td></tr>`;}).join('')}</tbody></table></div>`;
@@ -1293,10 +1316,25 @@ async function loadAudit(){
 
 /* ---------------- DAY LOG ---------------- */
 let DAY_ORDERS = {};
-async function loadDay(){
+// ===== تحديث مباشر لسجل اليوم: لما المندوب يأكد أو يضغط تم التوصيل يطلع على طول =====
+function uiBusy(){ const a=document.activeElement; return !!(document.querySelector('.uidlg, .modal-bg.show') || (a && /INPUT|TEXTAREA|SELECT/.test(a.tagName) && a.closest('table'))); }
+let DAY_LIVE={date:'',unsub:[],timer:null,first:{}};
+function dayLiveStart(date){
+  if(DAY_LIVE.date===date) return;
+  DAY_LIVE.unsub.forEach(u=>{ try{u();}catch(e){} }); DAY_LIVE.unsub=[]; DAY_LIVE.date=date; DAY_LIVE.first={o:true,b:true};
+  const on=(q,k)=>DAY_LIVE.unsub.push(q.onSnapshot(()=>{ if(DAY_LIVE.first[k]){ DAY_LIVE.first[k]=false; return; } dayLiveRender(); }, e=>console.warn('live',e)));
+  on(db.collection('dispatchOrders').where('date','==',date),'o');
+  on(db.collection('dispatchBatches').where('date','==',date),'b');
+}
+function dayLiveRender(){
+  clearTimeout(DAY_LIVE.timer);
+  DAY_LIVE.timer=setTimeout(()=>{ if(uiBusy()){ dayLiveRender(); return; } loadDay(true); }, 800);
+}
+async function loadDay(silent){
   const date = document.getElementById('dayDate').value || localDate();
   const box = document.getElementById('dayBatches');
-  box.innerHTML='<div class="muted">جاري التحميل...</div>';
+  if(!silent) box.innerHTML='<div class="muted">جاري التحميل...</div>';
+  dayLiveStart(date);
   const [bSnap, oSnap] = await Promise.all([
     db.collection('dispatchBatches').where('date','==',date).get(),
     db.collection('dispatchOrders').where('date','==',date).get()
@@ -1502,6 +1540,7 @@ function orderActions(o,b){
   // النقل وتعديل المنطقة والتوصيل الثاني صارت من شاشة "تسليم جديد" (اكتب رقم الطلب)
   const st=repStatusOf(o); let h='';
   h += `<button class="mini" onclick="fixFlorists('${o.id}')">💐 المنسق</button> `;
+  h += `<button class="mini" onclick="fixType('${o.id}')">🏷 النوع</button> `;
   if(st!=='confirmed') h+=`<button class="danger" onclick="deleteOrder('${o.id}','${b.id}')">حذف</button>`;
   const pend = AREQ.find(q=>q.orderId===o.id && q.status==='open');
   if(pend) h += ' <span class="rs rs-pending">📍 عند الإدارة</span>';

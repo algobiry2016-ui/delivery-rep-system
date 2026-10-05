@@ -16,7 +16,7 @@
 <script>
 // تنبيه "فيه نسخة جديدة": لو انرفع تحديث والصفحة مفتوحة من قبل، يطلع شريط يطلب التحديث (عشان ما يشتغل أحد على نسخة قديمة)
 (function(){
-  const APP_V='2026-10-05-1';
+  const APP_V='2026-10-05-2';
   async function chk(){
     try{ const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'}); if(!r.ok) return; const j=await r.json();
       if(j.v && j.v!==APP_V && !document.getElementById('updBar')){
@@ -304,10 +304,21 @@ function quick(k){
 }
 
 /* ---------- data ---------- */
-async function loadAll(){
+// ===== تحديث مباشر =====
+function uiBusy(){ return !!document.querySelector('.uidlg, .modal-bg.show'); }
+let LIVE={key:'',unsub:[],timer:null,first:{}};
+function liveStart(from,to){
+  const key=from+'|'+to; if(LIVE.key===key) return;
+  LIVE.unsub.forEach(u=>{ try{u();}catch(e){} }); LIVE.unsub=[]; LIVE.key=key; LIVE.first={o:true,e:true};
+  const on=(q,k)=>LIVE.unsub.push(q.onSnapshot(()=>{ if(LIVE.first[k]){ LIVE.first[k]=false; return; } clearTimeout(LIVE.timer); LIVE.timer=setTimeout(()=>{ if(!uiBusy()) loadAll(true); },800); }, e=>console.warn('live',e)));
+  on(db.collection('dispatchOrders').where('date','>=',from).where('date','<=',to),'o');
+  on(db.collection('dailyEntries').where('date','>=',from).where('date','<=',to),'e');
+}
+async function loadAll(silent){
   const from=document.getElementById('fFrom').value, to=document.getElementById('fTo').value;
   if(!from||!to||from>to){ toast('تحقق من الفترة'); return; }
-  document.getElementById('oBody').innerHTML='<tr><td colspan="12" class="empty">جاري التحميل...</td></tr>';
+  if(!silent) document.getElementById('oBody').innerHTML='<tr><td colspan="12" class="empty">جاري التحميل...</td></tr>';
+  liveStart(from,to);
   try{
     const f=new Date(from+'T00:00:00+03:00'), t=new Date(to+'T00:00:00+03:00'); t.setDate(t.getDate()+4);
     const [o,e,df,ds,ms,pend] = await Promise.all([
@@ -326,7 +337,7 @@ async function loadAll(){
     DISPUTES = ds.docs.map(d=>d.data()); MISSING = ms.docs.map(d=>d.data());
     const today=riyadh(); STALE = pend.docs.map(d=>d.data()).filter(x=>x.date<today);
   }catch(err){ console.error(err); toast('تعذّر التحميل — تأكد من الصلاحيات'); return; }
-  SEL.clear();
+  if(!silent) SEL.clear(); else { [...SEL].forEach(id=>{ if(!ORDERS.some(o=>o.id===id)) SEL.delete(id); }); }
   const keep=(id,opts)=>{ const el=document.getElementById(id), v=el.value; el.innerHTML=opts; el.value=v; if(el.value!==v) el.value=''; };
   const reps=[...new Map(ORDERS.filter(x=>x.repPhone).map(x=>[x.repPhone,x.repName])).entries()].sort((a,b)=>(a[1]||'').localeCompare(b[1]||'','ar'));
   keep('fRep','<option value="">كل المناديب</option>'+reps.map(([p,n])=>`<option value="${p}">${esc(n)}</option>`).join(''));
