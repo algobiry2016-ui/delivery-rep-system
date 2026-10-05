@@ -16,7 +16,7 @@
 <script>
 // تنبيه "فيه نسخة جديدة": لو انرفع تحديث والصفحة مفتوحة من قبل، يطلع شريط يطلب التحديث (عشان ما يشتغل أحد على نسخة قديمة)
 (function(){
-  const APP_V='2026-10-05-2';
+  const APP_V='2026-10-05-3';
   async function chk(){
     try{ const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'}); if(!r.ok) return; const j=await r.json();
       if(j.v && j.v!==APP_V && !document.getElementById('updBar')){
@@ -815,7 +815,7 @@ async function rebuildEntry(wb, entryId, changedId, changedData, remove){
 // تصحيح نوع الطلب (مثلاً انسجل دوكمنتيشن وهو ورد إكسبرس، أو واتس وهو محل) — النوع لازم يناسب الرقم
 async function fixType(id){
   const o=DAY_ORDERS[id]; if(!o) return;
-  const phone=PHONE_TYPES.includes(o.type);
+  const phone=/^05\d{8}$/.test(String(o.orderNo||''));   // من شكل الرقم: جوال = واتس/محل، رقم سلة = دوكمنتيشن/ورد
   const opts=Object.keys(TYPES).filter(t=>t!==o.type && (PHONE_TYPES.includes(t)===phone));
   if(!opts.length){ toast('ما فيه نوع ثاني يناسب هذا الرقم'); return; }
   const v=await uiPrompt(`تصحيح نوع الطلب ${o.orderNo}\nالحالي: ${TYPES[o.type].full}\n\n${phone?'(رقمه جوال — يصير واتس أو محل)':'(رقمه رقم سلة — يصير دوكمنتيشن أو ورد إكسبرس)'}\nاكتب رقم النوع الصحيح:\n${opts.map((t,i)=>`${i+1}) ${TYPES[t].full}`).join('\n')}`, '1');
