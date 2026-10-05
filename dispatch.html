@@ -16,7 +16,7 @@
 <script>
 // تنبيه "فيه نسخة جديدة": لو انرفع تحديث والصفحة مفتوحة من قبل، يطلع شريط يطلب التحديث (عشان ما يشتغل أحد على نسخة قديمة)
 (function(){
-  const APP_V='2026-10-04-1';
+  const APP_V='2026-10-04-7';
   async function chk(){
     try{ const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'}); if(!r.ok) return; const j=await r.json();
       if(j.v && j.v!==APP_V && !document.getElementById('updBar')){
@@ -315,6 +315,7 @@
   <div class="modal">
     <h3 style="margin-top:0">تعديل الطلب <span id="editOrderNo"></span></h3>
     <div class="field"><label>المنسق</label><select id="editFlorist"></select></div>
+    <div class="field"><label>منسق ثاني (اختياري)</label><select id="editFlorist2"></select></div>
     <div class="field"><label>المنطقة</label><select id="editArea"></select></div>
     <div class="field"><label>النوع</label>
       <div class="seg" id="editSeg">
@@ -691,12 +692,13 @@ function addRow(prep, redel){
     <div class="field"><input class="o-no" inputmode="tel" placeholder="${noPlaceholder(prevType)}" ${(prep||redel)?`value="${esc((prep||redel).orderNo)}" readonly style="background:#fff;font-weight:900;direction:ltr;text-align:right"`:'onchange="checkExisting(this)" onblur="checkExisting(this)"'}></div>
     <div class="exist-box"></div>
     <div class="row2">
-      <div class="field"><select class="o-florist" ${prep?'disabled':''}>${floristOptions(prep?prep.floristName:(redel?redel.florist:''))}</select></div>
+      <div class="field"><select class="o-florist" ${prep?'disabled':''}>${floristOptions(prep?prep.floristName:(redel?floristsOf(redel)[0]:''))}</select>
+        <div class="flor-x"></div>${prep?'':`<button type="button" class="mini" style="margin-top:6px" onclick="addRowFlorist(this)">＋ منسق ثاني</button>`}</div>
       <div class="field o-area-field" style="${MODE==='pickup'?'display:none':''}"><select class="o-area" onchange="onAreaSelect(this)">${areaOptions(redel?redel.areaId:prevArea)}</select></div>
     </div>
     <div class="row2">
       <div class="field" style="margin:0"><input class="o-notes" placeholder="ملاحظات (اختياري)" value="${redel?esc('توصيل ثاني — '+(redel.returnReason||'')):''}"></div>
-      <div class="field o-contact-field" style="margin:0;${MODE==='pickup'?'display:none':''}"><label style="font-size:11.5px">وقت تواصل المندوب مع المستلم (لإرسال الموقع)</label>${timePicker('')}</div>
+      <div class="field o-contact-field" style="margin:0;${MODE==='pickup'?'display:none':''}"><label style="font-size:11.5px">وقت تواصل المندوب مع المستلم <b style="color:var(--red)">*</b></label>${timePicker('')}</div>
     </div>
     <div class="extra-areas"></div>
     ${(redel||prep)?'':`<button type="button" class="mini addx" style="margin-top:8px;${MODE==='pickup'?'display:none':''}" onclick="addExtraArea('${id}')">＋ منطقة توصيل ثانية لنفس الطلب (مستلم مختلف)</button>`}`;
@@ -768,10 +770,11 @@ async function processExOps(ops, rep){
       } else {
         // نقل لمندوب ثاني: تسليم جديد له، والطلب ينشال من الأول (ومن قيده لو كان أكده)
         const nb=db.collection('dispatchBatches').doc();
-        wb.set(nb, {date:localDate(), repPhone:toRep.id, repName:toRep.name, isAmmar:!!toRep.isAmmar, orderCount:1, handedAt:TS(), departedAt:null, transferIn:true, createdBy:currentUser.uid, createdByName:myName, createdAt:TS()});
-        const upd={repPhone:toRep.id, repName:toRep.name, isAmmar:!!toRep.isAmmar, batchId:nb.id, handedAt:TS(), departedAt:null,
+        wb.set(nb, {date:localDate(), repPhone:toRep.id, repName:toRep.name, isAmmar:!!toRep.isAmmar, orderCount:1, handedAt:TS(), departedAt:TS(), transferIn:true, createdBy:currentUser.uid, createdByName:myName, createdAt:TS()});
+        const upd={repPhone:toRep.id, repName:toRep.name, isAmmar:!!toRep.isAmmar, batchId:nb.id, handedAt:TS(), departedAt:TS(),
           areaId:op.areaId, areaName:area?area.name:'', rate:newRate, repStatus:'pending', entryId:null, disputeReason:null, disputeNote:null,
-          transferredFrom:o.repName, transferNote:op.why, transferCount:(o.transferCount||0)+1, transferredAt:TS(), ...(op.areaId!==o.areaId?{areaBefore:o.areaName}:{})};
+          transferredFrom:o.repName, transferNote:op.why, transferCount:(o.transferCount||0)+1, transferredAt:TS(), ...(op.areaId!==o.areaId?{areaBefore:o.areaName}:{}),
+          deliveredAt:null, ...(op.contactTime?{contactTime:op.contactTime, contactedAt:contactTs(localDate(),op.contactTime), contactedBy:'dispatcher'}:{})};
         wb.update(db.collection('dispatchOrders').doc(o.id), upd);
         if(o.entryId) await rebuildEntry(wb, o.entryId, o.id, null, true);
         const rest=(await db.collection('dispatchOrders').where('batchId','==',o.batchId).get()).docs.filter(x=>x.id!==o.id).length;
@@ -802,6 +805,36 @@ async function rebuildEntry(wb, entryId, changedId, changedData, remove){
   }
   if(!its.length) wb.delete(db.collection('dailyEntries').doc(entryId));
   else wb.update(db.collection('dailyEntries').doc(entryId), buildEntryFrom(its));
+}
+
+// تعديل المنسقين لطلب أكده المندوب (ما يأثر على فلوس المندوب)
+async function fixFlorists(id){
+  const o=DAY_ORDERS[id]; if(!o) return;
+  const list=FLORISTS;
+  const cur=floristsOf(o).map(f=>list.indexOf(f)+1).filter(x=>x>0).join('،');
+  const v=await uiPrompt(`منسقين الطلب ${o.orderNo}\nالحالي: ${floristsOf(o).join(' + ')||'—'}\n\nاكتب أرقامهم مفصولة بفاصلة (مثلاً 1،3):\n${list.map((f,i)=>`${i+1}) ${f}`).join('\n')}`, cur);
+  if(v===null) return;
+  const picked=[...new Set(String(v).replace(/[٠-٩]/g,d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d)).split(/[،,\s]+/).map(x=>list[Number(x)-1]).filter(Boolean))];
+  if(!picked.length){ toast('اختر منسق واحد على الأقل'); return; }
+  try{
+    await db.collection('dispatchOrders').doc(id).update({florist:picked.join(' + '), florists:picked});
+    audit('edit', o, `المنسق: ${floristsOf(o).join(' + ')} ← ${picked.join(' + ')}`, {oldRate:o.rate||0, newRate:o.rate||0, repPhone:o.repPhone, repName:o.repName});
+    toast('انحفظ ✅'); loadDay();
+  }catch(e){ console.error(e); toast('ما انحفظ'); }
+}
+// أكثر من منسق جهّز نفس الطلب (مثلاً: صيام جزء وجيلي جزء) — الطلب واحد، وينحسب لكل منسق في تقريرهم
+function floristsOf(o){ return Array.isArray(o.florists)&&o.florists.length ? o.florists : String(o.florist||'').split(' + ').map(x=>x.trim()).filter(Boolean); }
+function addRowFlorist(btn){
+  const box=btn.parentElement.querySelector('.flor-x');
+  if(box.children.length>=2){ toast('أقصى شي 3 منسقين للطلب'); return; }
+  const d=document.createElement('div'); d.style.cssText='display:flex;gap:6px;margin-top:6px';
+  d.innerHTML=`<select class="o-florist-x" style="flex:1">${floristOptions('')}</select><button type="button" class="danger" onclick="this.parentElement.remove()">✕</button>`;
+  box.appendChild(d);
+}
+function rowFlorists(r){
+  const main=r.querySelector('.o-florist').value;
+  const xs=[...r.querySelectorAll('.o-florist-x')].map(x=>x.value).filter(Boolean);
+  return [...new Set([main,...xs].filter(Boolean))];
 }
 
 // نفس رقم الطلب لأكثر من مستلم: كل منطقة إضافية = توصيلة مستقلة بسعر منطقتها
@@ -901,7 +934,8 @@ async function saveHandover(){
   const seen = new Set();
   for(const [i,r] of [...document.querySelectorAll('.orow')].entries()){
     const no = normOrderNo(r.querySelector('.o-no').value);
-    const florist = r.querySelector('.o-florist').value;
+    const flList = rowFlorists(r);
+    const florist = flList.join(' + ');
     const prep = r.dataset.prepId ? READY.find(x=>x.id===r.dataset.prepId) : null;
     const areaId = pickup ? '' : r.querySelector('.o-area').value;
     const n = i+1;
@@ -918,14 +952,19 @@ async function saveHandover(){
         // يمشي كتوصيل ثاني عادي (التوصيلة الأولى تبقى للأول، والجديد يرفع الإيصال)
         r.dataset.redeliveryOf = ex.target.id; r.dataset.exReason = ex.why;
       } else {
-        exOps.push({...ex, areaId:exArea, n, florist:r.querySelector('.o-florist').value});
+        const exCT = readTime(r.querySelector('.o-contact-field .tpk'));
+        if(exCT===null){ toast(`طلب ${n}: وقت التواصل غير مفهوم — اكتبه مثل 2:30`); return; }
+        if(ex.action==='move' && !exCT){ toast(`طلب ${n}: اكتب وقت تواصل المندوب الجديد مع المستلم (إلزامي)`); return; }
+        exOps.push({...ex, areaId:exArea, n, florist, contactTime:exCT||null});
         continue;
       }
     }
     const isRedel = !!r.dataset.redeliveryOf;
     const multi = false;
     const cTime = pickup ? '' : readTime(r.querySelector('.o-contact-field .tpk'));
-    if(cTime===null){ toast(`طلب ${n}: وقت التواصل غير مفهوم — اكتبه مثل 2:30 أو امسحه`); return; }
+    if(cTime===null){ toast(`طلب ${n}: وقت التواصل غير مفهوم — اكتبه مثل 2:30`); return; }
+    const exChk = (!pickup && !r.dataset.redeliveryOf && !r.dataset.prepId) ? rowExisting(r) : null;
+    if(!pickup && !cTime && !(exChk && exChk.action==='area')){ toast(`طلب ${n}: اكتب وقت تواصل المندوب مع المستلم (إلزامي)`); return; }
     const extras = pickup ? [] : [...r.querySelectorAll('.o-area-x')].map(x=>x.value);
     if(extras.some(v=>!v)){ toast(`طلب ${n}: اختر المنطقة الإضافية أو شيلها`); return; }
     if(PHONE_TYPES.includes(type) && !isRedel){
@@ -934,6 +973,7 @@ async function saveHandover(){
       if(!no){ toast(`طلب ${n}: اكتب رقم الطلب`); return; }
       if(/^05\d{8}$/.test(no)){ toast(`طلب ${n}: هذا رقم جوال — لو الطلب واتس أو محل اختر النوع الصحيح`); return; }
       if(no.length!==SALLA_LEN){ toast(`طلب ${n}: رقم طلب سلة لازم يكون ${SALLA_LEN} أرقام — كتبت ${no.length} (${no}). تأكد ما فيه رقم زايد أو ناقص`); return; }
+      if(/^0/.test(no) || /^(\d)\1+$/.test(no)){ toast(`طلب ${n}: الرقم ${no} مو رقم طلب سلة صحيح — لو الطلب ما له رقم سلة اختر "واتس" أو "محل" واكتب جوال العميل`); return; }
     }
     if(r.dataset.prepId && !prep){ toast(`الطلب ${no} ما عاد في قائمة الجاهز — شيله وحدّث`); return; }
     if(no && seen.has(no)){ toast(`الطلب ${no} مكرر في نفس التسليم — لو لمستلم ثاني استخدم "＋ منطقة توصيل ثانية" في نفس السطر`); return; }
@@ -942,7 +982,7 @@ async function saveHandover(){
     if(no) seen.add(no);
     const area = pickup ? null : AREAS.find(a=>a.id===areaId);
     if(!pickup && !repServes(rep,type)){ toast(`${rep.name} ما يوصّل طلبات ${TYPES[type].label} — طلب ${n}`); return; }
-    orders.push({orderNo:no, florist, type, brand:TYPES[type].brand, source:TYPES[type].source,
+    orders.push({orderNo:no, florist, florists:flList, type, brand:TYPES[type].brand, source:TYPES[type].source,
       fulfillment: pickup ? 'pickup' : 'delivery',
       areaId: pickup ? null : areaId, areaName: pickup ? 'استلام من المتجر' : (area?area.name:''),
       rate: (!pickup && isPriced(area)) ? rateFor(area,type,rep) : null,   // السعر وقت التسليم — ما يتغير لو تغيّرت الأسعار بعدين
@@ -984,13 +1024,13 @@ async function saveHandover(){
       dupReqs = nos.map(no=>({orderNo:no, reason:why.trim(), orders: orders.filter(o=>o.orderNo===no)}));
       for(let i=orders.length-1;i>=0;i--) if(nos.includes(orders[i].orderNo)) orders.splice(i,1);
     }
-    // رقم بعيد جداً عن أرقام طلبات نفس البراند اليوم (مثلاً رقم متبدل بالغلط) — نطلب تأكيد وينسجل
+    // رقم بعيد جداً عن أرقام طلبات نفس البراند اليوم (مثلاً أول الأرقام متبدلة: 219... بدل 291...) — نطلب تأكيد وينسجل
     const far=[];
     let todayAll=[]; try{ todayAll=(await db.collection('dispatchOrders').where('date','==',localDate()).get()).docs.map(d=>d.data()); }catch(e){}
     for(const o of orders.filter(x=>x.orderNo && !PHONE_TYPES.includes(x.type) && !x.redeliveryOf)){
       const others=todayAll.filter(x=>x.brand===o.brand && !PHONE_TYPES.includes(x.type) && /^\d+$/.test(x.orderNo) && x.orderNo!==o.orderNo).map(x=>Number(x.orderNo));
       if(others.length>=3){ const sorted=others.sort((a,b)=>a-b), med=sorted[Math.floor(sorted.length/2)];
-        if(Math.abs(Number(o.orderNo)-med)>50000) far.push(o); }
+        if(Math.abs(Number(o.orderNo)-med)>5000000) far.push(o); }   // أرقام سلة تزيد مئات الآلاف باليوم، والطلبات المجدولة تخلي الفرق كبير — ننبه بس على الرقم البعيد جداً (غلط في أول الأرقام)
     }
     if(far.length && !await uiConfirm(`تأكد من أرقام الطلبات هذي — بعيدة عن أرقام طلبات اليوم:\n${far.map(o=>o.orderNo).join('\n')}\n\nإذا متأكد إنها صحيحة اضغط موافق (بتنسجل للإدارة).`)){ btn.disabled=false; btn.textContent=btnTxt; return; }
     far.forEach(o=>o.farNumber=true);
@@ -1037,11 +1077,11 @@ async function saveHandover(){
     const flush=()=>{ chunks.push(wb); wb=db.batch(); inChunk=0; chunkNos.push([]); };
     wb.set(batchRef, pickup ? {
       date, repPhone:null, repName:'استلام من المتجر', isPickup:true,
-      orderCount:orders.length, handedAt:TS(), departedAt:null,
+      orderCount:orders.length, handedAt:TS(), departedAt: pickup?null:TS(),   // وقت التسليم = وقت خروج المندوب
       createdBy:currentUser.uid, createdByName:myName, createdAt:TS()
     } : {
       date, repPhone:rep.id, repName:rep.name, isAmmar:!!rep.isAmmar,
-      orderCount:orders.length, handedAt:TS(), departedAt:null,
+      orderCount:orders.length, handedAt:TS(), departedAt: pickup?null:TS(),   // وقت التسليم = وقت خروج المندوب
       createdBy:currentUser.uid, createdByName:myName, createdAt:TS()
     });
     orders.forEach(o=>{
@@ -1055,7 +1095,7 @@ async function saveHandover(){
         ...(o.contactTime ? {contactedAt: contactTs(date,o.contactTime), contactedBy:'dispatcher'} : {}),
         ...(o.redeliveryOf ? {proofImage: pr2?pr2.proof:null, needsRepProof: pr2?(!!pr2.byRep && !pr2.proof):true} : {}),
         repPhone: pickup?null:rep.id, repName: pickup?null:rep.name, isAmmar: pickup?false:!!rep.isAmmar,
-        handedAt:TS(), departedAt:null, repStatus: pickup?'na':'pending',
+        handedAt:TS(), departedAt: pickup?null:TS(), repStatus: pickup?'na':'pending',
         createdBy:currentUser.uid, createdAt:TS()
       });
       if(o.farNumber) wb.set(db.collection('auditLog').doc(), auditRow('farNumber', {id:ref.id, orderNo:o.orderNo}, `رقم بعيد عن أرقام طلبات اليوم — إبراهيم أكد إنه صحيح · ${pickup?'استلام':rep.name}`));
@@ -1215,10 +1255,10 @@ async function saveTransfer(){
     const area=AREAS.find(a=>a.id===o.areaId);
     const wb=db.batch();
     const nb=db.collection('dispatchBatches').doc();
-    wb.set(nb, {date:o.date, repPhone:rep.id, repName:rep.name, isAmmar:!!rep.isAmmar, orderCount:1, handedAt:TS(), departedAt:null,
+    wb.set(nb, {date:o.date, repPhone:rep.id, repName:rep.name, isAmmar:!!rep.isAmmar, orderCount:1, handedAt:TS(), departedAt:TS(),
       transferIn:true, createdBy:currentUser.uid, createdByName:myName, createdAt:TS()});
     wb.update(db.collection('dispatchOrders').doc(o.id), {
-      repPhone:rep.id, repName:rep.name, isAmmar:!!rep.isAmmar, batchId:nb.id, handedAt:TS(), departedAt:null,
+      repPhone:rep.id, repName:rep.name, isAmmar:!!rep.isAmmar, batchId:nb.id, handedAt:TS(), departedAt:TS(),
       rate: isPriced(area) ? rateFor(area,o.type,rep) : null,
       repStatus:'pending', disputeReason:null, disputeNote:null,
       transferredFrom:o.repName, transferNote:note, transferCount:(o.transferCount||0)+1, transferredAt:TS()
@@ -1281,10 +1321,8 @@ async function loadDay(){
     const orders = (byBatch[b.id]||[]).sort((x,y)=>x.orderNo.localeCompare(y.orderNo));
     const wait = minsBetween(b.handedAt,b.departedAt);
     const status = b.isPickup ? `<span class="pill f-pick">🏬 ${orders.filter(o=>o.pickedUpAt).length}/${orders.length} استلمها العميل</span>`
-      : b.departedAt
-      ? `<span class="pill p-out">خرج ${fmtTime(b.departedAt)} · انتظر ${wait} د</span>`
-      : `<span class="pill p-wait">بانتظار الخروج</span>`;
-    const departBtn = (!b.isPickup && !b.departedAt && canWrite) ? `<button class="green" onclick="markDeparted('${b.id}')">خرج المندوب الآن</button>` : '';
+      : `<span class="pill p-out">خرج ${fmtTime(b.departedAt||b.handedAt)}</span>`;   // وقت التسليم = وقت الخروج
+    const departBtn = '';
     const delBatch = canWrite ? `<button class="danger" onclick="deleteBatch('${b.id}')">حذف التسليم</button>` : '';
     return `<div class="card">
       <div class="batch-head">
@@ -1295,7 +1333,7 @@ async function loadDay(){
       <div class="scroll"><table>
         <thead><tr><th>رقم الطلب</th><th>النوع</th><th>المنسق</th><th>${b.isPickup?'الاستلام':'المنطقة'}</th><th>${b.isPickup?'':'التواصل مع المستلم ← الخروج من المحل'}</th><th>${b.isPickup?'':'المندوب'}</th><th>ملاحظات</th><th></th></tr></thead>
         <tbody>${orders.map(o=>`<tr>
-          <td><b style="direction:ltr;unicode-bidi:isolate">${esc(o.orderNo)}</b>${o.manual?' <span class="manual-tag">يدوي</span>':''}${orderFlags(o)}</td><td>${typeBadge(o.type)}</td><td>${esc(o.florist)}${o.floristReadyAt?`<div class="muted" style="font-size:11.5px">تجهيز ${minsBetween(o.floristReceivedAt,o.floristReadyAt)} د · انتظر ${minsBetween(o.floristReadyAt,o.handedAt)} د</div>`:''}</td>
+          <td><b style="direction:ltr;unicode-bidi:isolate">${esc(o.orderNo)}</b>${o.manual?' <span class="manual-tag">يدوي</span>':''}${orderFlags(o)}</td><td>${typeBadge(o.type)}</td><td>${esc(floristsOf(o).join(' + '))}${o.floristReadyAt?`<div class="muted" style="font-size:11.5px">تجهيز ${minsBetween(o.floristReceivedAt,o.floristReadyAt)} د · انتظر ${minsBetween(o.floristReadyAt,o.handedAt)} د</div>`:''}</td>
           <td>${isPickup(o) ? (o.pickedUpAt?`<span class="rs rs-confirmed">استلمه ${fmtTime(o.pickedUpAt)}</span>`:'<span class="rs rs-pending">ما استلمه</span>') : esc(o.areaName)}</td><td>${isPickup(o)?'':contactCell(o)}</td><td>${isPickup(o)?'':repStatusBadge(o)}</td><td>${esc(o.notes)}</td>
           <td style="white-space:nowrap">${orderActions(o,b)}</td>
         </tr>`).join('')}</tbody>
@@ -1415,10 +1453,11 @@ function contactCell(o){
       <button type="button" class="mini" style="margin-top:4px" onclick="saveContactFrom('${o.id}')">حفظ الوقت</button></div>` : '';
   const pen = (canWrite && val) ? ` <a href="#" title="تعديل" style="text-decoration:none" onclick="document.getElementById('ct_${o.id}').style.display='block';this.style.display='none';return false">✎</a>` : '';
   const contactLine = val ? `<div>📞 تواصل: <b>${fmtTime(o.contactedAt)}</b>${pen}</div>` : `<div class="muted" style="font-size:12px">📞 وقت التواصل:</div>`;
-  const departLine = o.departedAt ? `<div>🚪 خرج: <b>${fmtTime(o.departedAt)}</b></div>` : `<div class="muted" style="font-size:12px">🚪 لسا ما خرج</div>`;
+  const dep = o.departedAt || o.handedAt;
+  const departLine = dep ? `<div>🚪 خرج: <b>${fmtTime(dep)}</b></div>` : '';
   let gap='';
-  if(o.contactedAt && o.departedAt){
-    const m=minsBetween(o.contactedAt,o.departedAt);
+  if(o.contactedAt && dep){
+    const m=minsBetween(o.contactedAt,dep);
     gap = m>=0 ? `<div style="font-size:11.5px;color:var(--ink-soft)">من التواصل للخروج: <b>${m} د</b></div>`
                : `<div style="font-size:11.5px;color:var(--red);font-weight:700">⚠️ وقت التواصل بعد وقت الخروج — راجع الوقت</div>`;
   }
@@ -1455,15 +1494,13 @@ function orderFlags(o){
 function orderActions(o,b){
   if(!canWrite) return '';
   if(isPickup(o)) return `${o.pickedUpAt?'':`<button class="green" style="padding:6px 10px;font-size:12px" onclick="markPickedUp('${o.id}')">استلمه العميل</button> `}<button class="danger" onclick="deleteOrder('${o.id}','${b.id}')">حذف</button>`;
+  // النقل وتعديل المنطقة والتوصيل الثاني صارت من شاشة "تسليم جديد" (اكتب رقم الطلب)
   const st=repStatusOf(o); let h='';
-  if(st!=='confirmed') h+=`<button class="mini" onclick="openEdit('${o.id}')">تعديل</button> <button class="mini" onclick="openTransfer('${o.id}')">تحويل</button> `;
-  if(!o.returned) h+=`<button class="mini" onclick="openReturn('${o.id}')">↩︎ رجع</button> `;
+  if(o.deliveredAt) h+=`<span class="rs rs-confirmed">📦 وصل ${fmtTime(o.deliveredAt)}</span> `;
+  h += `<button class="mini" onclick="fixFlorists('${o.id}')">💐 المنسق</button> `;
   if(st!=='confirmed') h+=`<button class="danger" onclick="deleteOrder('${o.id}','${b.id}')">حذف</button>`;
-  else {
-    const pend = AREQ.find(q=>q.orderId===o.id && q.status==='open');
-    h += pend ? '<span class="rs rs-pending">📍 طلب تعديل المنطقة عند الإدارة</span>'
-              : `<button class="mini" onclick="openAreaReq('${o.id}')">📍 المنطقة غلط</button>`;
-  }
+  const pend = AREQ.find(q=>q.orderId===o.id && q.status==='open');
+  if(pend) h += ' <span class="rs rs-pending">📍 عند الإدارة</span>';
   return h;
 }
 
@@ -1582,7 +1619,9 @@ function openEdit(id){
   const o = DAY_ORDERS[id]; editId=id;
   if(repStatusOf(o)==='confirmed'){ toast('المندوب أكد هذا الطلب — التعديل صار من لوحة الإدارة'); return; }
   document.getElementById('editOrderNo').textContent=o.orderNo;
-  document.getElementById('editFlorist').innerHTML=floristOptions(o.florist);
+  const fl=floristsOf(o);
+  document.getElementById('editFlorist').innerHTML=floristOptions(fl[0]||'');
+  document.getElementById('editFlorist2').innerHTML=floristOptions(fl[1]||'').replace('<option value="">المنسق...</option>','<option value="">— بدون —</option>');
   document.getElementById('editArea').innerHTML=areaOptions(o.areaId);
   document.getElementById('editNotes').value=o.notes||'';
   pickEditType(o.type);
@@ -1594,7 +1633,8 @@ document.addEventListener('change',e=>{
 });
 function closeEdit(){ document.getElementById('editModal').classList.remove('show'); }
 async function saveEdit(){
-  const areaId=document.getElementById('editArea').value, florist=document.getElementById('editFlorist').value;
+  const areaId=document.getElementById('editArea').value;
+  const flArr=[...new Set([document.getElementById('editFlorist').value, document.getElementById('editFlorist2').value].filter(Boolean))], florist=flArr.join(' + ');
   if(!areaId||!florist){ toast('المنسق والمنطقة مطلوبين'); return; }
   const area=AREAS.find(a=>a.id===areaId);
   const old=DAY_ORDERS[editId];
@@ -1605,7 +1645,7 @@ async function saveEdit(){
     if((old.rate||0)!==(newRate||0)) ch.push(`السعر: ${old.rate||0} ← ${newRate||0} ر.س`);
     audit('edit', old, ch.join(' · ')||'ملاحظات', {oldRate:old.rate||0, newRate:newRate||0, repPhone:old.repPhone, repName:old.repName});
     await db.collection('dispatchOrders').doc(editId).update({
-      florist, areaId, areaName:area?area.name:'', type:editType,
+      florist, florists:flArr, areaId, areaName:area?area.name:'', type:editType,
       brand:TYPES[editType].brand, source:TYPES[editType].source,
       rate: newRate, isAmmar: !!repNow.isAmmar,
       notes:document.getElementById('editNotes').value.trim(),
@@ -1665,7 +1705,9 @@ async function loadReports(){
   const areas = group(deliv, o=>o.areaName||'—');
   const days = group(orders, o=>o.date);
   const dayCount = Object.keys(days).length;
-  const florists = group(orders, o=>o.florist||'—');
+  // الطلب اللي جهّزه أكثر من منسق ينحسب لكل واحد منهم
+  const florOrders = orders.flatMap(o=>{ const f=floristsOf(o); return (f.length?f:['—']).map(x=>({...o,_fl:x})); });
+  const florists = group(florOrders, o=>o._fl);
 
   const table = (title, firstCol, m, list, extraHead='', extraCell=()=> '', extraFoot='')=>{
     const rows = Object.entries(m).sort((a,b)=>b[1].total-a[1].total);
@@ -1695,13 +1737,13 @@ async function loadReports(){
       <div class="stat"><div class="v">${dayCount?Math.round(orders.length/dayCount*10)/10:'—'}</div><div class="l">متوسط الطلبات باليوم</div></div>
       <div class="stat"><div class="v">${avg(allWaits)}</div><div class="l">متوسط الانتظار قبل الخروج (د)</div></div>
     </div>
-    ${table('المناديب (توصيل)','المندوب',reps,deliv,'<th>أكد</th><th>ما أكد</th><th>اعترض</th><th>رجع</th><th>متوسط الانتظار قبل الخروج (د)</th><th>متوسط من التواصل للخروج (د)</th>'+(isFullAdmin?'<th>المستحق التقديري</th>':''),
-      (k,v)=>{ const l=deliv.filter(o=>o.repPhone===k); const cg=l.map(o=>minsBetween(o.contactedAt,o.departedAt)).filter(x=>x!==null&&x>=0); return `${stCols(l)}<td>${l.filter(o=>o.returned).length}</td><td>${avg(waits[k])}</td><td>${avg(cg)}</td>${isFullAdmin?`<td><b>${v.amount} ر.س</b>${v.unpriced?`<br><span class="new-tag">+${v.unpriced} طلب بدون سعر</span>`:''}</td>`:''}`; },
-      `${stCols(deliv)}<td>${returned.length}</td><td>${avg(allWaits)}</td><td>${avg(deliv.map(o=>minsBetween(o.contactedAt,o.departedAt)).filter(x=>x!==null&&x>=0))}</td>${isFullAdmin?`<td>${totalAmount} ر.س</td>`:''}`)}
+    ${table('المناديب (توصيل)','المندوب',reps,deliv,'<th>أكد</th><th>ما أكد</th><th>اعترض</th><th>رجع</th><th>متوسط من التواصل للخروج (د)</th>'+(isFullAdmin?'<th>المستحق التقديري</th>':''),
+      (k,v)=>{ const l=deliv.filter(o=>o.repPhone===k); const cg=l.map(o=>minsBetween(o.contactedAt,o.departedAt)).filter(x=>x!==null&&x>=0); return `${stCols(l)}<td>${l.filter(o=>o.returned).length}</td><td>${avg(cg)}</td>${isFullAdmin?`<td><b>${v.amount} ر.س</b>${v.unpriced?`<br><span class="new-tag">+${v.unpriced} طلب بدون سعر</span>`:''}</td>`:''}`; },
+      `${stCols(deliv)}<td>${returned.length}</td><td>${avg(deliv.map(o=>minsBetween(o.contactedAt,o.departedAt)).filter(x=>x!==null&&x>=0))}</td>${isFullAdmin?`<td>${totalAmount} ر.س</td>`:''}`)}
     ${dayCount>1 ? dailyTable : ''}
     ${table('المناطق (توصيل)','المنطقة',areas,deliv)}
-    ${!FLORIST_FLOW ? table('المنسقين','المنسق',florists,orders) : table('المنسقين','المنسق',florists,orders,'<th>متوسط التجهيز (د)</th><th>متوسط انتظار الجاهز (د)</th><th>يدوي</th>',
-      (k)=>{ const l=orders.filter(o=>(o.florist||'—')===k);
+    ${!FLORIST_FLOW ? table('المنسقين','المنسق',florists,florOrders) : table('المنسقين','المنسق',florists,orders,'<th>متوسط التجهيز (د)</th><th>متوسط انتظار الجاهز (د)</th><th>يدوي</th>',
+      (k)=>{ const l=florOrders.filter(o=>o._fl===k);
         const prepT=l.map(o=>minsBetween(o.floristReceivedAt,o.floristReadyAt)).filter(x=>x!==null&&x>=0);
         const waitT=l.map(o=>minsBetween(o.floristReadyAt,o.handedAt)).filter(x=>x!==null&&x>=0);
         return `<td>${avg(prepT)}</td><td>${avg(waitT)}</td><td>${l.filter(o=>o.manual).length}</td>`; },

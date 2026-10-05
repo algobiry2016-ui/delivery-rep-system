@@ -16,7 +16,7 @@
 <script>
 // تنبيه "فيه نسخة جديدة": لو انرفع تحديث والصفحة مفتوحة من قبل، يطلع شريط يطلب التحديث (عشان ما يشتغل أحد على نسخة قديمة)
 (function(){
-  const APP_V='2026-10-04-1';
+  const APP_V='2026-10-04-7';
   async function chk(){
     try{ const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'}); if(!r.ok) return; const j=await r.json();
       if(j.v && j.v!==APP_V && !document.getElementById('updBar')){
@@ -330,6 +330,7 @@
               <option value="pickup">استلام من المتجر</option>
               <option value="orphan">قيدها محذوف</option>
               <option value="nopay">رجعت — ما تنحسب</option>
+              <option value="transit">ما ضغط تم التوصيل</option>
               <option value="exclude">رجعت وتحتاج استبعاد</option>
             </select></div>
             <div><label>النوع</label><select id="oType" onchange="renderOrdersTab()">
@@ -358,7 +359,7 @@
             <thead><tr>
               <th><input type="checkbox" id="oAll" onchange="oToggleAll(this.checked)" title="تحديد كل القابل للاعتماد"></th>
               <th>التاريخ</th><th>المندوب</th><th>رقم الطلب</th><th>النوع</th><th>المنطقة</th><th>السعر</th><th>فارق التوصيل</th>
-              <th>التسليم ← الخروج · 📞 التواصل</th><th>المندوب أكد؟</th><th>الاعتماد</th><th>المنسق</th><th>ملاحظات</th>
+              <th>التسليم ← الخروج · 📞 · 📦 الوصول</th><th>المندوب أكد؟</th><th>الاعتماد</th><th>المنسق</th><th>ملاحظات</th>
             </tr></thead>
             <tbody id="oBody"></tbody>
           </table></div>
@@ -1933,12 +1934,14 @@ function renderReport(){
   const conf={}; deliv.forEach(o=>{ if(o.repStatus==='confirmed'&&o.handedAt&&o.repActionAt){ const m=mins(o.handedAt,o.repActionAt); if(m!==null&&m>=0)(conf[o.repPhone]=conf[o.repPhone]||[]).push(m); } });
   const rp={}; deliv.forEach(o=>{ const k=o.repPhone; rp[k]=rp[k]||{n:0,ret:0,re:0,multi:0,tr:0,disp:0,areas:new Set(),orders:new Set()}; const r=rp[k];
     r.n++; r.orders.add(o.orderNo); r.areas.add(o.areaName); if(o.returned) r.ret++; if(o.redeliveryOf) r.re++; if(o.multiDelivery) r.multi++; if(o.transferredFrom) r.tr++; if((o.disputeCount||0)>0) r.disp++; });
+  const dlv={}; deliv.forEach(o=>{ const m=mins(o.departedAt||o.handedAt,o.deliveredAt); if(m!==null&&m>=0)(dlv[o.repPhone]=dlv[o.repPhone]||[]).push(m); });
   const cont={}, after={}; deliv.forEach(o=>{ const m=mins(o.contactedAt,o.departedAt); if(m===null) return; if(m>=0)(cont[o.repPhone]=cont[o.repPhone]||[]).push(m); else after[o.repPhone]=(after[o.repPhone]||0)+1; });
-  const opsTable=tbl(['المندوب','التوصيلات','طلبات مختلفة','مناطق','رجعت','توصيل ثاني','توصيل إضافي','محوّل له','اعترض','متوسط الانتظار قبل الخروج (د)','متوسط من التواصل للخروج (د)','متوسط وقت التأكيد (د)'],
-    Object.entries(rp).sort((a,b)=>b[1].n-a[1].n).map(([id,r])=>`<tr><td><b>${oEsc(nm(id))}</b></td><td>${r.n}</td><td>${r.orders.size}</td><td>${r.areas.size}</td><td>${r.ret||'—'}</td><td>${r.re||'—'}</td><td>${r.multi||'—'}</td><td>${r.tr||'—'}</td><td>${r.disp||'—'}</td><td>${avg(waits[id]||[])}</td><td>${avg(cont[id]||[])}</td><td>${avg(conf[id]||[])}</td></tr>`).join(''),'',1150);
+  const opsTable=tbl(['المندوب','التوصيلات','طلبات مختلفة','مناطق','رجعت','توصيل ثاني','توصيل إضافي','محوّل له','اعترض','متوسط من التواصل للخروج (د)','متوسط من الخروج للوصول (د)','متوسط وقت التأكيد (د)'],
+    Object.entries(rp).sort((a,b)=>b[1].n-a[1].n).map(([id,r])=>`<tr><td><b>${oEsc(nm(id))}</b></td><td>${r.n}</td><td>${r.orders.size}</td><td>${r.areas.size}</td><td>${r.ret||'—'}</td><td>${r.re||'—'}</td><td>${r.multi||'—'}</td><td>${r.tr||'—'}</td><td>${r.disp||'—'}</td><td>${avg(cont[id]||[])}</td><td>${avg(dlv[id]||[])}</td><td>${avg(conf[id]||[])}</td></tr>`).join(''),'',1150);
 
   // ===== ٦) المنسقين =====
-  const fl={}; O.forEach(o=>{ const k=o.florist||'—'; fl[k]=fl[k]||{n:0,...Object.fromEntries(tk.map(t=>[t,0]))}; fl[k].n++; fl[k][o.type]++; });
+  // الطلب اللي جهّزه أكثر من منسق ينحسب لكل واحد منهم
+  const fl={}; O.forEach(o=>{ const fs=(Array.isArray(o.florists)&&o.florists.length?o.florists:String(o.florist||'').split(' + ').filter(Boolean)); (fs.length?fs:['—']).forEach(k=>{ fl[k]=fl[k]||{n:0,...Object.fromEntries(tk.map(t=>[t,0]))}; fl[k].n++; fl[k][o.type]++; }); });
   const flRows=Object.entries(fl).sort((a,b)=>b[1].n-a[1].n); const maxF=Math.max(1,...flRows.map(([,v])=>v.n));
   const flTable=tbl(['المنسق','الطلبات',...tk.map(t=>R_TYPES[t]),'النسبة'],
     flRows.map(([k,v])=>`<tr><td><b>${oEsc(k)}</b></td><td>${bar(v.n,maxF,'#7A5C8A')}</td>${tk.map(t=>`<td>${v[t]||'—'}</td>`).join('')}<td>${pct(v.n,O.length)}</td></tr>`).join(''),'',640);
@@ -2084,6 +2087,8 @@ function oRate(o){
   const base = o.brand==='ward' ? a.rateWard : a.rateDoc;
   return o.isAmmar ? Math.max(0,base-5) : base;
 }
+const DELIVERY_FROM='2026-10-05';   // من هذا التاريخ: الطلب ما ينعتمد إلا بعد ما المندوب يضغط "تم التوصيل"
+function oNeedsDelivery(o){ return o.fulfillment!=='pickup' && !o.noPay && !o.returned && (o.date||'')>=DELIVERY_FROM; }
 function oStage(o){
   if(o.fulfillment==='pickup') return 'pickup';
   if(o.noPay && !o.entryId) return 'nopay';
@@ -2091,6 +2096,7 @@ function oStage(o){
   const st=o.repStatus||'pending';
   if(st==='disputed') return 'disputed';
   if(st!=='confirmed') return 'unconfirmed';
+  if(oNeedsDelivery(o) && !o.deliveredAt) return 'transit';
   const es=O_ENTRIES[o.entryId];
   if(!es) return 'orphan';   // أكده المندوب بس قيده انحذف (مثلاً من "نظرة عامة")
   if(es.status==='approved') return 'approved';
@@ -2106,6 +2112,7 @@ const O_STAGE_UI = {
   pickup:     ()=>'<span class="st st-gray">لا يحتاج</span>',
   orphan:     ()=>'<span class="st st-rej">القيد محذوف</span><div class="dim">ارجعه للمندوب أو احذفه</div>',
   nopay:      ()=>'<span class="st st-gray">ما تنحسب</span>',
+  transit:    ()=>'<span class="st st-await">🚚 ما ضغط "تم التوصيل"</span>',
   exclude:    ()=>'<span class="st st-rej">رجع — استبعده من الحساب</span>'
 };
 function oRepCell(o){
@@ -2230,7 +2237,7 @@ function renderOrdersTab(){
       <td>${oEsc(o.fulfillment==='pickup'?'—':o.areaName)}${(myRole==='admin'&&o.fulfillment!=='pickup')?` <a href="#" title="تعديل المنطقة" style="text-decoration:none;font-size:12px" onclick="oFixArea('${o.id}');return false">✎</a>`:''}${o.areaBefore?`<div class="dim">كانت ${oEsc(o.areaBefore)}</div>`:''}</td>
       <td style="font-weight:900;white-space:nowrap">${o.fulfillment==='pickup'?'—':o.noPay?`<s class="dim">${o.rate||0}</s> 0 ر.س`:(r?r+' ر.س':'<span class="st st-await">بدون سعر</span>')}</td>
       <td style="white-space:nowrap">${df?`<b>+${df.amount} ر.س</b><div class="dim">${df.status==='approved'?'معتمد':'بانتظار المراجعة'}${df.area?' · '+oEsc(df.area):''}</div>`:'<span class="dim">—</span>'}</td>
-      <td class="dim">${oTime(o.handedAt)}${o.departedAt?' ← '+oTime(o.departedAt):''}${o.contactedAt?`<div>📞 تواصل ${oTime(o.contactedAt)}</div>`:''}</td>
+      <td class="dim">${oTime(o.handedAt)}${o.departedAt?' ← '+oTime(o.departedAt):''}${o.contactedAt?`<div>📞 تواصل ${oTime(o.contactedAt)}</div>`:''}${o.deliveredAt?`<div style="color:var(--green)">📦 وصل ${oTime(o.deliveredAt)}</div>`:''}</td>
       <td>${oRepCell(o)}</td>
       <td>${O_STAGE_UI[stg](o)}</td>
       <td class="dim">${oEsc(o.florist||'')}</td>
@@ -2320,10 +2327,10 @@ async function oAddDelivery(id){
   try{
     const TSv=firebase.firestore.FieldValue.serverTimestamp, date=oRiyadh();
     const wb=db.batch(); const bref=db.collection('dispatchBatches').doc();
-    wb.set(bref,{date, repPhone:rep.id, repName:rep.name, isAmmar:!!rep.isAmmar, orderCount:1, handedAt:TSv(), departedAt:null, createdBy:currentUser.uid, createdByName:'الإدارة', createdAt:TSv()});
+    wb.set(bref,{date, repPhone:rep.id, repName:rep.name, isAmmar:!!rep.isAmmar, orderCount:1, handedAt:TSv(), departedAt:TSv(), createdBy:currentUser.uid, createdByName:'الإدارة', createdAt:TSv()});
     wb.set(db.collection('dispatchOrders').doc(), {orderNo:o.orderNo, florist:o.florist||'', type:o.type, brand:o.brand, source:o.source, fulfillment:'delivery',
       areaId:area.id, areaName:area.name, rate, notes:note, multiDelivery:true, addedByAdmin:true, linkedTo:o.id,
-      date, batchId:bref.id, repPhone:rep.id, repName:rep.name, isAmmar:!!rep.isAmmar, handedAt:TSv(), departedAt:null, repStatus:'pending', createdBy:currentUser.uid, createdAt:TSv()});
+      date, batchId:bref.id, repPhone:rep.id, repName:rep.name, isAmmar:!!rep.isAmmar, handedAt:TSv(), departedAt:TSv(), repStatus:'pending', createdBy:currentUser.uid, createdAt:TSv()});
     wb.set(db.collection('auditLog').doc(), {action:'adminAddDelivery', orderNo:o.orderNo, details:`توصيلة إضافية · ${rep.name} · ${area.name} ${rate} ر.س · ${note}`, by:currentUser.uid, byName:currentUser.email, at:TSv(), date});
     await wb.commit(); toast('انضافت التوصيلة ✅ — تطلع عند المندوب يأكدها'); loadOrdersTab();
   }catch(err){ console.error(err); toast('ما انحفظ'); }
@@ -2479,8 +2486,8 @@ async function applyMove(wb, o, q){
   const a=AREAS.find(x=>x.id===q.toAreaId); const base=a?(o.brand==='ward'?a.rateWard:a.rateDoc):0; const nr=rep.isAmmar?Math.max(0,base-5):base;
   const TSv=firebase.firestore.FieldValue.serverTimestamp;
   const nb=db.collection('dispatchBatches').doc();
-  wb.set(nb,{date:oRiyadh(), repPhone:q.toRepPhone, repName:rep.name, isAmmar:!!rep.isAmmar, orderCount:1, handedAt:TSv(), departedAt:null, transferIn:true, createdBy:currentUser.uid, createdByName:'الإدارة', createdAt:TSv()});
-  const upd={repPhone:q.toRepPhone, repName:rep.name, isAmmar:!!rep.isAmmar, batchId:nb.id, handedAt:TSv(), departedAt:null, areaId:q.toAreaId, areaName:a?a.name:o.areaName, rate:nr,
+  wb.set(nb,{date:oRiyadh(), repPhone:q.toRepPhone, repName:rep.name, isAmmar:!!rep.isAmmar, orderCount:1, handedAt:TSv(), departedAt:TSv(), transferIn:true, createdBy:currentUser.uid, createdByName:'الإدارة', createdAt:TSv()});
+  const upd={repPhone:q.toRepPhone, repName:rep.name, isAmmar:!!rep.isAmmar, batchId:nb.id, handedAt:TSv(), departedAt:TSv(), areaId:q.toAreaId, areaName:a?a.name:o.areaName, rate:nr,
     repStatus:'pending', entryId:null, transferredFrom:o.repName, transferNote:q.reason, transferCount:(o.transferCount||0)+1, transferredAt:TSv()};
   wb.update(db.collection('dispatchOrders').doc(o.id), upd);
   const e=o.entryId&&O_ENTRIES[o.entryId];
@@ -2543,12 +2550,12 @@ async function dupDecide(id, ok){
     if(ok){
       const bref=db.collection('dispatchBatches').doc();
       wb.set(bref, q.pickup ? {date:q.date, repPhone:null, repName:'استلام من المتجر', isPickup:true, orderCount:q.orders.length, handedAt:TSv(), departedAt:null, createdBy:currentUser.uid, createdByName:'الإدارة (موافقة تكرار)', createdAt:TSv()}
-        : {date:q.date, repPhone:q.repPhone, repName:q.repName, isAmmar:!!q.isAmmar, orderCount:q.orders.length, handedAt:TSv(), departedAt:null, createdBy:currentUser.uid, createdByName:'الإدارة (موافقة تكرار)', createdAt:TSv()});
+        : {date:q.date, repPhone:q.repPhone, repName:q.repName, isAmmar:!!q.isAmmar, orderCount:q.orders.length, handedAt:TSv(), departedAt:TSv(), createdBy:currentUser.uid, createdByName:'الإدارة (موافقة تكرار)', createdAt:TSv()});
       q.orders.forEach(o=>{
         const ct = o.contactTime ? {contactedAt: firebase.firestore.Timestamp.fromDate(new Date(`${q.date}T${o.contactTime}:00+03:00`)), contactedBy:'dispatcher'} : {};
         wb.set(db.collection('dispatchOrders').doc(), {...o, ...ct, date:q.date, batchId:bref.id,
           repPhone:q.pickup?null:q.repPhone, repName:q.pickup?null:q.repName, isAmmar:q.pickup?false:!!q.isAmmar,
-          handedAt:TSv(), departedAt:null, repStatus:q.pickup?'na':'pending', dupApproved:true, dupReason:q.reason,
+          handedAt:TSv(), departedAt:q.pickup?null:TSv(), repStatus:q.pickup?'na':'pending', dupApproved:true, dupReason:q.reason,
           createdBy:currentUser.uid, createdAt:TSv()});
       });
     }
@@ -2772,7 +2779,11 @@ function secRenderAlerts(){
   const notRec=SEC.disputes.filter(o=>o.disputeReason==='ما استلمت الطلب');
   if(notRec.length) add(3,`🔴 ${notRec.length} طلب المندوب يقول ما استلمه`, notRec.map(o=>`${o.orderNo} · ${o.repName} · ${o.date}`).join('<br>'));
   if((SEC.dups||[]).length) add(3,`🔴 ${SEC.dups.length} طلب تكرار رقم جوال ينتظر موافقتك`, SEC.dups.map(q=>`${oEsc(q.orderNo)} · ${oEsc(q.pickup?'استلام':q.repName)} · السبب: ${oEsc(q.reason)}`).join('<br>')+'<br><span class="dim">توافق أو ترفض من "الطلبات والاعتماد".</span>');
-  const farL=L.filter(x=>x.action==='farNumber');
+  // نعيد الفحص هنا بنفس المعيار الجديد (فرق أكثر من 5 مليون عن متوسط أرقام اليوم، أو رقم غير صحيح) — عشان التنبيهات القديمة الكثيرة ما تزحم
+  const medOf={}; O.filter(o=>/^\d{9}$/.test(o.orderNo)&&o.type!=='wa'&&o.type!=='shop').forEach(o=>{ const k=o.date+'|'+o.brand; (medOf[k]=medOf[k]||[]).push(Number(o.orderNo)); });
+  Object.keys(medOf).forEach(k=>{ const a2=medOf[k].sort((x,y)=>x-y); medOf[k]=a2[Math.floor(a2.length/2)]; });
+  const farL=L.filter(x=>x.action==='farNumber').filter(x=>{ const no=String(x.orderNo||''); if(!/^[1-9]\d{8}$/.test(no)||/^(\d)\1+$/.test(no)) return true;
+    const o=O.find(z=>z.orderNo===no); const m=o?medOf[o.date+'|'+o.brand]:null; return !m || Math.abs(Number(no)-m)>5000000; });
   if(farL.length) add(2,`🟠 ${farL.length} رقم طلب بعيد عن أرقام اليوم — إبراهيم أكد إنه صحيح`, farL.map(x=>`${oEsc(x.orderNo)} — ${oEsc(x.details)}`).join('<br>')+'<br><span class="dim">طابقه مع سلة. لو غلط صححه من "الطلبات والاعتماد" بـ ✎ جنب الرقم.</span>');
   // سلامة البيانات: سعر الطلب لازم يطابق سعر منطقته (حسب حالة "عمار" للمندوب)
   const repsById=Object.fromEntries((SEC.reps||[]).map(r=>[r.id,r]));
@@ -2799,6 +2810,15 @@ function secRenderAlerts(){
   // قيد يدوي (من النظام القديم) لمندوب عنده طلبات من سجل التسليم بنفس اليوم = خطر انحساب مرتين
   const strayEnt=(SEC.entries||[]).filter(e=>!e.fromDispatch && e.status!=='rejected' && O.some(o=>o.repPhone===e.repUid && o.date===e.date));
   if(strayEnt.length) add(3,`🔴 ${strayEnt.length} قيد يدوي لمندوب عنده طلبات من سجل التسليم بنفس اليوم — خطر تكرار`, strayEnt.map(e=>`${oEsc(e.repName)} · ${e.date}: ${e.totalCount} طلب · ${e.totalAmount} ر.س (${e.status==='approved'?'معتمد':'بانتظار'})`).join('<br>')+'<br><span class="dim">الإدخال اليدوي متوقف عند المناديب، فقيد مثل هذا غالباً مكرر. راجعه قبل ما تعتمد.</span>');
+  // "تم التوصيل": ضغط جماعي (كذا طلب بنفس الدقيقتين) / وصل وبعدين رجع / ما ضغطه من أيام سابقة
+  const delv=O.filter(o=>o.deliveredAt&&o.deliveredAt.toMillis);
+  const bulk=[]; [...new Set(delv.map(o=>o.repPhone))].forEach(p=>{ const l=delv.filter(o=>o.repPhone===p).sort((a,b)=>a.deliveredAt.toMillis()-b.deliveredAt.toMillis());
+    for(let i=0;i+2<l.length;i++){ if(l[i+2].deliveredAt.toMillis()-l[i].deliveredAt.toMillis()<=120000){ bulk.push({rep:l[i].repName, at:l[i].deliveredAt, n:l.filter(x=>Math.abs(x.deliveredAt.toMillis()-l[i].deliveredAt.toMillis())<=120000).length}); break; } } });
+  if(bulk.length) add(2,`🟠 ${bulk.length} مندوب ضغط "تم التوصيل" لكذا طلب مع بعض`, bulk.map(b=>`${oEsc(b.rep)}: ${b.n} طلب خلال دقيقتين (${oTime(b.at)})`).join('<br>')+'<br><span class="dim">المفروض يضغطه عند كل طلب وقت ما يوصّله — الأوقات هنا ما تعكس الوصول الفعلي.</span>');
+  const delThenRet=O.filter(o=>o.deliveredAt && o.returned);
+  if(delThenRet.length) add(3,`🔴 ${delThenRet.length} طلب المندوب قال "وصل" وبعدين انسجل إنه رجع`, delThenRet.map(o=>`${oEsc(o.orderNo)} · ${oEsc(o.repName)} · وصل ${oTime(o.deliveredAt)} · رجع: ${oEsc(o.returnReason||'')}`).join('<br>'));
+  const stale=O.filter(o=>oNeedsDelivery(o) && o.repStatus==='confirmed' && !o.deliveredAt && o.date<oRiyadh());
+  if(stale.length) add(1,`🟡 ${stale.length} طلب من أيام سابقة المندوب ما ضغط عليه "تم التوصيل"`, [...new Set(stale.map(o=>o.repName))].map(n=>`${oEsc(n)}: ${stale.filter(o=>o.repName===n).length}`).join(' · '));
   // ٢) حذف طلبات
   const del=L.filter(x=>x.action==='delete'||x.action==='deleteBatch');
   if(del.length) add(2,`🟠 ${del.length} عملية حذف من المشرف (إبراهيم)`, del.map(x=>`${oTime(x.at)} · ${oEsc(x.orderNo||'')} — ${oEsc(x.details)}`).join('<br>'));

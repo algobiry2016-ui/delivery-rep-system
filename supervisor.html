@@ -16,7 +16,7 @@
 <script>
 // تنبيه "فيه نسخة جديدة": لو انرفع تحديث والصفحة مفتوحة من قبل، يطلع شريط يطلب التحديث (عشان ما يشتغل أحد على نسخة قديمة)
 (function(){
-  const APP_V='2026-10-04-1';
+  const APP_V='2026-10-04-7';
   async function chk(){
     try{ const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'}); if(!r.ok) return; const j=await r.json();
       if(j.v && j.v!==APP_V && !document.getElementById('updBar')){
@@ -173,6 +173,7 @@
             <option value="disputed">اعتراض المندوب</option>
             <option value="rejected">مرفوض</option>
             <option value="pickup">استلام من المتجر</option>
+            <option value="transit">ما ضغط تم التوصيل</option>
           </select></div>
           <div><label class="l">النوع</label><select id="fType" onchange="renderOrders()">
             <option value="">الكل</option><option value="doc">دوكمنتيشن</option><option value="ward">ورد إكسبرس</option><option value="wa">واتس دوكمنتيشن</option><option value="shop">طلبات المحل</option>
@@ -337,12 +338,15 @@ function rate(o){
 }
 function diffOf(o){ return DIFFMAP[(o.repPhone||'')+'|'+norm(o.orderNo)]||null; }
 // مراحل الطلب من منظور المشرف
+const DELIVERY_FROM='2026-10-05';
+function needsDelivery(o){ return o.fulfillment!=='pickup' && !o.noPay && !o.returned && (o.date||'')>=DELIVERY_FROM; }
 function stage(o){
   if(o.fulfillment==='pickup') return 'pickup';
   if(o.noPay) return 'nopay';   // رجع بدون توصيل ثاني — ما يحتاج مراجعة (الإدارة تستبعده)
   const st=o.repStatus||'pending';
   if(st==='disputed') return 'disputed';
   if(st!=='confirmed') return 'unconfirmed';
+  if(needsDelivery(o) && !o.deliveredAt) return 'transit';   // ما يتراجع قبل ما المندوب يضغط تم التوصيل
   const e=ENTRIES[o.entryId];
   if(!e) return 'orphan';
   if(e.status==='approved') return 'approved';
@@ -356,7 +360,7 @@ const STAGE_UI = {
   approved:'<span class="st st-appr">✓ معتمد</span>',
   rejected:'<span class="st st-rej">مرفوض</span>',
   unconfirmed:'<span class="st st-gray">—</span>', disputed:'<span class="st st-gray">—</span>',
-  pickup:'<span class="st st-gray">لا يحتاج</span>', nopay:'<span class="st st-gray">رجعت — ما تنحسب</span>', orphan:'<span class="st st-rej">القيد محذوف — عند الإدارة</span>'
+  pickup:'<span class="st st-gray">لا يحتاج</span>', transit:'<span class="st st-await">🚚 ما ضغط تم التوصيل</span>', nopay:'<span class="st st-gray">رجعت — ما تنحسب</span>', orphan:'<span class="st st-rej">القيد محذوف — عند الإدارة</span>'
 };
 function repCell(o){
   if(o.fulfillment==='pickup') return o.pickedUpAt?`<span class="st st-appr">استلمه العميل</span>`:'<span class="st st-await">ما استلمه</span>';
@@ -410,7 +414,7 @@ function renderOrders(){
       <td>${o.fulfillment==='pickup'?'—':esc(o.areaName)}</td>
       <td style="font-weight:900;white-space:nowrap">${o.fulfillment==='pickup'?'—':o.noPay?`<s class="dim">${o.rate||0}</s> 0 ر.س`:(r?r+' ر.س':'<span class="st st-await">بدون سعر</span>')}</td>
       <td style="white-space:nowrap">${df?`<b>+${df.amount} ر.س</b><div class="dim">${df.status==='approved'?'معتمد':'بانتظار'}${df.area?' · '+esc(df.area):''}</div>`:'<span class="dim">—</span>'}</td>
-      <td class="dim">${tm(o.handedAt)}${o.departedAt?' ← '+tm(o.departedAt):''}${o.contactedAt?`<div>📞 تواصل ${tm(o.contactedAt)}</div>`:''}</td>
+      <td class="dim">${tm(o.handedAt)}${o.departedAt?' ← '+tm(o.departedAt):''}${o.contactedAt?`<div>📞 تواصل ${tm(o.contactedAt)}</div>`:''}${o.deliveredAt?`<div style="color:var(--green)">📦 وصل ${tm(o.deliveredAt)}</div>`:''}</td>
       <td>${repCell(o)}</td><td>${STAGE_UI[s]}</td>
       <td>${flags}${o.notes?`<div class="dim">${esc(o.notes)}</div>`:''}</td></tr>`;
   }).join('');

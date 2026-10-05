@@ -16,7 +16,7 @@
 <script>
 // تنبيه "فيه نسخة جديدة": لو انرفع تحديث والصفحة مفتوحة من قبل، يطلع شريط يطلب التحديث (عشان ما يشتغل أحد على نسخة قديمة)
 (function(){
-  const APP_V='2026-10-04-1';
+  const APP_V='2026-10-04-7';
   async function chk(){
     try{ const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'}); if(!r.ok) return; const j=await r.json();
       if(j.v && j.v!==APP_V && !document.getElementById('updBar')){
@@ -286,6 +286,15 @@
   .stp.cur{background:var(--amber-bg);color:var(--amber);}
   .stxt{font-size:11px;color:var(--ink-soft);margin-top:3px;white-space:nowrap;}
   .dim{color:var(--ink-soft);}
+  /* تنبيهات فوق الشاشة (بهوية دوكمنتيشن) */
+  #repBanners{position:sticky;top:0;z-index:30;}
+  .rban{display:flex;align-items:center;gap:10px;padding:11px 16px;font-size:13.5px;font-weight:700;cursor:pointer;border-bottom:1px solid rgba(0,0,0,.06);}
+  .rban .ic{font-size:18px;}
+  .rban .go{margin-inline-start:auto;font-size:12px;font-weight:900;padding:5px 10px;border-radius:14px;white-space:nowrap;}
+  .rban.conf{background:#FBF1E2;color:#6B4A1E;border-inline-start:4px solid #B8935F;}
+  .rban.conf .go{background:#B8935F;color:#fff;}
+  .rban.deliv{background:#2B2420;color:#F7F3EE;border-inline-start:4px solid #B8935F;}
+  .rban.deliv .go{background:#B8935F;color:#fff;}
   .legend{font-size:11.5px;color:var(--ink-soft);margin-top:8px;line-height:1.8;}
   .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:flex-end;justify-content:center;z-index:60;}
   .modal-bg.show{display:flex;}
@@ -343,6 +352,7 @@
       <div class="rep-name" id="repNameDisplay">—</div>
     </div>
 
+    <div id="repBanners"></div>
     <div class="content">
 
       <!-- ---- HOME ---- -->
@@ -1174,11 +1184,23 @@ function listenMyOrders(){
 
 let ENTRY_STATUS = {}, ENTRY_REASON = {};
 // حالة الطلب عند المندوب: تأكيده ← ثم اعتماد الإدارة لقيده اليومي
+// "تم التوصيل": شرط للحساب من هذا التاريخ وبعده (الطلبات اللي قبله تمشي على الطريقة القديمة)
+const DELIVERY_FROM='2026-10-05';
+function needsDelivery(o){ return o.fulfillment!=='pickup' && !o.noPay && !o.returned && (o.date||'')>=DELIVERY_FROM; }
+async function markDelivered(ids){
+  const list=String(ids).split(',').map(id=>MY_ORDERS.find(x=>x.id===id)).filter(o=>o && repStatusOf(o)==='confirmed' && !o.deliveredAt);
+  if(!list.length) return;
+  try{
+    const wb=db.batch(); list.forEach(o=>wb.update(db.collection('dispatchOrders').doc(o.id), {deliveredAt:TS()}));
+    await wb.commit(); toast('📦 تم — انسجل وقت التوصيل');
+  }catch(e){ console.error(e); toast('ما انحفظ — تحقق من الإنترنت'); }
+}
 function orderStage(o){
   if(o.noPay && repStatusOf(o)!=='confirmed') return {k:'nopay'};
   const st=repStatusOf(o);
   if(st==='disputed') return {k:'disp'};
   if(st==='confirmed'){
+    if(needsDelivery(o) && !o.deliveredAt) return {k:'transit'};   // أكد الاستلام، باقي يضغط تم التوصيل
     const es = ENTRY_STATUS[o.entryId];
     if(es==='approved') return {k:'appr'};
     if(es==='rejected') return {k:'rej'};
@@ -1199,10 +1221,12 @@ function stageCell(o){
   if(o.noPay && k!=='rej') return '<span class="sp rej">↩︎ رجع — الإدارة بتستبعدها من الحساب</span>';
   if(k==='rej') return `<span class="sp rej">رفضته الإدارة</span>${ENTRY_REASON[o.entryId]?`<div class="sub" style="color:#B23A3A">${escH(ENTRY_REASON[o.entryId])}</div>`:''}`;
   const step=(label,state)=>`<span class="stp ${state}">${state==='on'?'✓ ':''}${label}</span>`;
+  const nd=needsDelivery(o);
+  if(k==='transit') return `<button class="btn-ok" style="background:#3A6EA5;white-space:nowrap" onclick="markDelivered('${o.id}')">📦 تم التوصيل</button>`;
   const s2 = k==='rev'||k==='appr' ? 'on' : 'cur';
   const s3 = k==='appr' ? 'on' : (k==='rev' ? 'cur' : '');
   const txt = k==='appr' ? '<b style="color:var(--green)">تم الاعتماد — انضاف لرصيدك</b>' : k==='rev' ? 'بانتظار اعتماد الإدارة' : 'بانتظار مراجعة مشرف المناديب';
-  return `<div class="stps">${step('أكدت','on')}${step('المراجعة',s2)}${step('الإدارة',s3)}</div><div class="stxt">${txt}</div>`;
+  return `<div class="stps">${step('أكدت','on')}${nd?step('وصل','on'):''}${step('المراجعة',s2)}${step('الإدارة',s3)}</div><div class="stxt">${o.deliveredAt?`📦 ${fmtT(o.deliveredAt)} · `:''}${txt}</div>`;
 }
 function renderMyOrders(){
   const box = document.getElementById('myOrdersList');
@@ -1225,6 +1249,7 @@ function renderMyOrders(){
     n.rev ? `بانتظار الإدارة ${n.rev} (${a.rev} ر.س)` : '',
     n.conf ? `بانتظار مشرف المناديب ${n.conf} (${a.conf} ر.س)` : '',
     n.pend ? `⏳ تحتاج تأكيدك ${n.pend} (${a.pend} ر.س)` : '',
+    n.transit ? `📦 باقي تضغط "تم التوصيل" ${n.transit}` : '',
     n.disp ? `⚠️ معترض ${n.disp}` : '',
     n.rej ? `مرفوض ${n.rej}` : ''
   ].filter(Boolean).join(' · ');
@@ -1257,9 +1282,12 @@ function renderMyOrders(){
             (o.proofImage) ? `<div class="sub"><a href="#" style="color:#3A6EA5" onclick="viewProof('${o.id}');return false">🧾 إثبات تحويل التوصيل الثاني</a></div>` : '',
             (o.ibrahimNote && stg.k==='pend') ? `<div class="sub" style="color:var(--amber)">ملاحظة: ${escH(o.ibrahimNote)}</div>` : ''
           ].join('');
+          const gTr = g.filter(x=>orderStage(x).k==='transit').map(x=>x.id);
           const act = gPend.length
             ? `<div style="display:flex;gap:5px"><button class="ibtn ok" title="تأكيد" onclick="confirmOrders(['${gPend.join("','")}'])">✓</button><button class="ibtn no" title="اعتراض" onclick="openDispute('${gPend.join(',')}')">✕</button></div>`
-            : stageCell(o);
+            : gTr.length
+              ? `<button class="btn-ok" style="background:#3A6EA5;white-space:nowrap" onclick="markDelivered('${gTr.join(',')}')">📦 تم التوصيل${gTr.length>1?` (${gTr.length})`:''}</button>`
+              : stageCell(o);
           const rs = multi ? ` rowspan="${g.length}"` : '';
           return g.map((x,i)=>{
             const r=orderRate(x);
@@ -1273,7 +1301,7 @@ function renderMyOrders(){
         <tfoot><tr><td colspan="3">المجموع</td><td class="price">${bAmt} ر.س</td><td></td></tr></tfoot>
       </table></div>
     </div>`;
-  }).join('') + `<div class="legend">✓ = تأكيد إنك استلمت الطلب والبيانات صحيحة · ✕ = اعتراض لو فيه غلط.<br>بعد تأكيدك يمر الطلب بمرحلتين: <b>مراجعة مشرف المناديب</b> ثم <b>اعتماد الإدارة</b>، وبعدها ينضاف لرصيدك.</div>`;
+  }).join('') + `<div class="legend">✓ = تأكيد إنك استلمت الطلب والبيانات صحيحة · ✕ = اعتراض لو فيه غلط.<br><b>📦 تم التوصيل</b> = اضغطه عند كل طلب أول ما توصّله.</div>`;
 }
 
 // التأكيد: يحوّل الطلبات المؤكدة لقيد يومي (dailyEntries) بنفس الشكل القديم، فيوصل للإدارة
@@ -1405,9 +1433,29 @@ function renderMyMissing(list){
 }
 
 // رقم أحمر على "الرئيسية" بعدد الطلبات اللي تنتظر تأكيد المندوب (كل التواريخ)
+let BAN={pend:[], transit:[]};
 function listenPendingBadge(){
   db.collection('dispatchOrders').where('repPhone','==',myPhone()).where('repStatus','==','pending')
-    .onSnapshot(s=>updateNavBadgeRep('navBadgeHome', s.size), e=>console.error(e));
+    .onSnapshot(s=>{ updateNavBadgeRep('navBadgeHome', s.size); BAN.pend=s.docs.map(d=>({id:d.id,...d.data()})).filter(o=>o.fulfillment!=='pickup'&&!o.noPay); renderBanners(); }, e=>console.error(e));
+  // طلبات أكدها وما ضغط عليها "تم التوصيل" (بكل التواريخ)
+  db.collection('dispatchOrders').where('repPhone','==',myPhone()).where('repStatus','==','confirmed')
+    .onSnapshot(s=>{ BAN.transit=s.docs.map(d=>({id:d.id,...d.data()})).filter(o=>needsDelivery(o)&&!o.deliveredAt); renderBanners(); }, e=>console.error(e));
+}
+// شريط تذكير فوق الشاشة: تأكيد الطلبات، و"تم التوصيل"
+function renderBanners(){
+  const box=document.getElementById('repBanners'); if(!box) return;
+  const p=BAN.pend.length, t=BAN.transit.length;
+  const dates=l=>[...new Set(l.map(o=>o.date))].sort();
+  const goTo=l=>{ const d=dates(l)[0]; return `goToOrders('${d}')`; };
+  box.innerHTML =
+    (p?`<div class="rban conf" onclick="${goTo(BAN.pend)}"><span class="ic">⏳</span><span>عندك <b>${p}</b> طلب ما أكدته — راجعها وأكدها</span><span class="go">أكّد</span></div>`:'')+
+    (t?`<div class="rban deliv" onclick="${goTo(BAN.transit)}"><span class="ic">📦</span><span>عندك <b>${t}</b> طلب وصّلته وما ضغطت "تم التوصيل" — ما تنحسب فلوسها لين تضغطه</span><span class="go">افتح</span></div>`:'');
+}
+function goToOrders(date){
+  try{ const inp=document.getElementById('ordersDate'); if(inp && date && inp.value!==date){ inp.value=date; if(typeof listenMyOrders==='function') listenMyOrders(); } }catch(e){}
+  const homeBtn=[...document.querySelectorAll('.navbtn')].find(b=>(b.getAttribute('onclick')||'').includes("showTab('home')"));
+  if(homeBtn) homeBtn.click();
+  setTimeout(()=>document.getElementById('myOrdersCard')?.scrollIntoView({behavior:'smooth',block:'start'}),150);
 }
 
 /* ---------------- MY BALANCE ---------------- */
