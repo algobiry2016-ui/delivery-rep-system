@@ -16,7 +16,7 @@
 <script>
 // تنبيه "فيه نسخة جديدة": لو انرفع تحديث والصفحة مفتوحة من قبل، يطلع شريط يطلب التحديث (عشان ما يشتغل أحد على نسخة قديمة)
 (function(){
-  const APP_V='2026-10-04-7';
+  const APP_V='2026-10-04-8';
   async function chk(){
     try{ const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'}); if(!r.ok) return; const j=await r.json();
       if(j.v && j.v!==APP_V && !document.getElementById('updBar')){
@@ -114,6 +114,9 @@
   .exist-box label.opt{display:flex;gap:8px;align-items:flex-start;padding:5px 0;cursor:pointer;line-height:1.5;}
   .exist-box label.opt input{width:17px;height:17px;margin-top:2px;flex-shrink:0;}
   .exist-box .dv{background:#fff;border:1px solid var(--line);border-radius:8px;padding:6px 8px;margin:4px 0;}
+  .jr{display:inline-block;font-size:11.5px;font-weight:700;padding:3px 9px;border-radius:9px;white-space:nowrap;}
+  .jr-g{background:#EAF2EC;color:#4C7A5C;} .jr-a{background:#FBF1E2;color:#A9762F;} .jr-r{background:#FBEAEA;color:#B23A3A;}
+  .jr-b{background:#E6EEF5;color:#3A6EA5;} .jr-n{background:#F2EEE9;color:#6B615A;}
   .rowtag{font-size:12px;font-weight:700;color:#3A6EA5;margin:4px 0 8px;}
 
   .badge{display:inline-block;padding:2px 9px;border-radius:10px;font-size:11.5px;font-weight:700;color:#fff;}
@@ -1331,10 +1334,10 @@ async function loadDay(){
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${status}${departBtn}</div>
       </div>
       <div class="scroll"><table>
-        <thead><tr><th>رقم الطلب</th><th>النوع</th><th>المنسق</th><th>${b.isPickup?'الاستلام':'المنطقة'}</th><th>${b.isPickup?'':'التواصل مع المستلم ← الخروج من المحل'}</th><th>${b.isPickup?'':'المندوب'}</th><th>ملاحظات</th><th></th></tr></thead>
+        <thead><tr><th>رقم الطلب</th><th>النوع</th><th>المنسق</th><th>${b.isPickup?'الاستلام':'المنطقة'}</th><th>${b.isPickup?'':'التواصل مع المستلم ← الخروج من المحل'}</th><th>حالة الطلب</th><th>ملاحظات</th><th></th></tr></thead>
         <tbody>${orders.map(o=>`<tr>
           <td><b style="direction:ltr;unicode-bidi:isolate">${esc(o.orderNo)}</b>${o.manual?' <span class="manual-tag">يدوي</span>':''}${orderFlags(o)}</td><td>${typeBadge(o.type)}</td><td>${esc(floristsOf(o).join(' + '))}${o.floristReadyAt?`<div class="muted" style="font-size:11.5px">تجهيز ${minsBetween(o.floristReceivedAt,o.floristReadyAt)} د · انتظر ${minsBetween(o.floristReadyAt,o.handedAt)} د</div>`:''}</td>
-          <td>${isPickup(o) ? (o.pickedUpAt?`<span class="rs rs-confirmed">استلمه ${fmtTime(o.pickedUpAt)}</span>`:'<span class="rs rs-pending">ما استلمه</span>') : esc(o.areaName)}</td><td>${isPickup(o)?'':contactCell(o)}</td><td>${isPickup(o)?'':repStatusBadge(o)}</td><td>${esc(o.notes)}</td>
+          <td>${isPickup(o) ? 'استلام من المتجر' : esc(o.areaName)}</td><td>${isPickup(o)?'':contactCell(o)}</td><td>${(()=>{ const j=orderJourney(o,fmtTime); return `<span class="jr jr-${j.c}">${j.t}</span>${j.sub?`<div style="font-size:11px;color:#6B615A">${esc(j.sub)}</div>`:''}`; })()}</td><td>${esc(o.notes)}</td>
           <td style="white-space:nowrap">${orderActions(o,b)}</td>
         </tr>`).join('')}</tbody>
       </table></div>
@@ -1496,7 +1499,6 @@ function orderActions(o,b){
   if(isPickup(o)) return `${o.pickedUpAt?'':`<button class="green" style="padding:6px 10px;font-size:12px" onclick="markPickedUp('${o.id}')">استلمه العميل</button> `}<button class="danger" onclick="deleteOrder('${o.id}','${b.id}')">حذف</button>`;
   // النقل وتعديل المنطقة والتوصيل الثاني صارت من شاشة "تسليم جديد" (اكتب رقم الطلب)
   const st=repStatusOf(o); let h='';
-  if(o.deliveredAt) h+=`<span class="rs rs-confirmed">📦 وصل ${fmtTime(o.deliveredAt)}</span> `;
   h += `<button class="mini" onclick="fixFlorists('${o.id}')">💐 المنسق</button> `;
   if(st!=='confirmed') h+=`<button class="danger" onclick="deleteOrder('${o.id}','${b.id}')">حذف</button>`;
   const pend = AREQ.find(q=>q.orderId===o.id && q.status==='open');
@@ -1506,6 +1508,20 @@ function orderActions(o,b){
 
 /* ---------------- المطابقة مع المناديب ---------------- */
 function repStatusOf(o){ return o.repStatus || 'pending'; }
+
+// ===== حالة الطلب (وين الطلب الحين في رحلته) =====
+function orderJourney(o, fmt){
+  if(o.fulfillment==='pickup') return o.pickedUpAt ? {k:'picked',t:'✅ استلمه العميل '+fmt(o.pickedUpAt),c:'g'} : {k:'pwait',t:'🏪 ينتظر العميل',c:'a'};
+  if(o.returned && o.redeliveryId) return {k:'redel',t:'🔁 رجع — توصيل ثاني',c:'n'};
+  if(o.returned || o.noPay) return {k:'ret',t:'↩︎ رجع للمحل',c:'r',sub:o.returnReason||''};
+  const st=o.repStatus||'pending';
+  if(st==='disputed') return {k:'disp',t:'⚠️ اعترض',c:'r',sub:o.disputeReason||''};
+  if(st!=='confirmed') return {k:'wait',t:'⏳ ما أكده المندوب',c:'a'};
+  if(o.deliveredAt) return {k:'deliv',t:'📦 وصل '+fmt(o.deliveredAt),c:'g'};
+  if((o.date||'')<'2026-10-05') return {k:'conf',t:'✓ أكده المندوب',c:'g'};   // قبل بداية "تم التوصيل"
+  return {k:'transit',t:'🚚 في الطريق',c:'b'};
+}
+const JOURNEY_OPTS=[['wait','⏳ ما أكده المندوب'],['disp','⚠️ اعترض'],['transit','🚚 في الطريق'],['deliv','📦 وصل'],['ret','↩︎ رجع للمحل'],['redel','🔁 رجع — توصيل ثاني'],['pwait','🏪 ينتظر العميل'],['picked','✅ استلمه العميل']];
 function repStatusBadge(o){
   if(o.noPay) return '<span class="rs rs-disputed">↩︎ رجع — ما تنحسب</span>';
   const st=repStatusOf(o);

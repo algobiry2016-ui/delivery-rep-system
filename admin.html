@@ -16,7 +16,7 @@
 <script>
 // تنبيه "فيه نسخة جديدة": لو انرفع تحديث والصفحة مفتوحة من قبل، يطلع شريط يطلب التحديث (عشان ما يشتغل أحد على نسخة قديمة)
 (function(){
-  const APP_V='2026-10-04-7';
+  const APP_V='2026-10-04-8';
   async function chk(){
     try{ const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'}); if(!r.ok) return; const j=await r.json();
       if(j.v && j.v!==APP_V && !document.getElementById('updBar')){
@@ -219,6 +219,9 @@
   .ofilters label{display:block;font-size:12px;font-weight:700;color:var(--ink-soft);margin-bottom:4px;}
   .ofilters input,.ofilters select{width:100%;padding:9px 10px;border:1.5px solid var(--line);border-radius:8px;font-family:inherit;font-size:14px;background:#fff;}
   .otiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px;}
+  .jr{display:inline-block;font-size:11.5px;font-weight:700;padding:3px 9px;border-radius:9px;white-space:nowrap;}
+  .jr-g{background:#EAF2EC;color:#4C7A5C;} .jr-a{background:#FBF1E2;color:#A9762F;} .jr-r{background:#FBEAEA;color:#B23A3A;}
+  .jr-b{background:#E6EEF5;color:#3A6EA5;} .jr-n{background:#F2EEE9;color:#6B615A;}
   .otile{background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px;cursor:pointer;transition:border-color .15s;}
   .otile:hover{border-color:var(--rose);}
   .otile .n{font-size:22px;font-weight:900;} .otile .a{font-size:12.5px;font-weight:700;color:var(--ink-soft);} .otile .l{font-size:12px;color:var(--ink-soft);margin-top:2px;}
@@ -320,7 +323,8 @@
             <div><label>من</label><input type="date" id="oFrom"></div>
             <div><label>إلى</label><input type="date" id="oTo"></div>
             <div><label>المندوب</label><select id="oRep" onchange="renderOrdersTab()"></select></div>
-            <div><label>الحالة</label><select id="oStatus" onchange="renderOrdersTab()">
+            <div><label>حالة الطلب</label><select id="oJourney" onchange="renderOrdersTab()"><option value="">الكل</option></select></div>
+            <div><label>الاعتماد</label><select id="oStatus" onchange="renderOrdersTab()">
               <option value="">الكل</option>
               <option value="awaiting">بانتظار اعتمادك</option>
               <option value="approved">معتمد</option>
@@ -359,7 +363,7 @@
             <thead><tr>
               <th><input type="checkbox" id="oAll" onchange="oToggleAll(this.checked)" title="تحديد كل القابل للاعتماد"></th>
               <th>التاريخ</th><th>المندوب</th><th>رقم الطلب</th><th>النوع</th><th>المنطقة</th><th>السعر</th><th>فارق التوصيل</th>
-              <th>التسليم ← الخروج · 📞 · 📦 الوصول</th><th>المندوب أكد؟</th><th>الاعتماد</th><th>المنسق</th><th>ملاحظات</th>
+              <th>التسليم · 📞 التواصل</th><th>حالة الطلب</th><th>الاعتماد</th><th>المنسق</th><th>ملاحظات</th>
             </tr></thead>
             <tbody id="oBody"></tbody>
           </table></div>
@@ -2115,6 +2119,20 @@ const O_STAGE_UI = {
   transit:    ()=>'<span class="st st-await">🚚 ما ضغط "تم التوصيل"</span>',
   exclude:    ()=>'<span class="st st-rej">رجع — استبعده من الحساب</span>'
 };
+
+// ===== حالة الطلب (وين الطلب الحين في رحلته) =====
+function orderJourney(o, fmt){
+  if(o.fulfillment==='pickup') return o.pickedUpAt ? {k:'picked',t:'✅ استلمه العميل '+fmt(o.pickedUpAt),c:'g'} : {k:'pwait',t:'🏪 ينتظر العميل',c:'a'};
+  if(o.returned && o.redeliveryId) return {k:'redel',t:'🔁 رجع — توصيل ثاني',c:'n'};
+  if(o.returned || o.noPay) return {k:'ret',t:'↩︎ رجع للمحل',c:'r',sub:o.returnReason||''};
+  const st=o.repStatus||'pending';
+  if(st==='disputed') return {k:'disp',t:'⚠️ اعترض',c:'r',sub:o.disputeReason||''};
+  if(st!=='confirmed') return {k:'wait',t:'⏳ ما أكده المندوب',c:'a'};
+  if(o.deliveredAt) return {k:'deliv',t:'📦 وصل '+fmt(o.deliveredAt),c:'g'};
+  if((o.date||'')<'2026-10-05') return {k:'conf',t:'✓ أكده المندوب',c:'g'};   // قبل بداية "تم التوصيل"
+  return {k:'transit',t:'🚚 في الطريق',c:'b'};
+}
+const JOURNEY_OPTS=[['wait','⏳ ما أكده المندوب'],['disp','⚠️ اعترض'],['transit','🚚 في الطريق'],['deliv','📦 وصل'],['ret','↩︎ رجع للمحل'],['redel','🔁 رجع — توصيل ثاني'],['pwait','🏪 ينتظر العميل'],['picked','✅ استلمه العميل']];
 function oRepCell(o){
   const st=o.repStatus||'pending';
   if(o.fulfillment==='pickup') return o.pickedUpAt?`<span class="st st-appr">استلمه العميل ${oTime(o.pickedUpAt)}</span>`:'<span class="st st-await">ما استلمه العميل</span>';
@@ -2124,6 +2142,7 @@ function oRepCell(o){
   return '<span class="st st-await">⏳ ما أكد</span>';
 }
 async function loadOrdersTab(){
+  const js=document.getElementById('oJourney'); if(js && js.options.length<2) js.innerHTML='<option value="">الكل</option>'+JOURNEY_OPTS.map(([k,t])=>`<option value="${k}">${t}</option>`).join('');
   const fromEl=document.getElementById('oFrom'), toEl=document.getElementById('oTo');
   if(!fromEl.value){ const t=oRiyadh(); fromEl.value=t.slice(0,8)+'01'; toEl.value=t; }
   const from=fromEl.value, to=toEl.value;
@@ -2178,9 +2197,9 @@ async function loadOrdersTab(){
 }
 function oFiltered(){
   const rep=document.getElementById('oRep').value, st=document.getElementById('oStatus').value,
-        tp=document.getElementById('oType').value, ar=document.getElementById('oArea').value,
+        tp=document.getElementById('oType').value, ar=document.getElementById('oArea').value, jr=(document.getElementById('oJourney')||{}).value||'',
         q=String(document.getElementById('oSearch').value||'').replace(/[٠-٩]/g,d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/\s/g,'').toUpperCase();
-  return O_ORDERS.filter(o=>(!rep||o.repPhone===rep) && (!st||oStage(o)===st) && (!tp||o.type===tp) && (!ar||o.areaId===ar) && (!q||String(o.orderNo).toUpperCase().includes(q)))
+  return O_ORDERS.filter(o=>(!rep||o.repPhone===rep) && (!st||oStage(o)===st) && (!jr||orderJourney(o,oTime).k===jr) && (!tp||o.type===tp) && (!ar||o.areaId===ar) && (!q||String(o.orderNo).toUpperCase().includes(q)))
     .sort((a,b)=> b.date.localeCompare(a.date) || (a.repName||'').localeCompare(b.repName||'','ar') || (a.handedAt?.toMillis?.()||0)-(b.handedAt?.toMillis?.()||0));
 }
 function renderOrdersTab(){
@@ -2237,8 +2256,8 @@ function renderOrdersTab(){
       <td>${oEsc(o.fulfillment==='pickup'?'—':o.areaName)}${(myRole==='admin'&&o.fulfillment!=='pickup')?` <a href="#" title="تعديل المنطقة" style="text-decoration:none;font-size:12px" onclick="oFixArea('${o.id}');return false">✎</a>`:''}${o.areaBefore?`<div class="dim">كانت ${oEsc(o.areaBefore)}</div>`:''}</td>
       <td style="font-weight:900;white-space:nowrap">${o.fulfillment==='pickup'?'—':o.noPay?`<s class="dim">${o.rate||0}</s> 0 ر.س`:(r?r+' ر.س':'<span class="st st-await">بدون سعر</span>')}</td>
       <td style="white-space:nowrap">${df?`<b>+${df.amount} ر.س</b><div class="dim">${df.status==='approved'?'معتمد':'بانتظار المراجعة'}${df.area?' · '+oEsc(df.area):''}</div>`:'<span class="dim">—</span>'}</td>
-      <td class="dim">${oTime(o.handedAt)}${o.departedAt?' ← '+oTime(o.departedAt):''}${o.contactedAt?`<div>📞 تواصل ${oTime(o.contactedAt)}</div>`:''}${o.deliveredAt?`<div style="color:var(--green)">📦 وصل ${oTime(o.deliveredAt)}</div>`:''}</td>
-      <td>${oRepCell(o)}</td>
+      <td class="dim">${oTime(o.handedAt)}${o.departedAt?' ← '+oTime(o.departedAt):''}${o.contactedAt?`<div>📞 تواصل ${oTime(o.contactedAt)}</div>`:''}</td>
+      <td>${(()=>{ const j=orderJourney(o,oTime); return `<span class="jr jr-${j.c}">${j.t}</span>${j.sub?`<div style="font-size:11px;color:#6B615A">${oEsc(j.sub)}</div>`:''}`; })()}</td>
       <td>${O_STAGE_UI[stg](o)}</td>
       <td class="dim">${oEsc(o.florist||'')}</td>
       <td>${flags}${o.notes?`<div class="dim" style="white-space:normal">${oEsc(o.notes)}</div>`:''}${myRole==='admin'&&o.fulfillment!=='pickup'?`<div style="margin-top:4px;white-space:nowrap">${o.returned&&!o.redeliveryId?`<button class="btn-a b" style="padding:3px 8px;font-size:11px" onclick="oUndoReturn('${o.id}')">↶ إلغاء الرجوع</button> `:''}<button class="btn-a b" style="padding:3px 8px;font-size:11px" onclick="oAddDelivery('${o.id}')">➕ توصيلة لنفس الطلب</button></div>`:''}</td>

@@ -16,7 +16,7 @@
 <script>
 // تنبيه "فيه نسخة جديدة": لو انرفع تحديث والصفحة مفتوحة من قبل، يطلع شريط يطلب التحديث (عشان ما يشتغل أحد على نسخة قديمة)
 (function(){
-  const APP_V='2026-10-04-7';
+  const APP_V='2026-10-04-8';
   async function chk(){
     try{ const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'}); if(!r.ok) return; const j=await r.json();
       if(j.v && j.v!==APP_V && !document.getElementById('updBar')){
@@ -101,6 +101,9 @@
   .tp-doc{background:#262626;} .tp-ward{background:#B8935F;} .tp-wa{background:#4C7A5C;} .tp-shop{background:#7A5C8A;}
   .fl{display:inline-block;font-size:10.5px;font-weight:700;padding:1px 6px;border-radius:7px;margin:1px 2px 0 0;}
   .fl-ret{background:var(--red-bg);color:var(--red);} .fl-re{background:var(--blue-bg);color:var(--blue);} .fl-tr{background:var(--cream);color:var(--ink);}
+  .jr{display:inline-block;font-size:11.5px;font-weight:700;padding:3px 9px;border-radius:9px;white-space:nowrap;}
+  .jr-g{background:#EAF2EC;color:#4C7A5C;} .jr-a{background:#FBF1E2;color:#A9762F;} .jr-r{background:#FBEAEA;color:#B23A3A;}
+  .jr-b{background:#E6EEF5;color:#3A6EA5;} .jr-n{background:#F2EEE9;color:#6B615A;}
   .thumb{width:44px;height:44px;border-radius:8px;object-fit:cover;cursor:zoom-in;border:1px solid var(--line);}
   .empty{text-align:center;color:var(--ink-soft);padding:20px;font-size:13.5px;}
   .toast{position:fixed;bottom:calc(20px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);background:var(--black);color:#fff;padding:12px 20px;border-radius:10px;font-size:14px;z-index:100;display:none;max-width:90%;}
@@ -164,7 +167,8 @@
       <div class="tiles" id="oTiles"></div>
       <div class="card">
         <div class="filters">
-          <div><label class="l">الحالة</label><select id="fStatus" onchange="renderOrders()">
+          <div><label class="l">حالة الطلب</label><select id="fJourney" onchange="renderOrders()"></select></div>
+          <div><label class="l">المراجعة</label><select id="fStatus" onchange="renderOrders()">
             <option value="">الكل</option>
             <option value="toReview">تحتاج مراجعتك</option>
             <option value="reviewed">تمت المراجعة</option>
@@ -188,7 +192,7 @@
           <thead><tr>
             <th><input type="checkbox" id="oAll" onchange="toggleAll(this.checked)"></th>
             <th>التاريخ</th><th>المندوب</th><th>رقم الطلب</th><th>النوع</th><th>المنطقة</th><th>السعر</th><th>فارق التوصيل</th>
-            <th>التسليم ← الخروج · 📞 التواصل</th><th>المندوب أكد؟</th><th>المراجعة والاعتماد</th><th>ملاحظات</th>
+            <th>التسليم · 📞 التواصل</th><th>حالة الطلب</th><th>المراجعة والاعتماد</th><th>ملاحظات</th>
           </tr></thead>
           <tbody id="oBody"></tbody>
         </table></div>
@@ -362,6 +366,20 @@ const STAGE_UI = {
   unconfirmed:'<span class="st st-gray">—</span>', disputed:'<span class="st st-gray">—</span>',
   pickup:'<span class="st st-gray">لا يحتاج</span>', transit:'<span class="st st-await">🚚 ما ضغط تم التوصيل</span>', nopay:'<span class="st st-gray">رجعت — ما تنحسب</span>', orphan:'<span class="st st-rej">القيد محذوف — عند الإدارة</span>'
 };
+
+// ===== حالة الطلب (وين الطلب الحين في رحلته) =====
+function orderJourney(o, fmt){
+  if(o.fulfillment==='pickup') return o.pickedUpAt ? {k:'picked',t:'✅ استلمه العميل '+fmt(o.pickedUpAt),c:'g'} : {k:'pwait',t:'🏪 ينتظر العميل',c:'a'};
+  if(o.returned && o.redeliveryId) return {k:'redel',t:'🔁 رجع — توصيل ثاني',c:'n'};
+  if(o.returned || o.noPay) return {k:'ret',t:'↩︎ رجع للمحل',c:'r',sub:o.returnReason||''};
+  const st=o.repStatus||'pending';
+  if(st==='disputed') return {k:'disp',t:'⚠️ اعترض',c:'r',sub:o.disputeReason||''};
+  if(st!=='confirmed') return {k:'wait',t:'⏳ ما أكده المندوب',c:'a'};
+  if(o.deliveredAt) return {k:'deliv',t:'📦 وصل '+fmt(o.deliveredAt),c:'g'};
+  if((o.date||'')<'2026-10-05') return {k:'conf',t:'✓ أكده المندوب',c:'g'};   // قبل بداية "تم التوصيل"
+  return {k:'transit',t:'🚚 في الطريق',c:'b'};
+}
+const JOURNEY_OPTS=[['wait','⏳ ما أكده المندوب'],['disp','⚠️ اعترض'],['transit','🚚 في الطريق'],['deliv','📦 وصل'],['ret','↩︎ رجع للمحل'],['redel','🔁 رجع — توصيل ثاني'],['pwait','🏪 ينتظر العميل'],['picked','✅ استلمه العميل']];
 function repCell(o){
   if(o.fulfillment==='pickup') return o.pickedUpAt?`<span class="st st-appr">استلمه العميل</span>`:'<span class="st st-await">ما استلمه</span>';
   const st=o.repStatus||'pending';
@@ -377,8 +395,10 @@ function renderAll(){ renderOrders(); renderIssues(); renderReps(); renderDiffs(
 function renderOrders(){
   const base=repFiltered();
   const st=document.getElementById('fStatus').value, tp=document.getElementById('fType').value, ar=document.getElementById('fArea').value;
+  const jsel=document.getElementById('fJourney'); if(jsel.options.length<2) jsel.innerHTML='<option value="">الكل</option>'+JOURNEY_OPTS.map(([k,t])=>`<option value="${k}">${t}</option>`).join('');
+  const jr=jsel.value;
   const q=norm(document.getElementById('fSearch').value).toUpperCase();
-  const list = base.filter(o=>(!st||stage(o)===st)&&(!tp||o.type===tp)&&(!ar||o.areaId===ar)&&(!q||String(o.orderNo).toUpperCase().includes(q)))
+  const list = base.filter(o=>(!st||stage(o)===st)&&(!jr||orderJourney(o,tm).k===jr)&&(!tp||o.type===tp)&&(!ar||o.areaId===ar)&&(!q||String(o.orderNo).toUpperCase().includes(q)))
     .sort((a,b)=>b.date.localeCompare(a.date)||(a.repName||'').localeCompare(b.repName||'','ar')||(a.handedAt?.toMillis?.()||0)-(b.handedAt?.toMillis?.()||0));
   VIEW=list;
   const c=k=>base.filter(o=>stage(o)===k), amt=l=>l.reduce((s,o)=>s+rate(o),0);
@@ -414,8 +434,8 @@ function renderOrders(){
       <td>${o.fulfillment==='pickup'?'—':esc(o.areaName)}</td>
       <td style="font-weight:900;white-space:nowrap">${o.fulfillment==='pickup'?'—':o.noPay?`<s class="dim">${o.rate||0}</s> 0 ر.س`:(r?r+' ر.س':'<span class="st st-await">بدون سعر</span>')}</td>
       <td style="white-space:nowrap">${df?`<b>+${df.amount} ر.س</b><div class="dim">${df.status==='approved'?'معتمد':'بانتظار'}${df.area?' · '+esc(df.area):''}</div>`:'<span class="dim">—</span>'}</td>
-      <td class="dim">${tm(o.handedAt)}${o.departedAt?' ← '+tm(o.departedAt):''}${o.contactedAt?`<div>📞 تواصل ${tm(o.contactedAt)}</div>`:''}${o.deliveredAt?`<div style="color:var(--green)">📦 وصل ${tm(o.deliveredAt)}</div>`:''}</td>
-      <td>${repCell(o)}</td><td>${STAGE_UI[s]}</td>
+      <td class="dim">${tm(o.handedAt)}${o.departedAt?' ← '+tm(o.departedAt):''}${o.contactedAt?`<div>📞 تواصل ${tm(o.contactedAt)}</div>`:''}</td>
+      <td>${(()=>{ const j=orderJourney(o,tm); return `<span class="jr jr-${j.c}">${j.t}</span>${j.sub?`<div style="font-size:11px;color:#6B615A">${esc(j.sub)}</div>`:''}`; })()}</td><td>${STAGE_UI[s]}</td>
       <td>${flags}${o.notes?`<div class="dim">${esc(o.notes)}</div>`:''}</td></tr>`;
   }).join('');
   renderBulk();
