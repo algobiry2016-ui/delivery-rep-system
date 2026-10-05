@@ -16,7 +16,7 @@
 <script>
 // تنبيه "فيه نسخة جديدة": لو انرفع تحديث والصفحة مفتوحة من قبل، يطلع شريط يطلب التحديث (عشان ما يشتغل أحد على نسخة قديمة)
 (function(){
-  const APP_V='2026-10-04-8';
+  const APP_V='2026-10-05-1';
   async function chk(){
     try{ const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'}); if(!r.ok) return; const j=await r.json();
       if(j.v && j.v!==APP_V && !document.getElementById('updBar')){
@@ -2507,7 +2507,8 @@ async function applyMove(wb, o, q){
   const nb=db.collection('dispatchBatches').doc();
   wb.set(nb,{date:oRiyadh(), repPhone:q.toRepPhone, repName:rep.name, isAmmar:!!rep.isAmmar, orderCount:1, handedAt:TSv(), departedAt:TSv(), transferIn:true, createdBy:currentUser.uid, createdByName:'الإدارة', createdAt:TSv()});
   const upd={repPhone:q.toRepPhone, repName:rep.name, isAmmar:!!rep.isAmmar, batchId:nb.id, handedAt:TSv(), departedAt:TSv(), areaId:q.toAreaId, areaName:a?a.name:o.areaName, rate:nr,
-    repStatus:'pending', entryId:null, transferredFrom:o.repName, transferNote:q.reason, transferCount:(o.transferCount||0)+1, transferredAt:TSv()};
+    repStatus:'pending', entryId:null, transferredFrom:o.repName, transferNote:q.reason, transferCount:(o.transferCount||0)+1, transferredAt:TSv(),
+    deliveredAt:null, repActionAt:null, returned:false, noPay:false, returnReason:null, returnedAt:null, secondFeePaid:null, redeliveryId:null};
   wb.update(db.collection('dispatchOrders').doc(o.id), upd);
   const e=o.entryId&&O_ENTRIES[o.entryId];
   if(e){

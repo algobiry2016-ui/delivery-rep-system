@@ -16,7 +16,7 @@
 <script>
 // تنبيه "فيه نسخة جديدة": لو انرفع تحديث والصفحة مفتوحة من قبل، يطلع شريط يطلب التحديث (عشان ما يشتغل أحد على نسخة قديمة)
 (function(){
-  const APP_V='2026-10-04-8';
+  const APP_V='2026-10-05-1';
   async function chk(){
     try{ const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'}); if(!r.ok) return; const j=await r.json();
       if(j.v && j.v!==APP_V && !document.getElementById('updBar')){
@@ -777,7 +777,9 @@ async function processExOps(ops, rep){
         const upd={repPhone:toRep.id, repName:toRep.name, isAmmar:!!toRep.isAmmar, batchId:nb.id, handedAt:TS(), departedAt:TS(),
           areaId:op.areaId, areaName:area?area.name:'', rate:newRate, repStatus:'pending', entryId:null, disputeReason:null, disputeNote:null,
           transferredFrom:o.repName, transferNote:op.why, transferCount:(o.transferCount||0)+1, transferredAt:TS(), ...(op.areaId!==o.areaId?{areaBefore:o.areaName}:{}),
-          deliveredAt:null, ...(op.contactTime?{contactTime:op.contactTime, contactedAt:contactTs(localDate(),op.contactTime), contactedBy:'dispatcher'}:{})};
+          deliveredAt:null, repActionAt:null,
+          // توصيلة جديدة للمندوب الثاني: نمسح أي "رجع" قديم عشان تنحسب له عادي
+          returned:false, noPay:false, returnReason:null, returnedAt:null, secondFeePaid:null, redeliveryId:null, ibrahimNote:null, ...(op.contactTime?{contactTime:op.contactTime, contactedAt:contactTs(localDate(),op.contactTime), contactedBy:'dispatcher'}:{})};
         wb.update(db.collection('dispatchOrders').doc(o.id), upd);
         if(o.entryId) await rebuildEntry(wb, o.entryId, o.id, null, true);
         const rest=(await db.collection('dispatchOrders').where('batchId','==',o.batchId).get()).docs.filter(x=>x.id!==o.id).length;
