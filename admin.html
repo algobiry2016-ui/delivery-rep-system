@@ -16,7 +16,7 @@
 <script>
 // تنبيه "فيه نسخة جديدة": لو انرفع تحديث والصفحة مفتوحة من قبل، يطلع شريط يطلب التحديث (عشان ما يشتغل أحد على نسخة قديمة)
 (function(){
-  const APP_V='2026-10-06-2';
+  const APP_V='2026-10-07-1';
   async function chk(){
     try{ const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'}); if(!r.ok) return; const j=await r.json();
       if(j.v && j.v!==APP_V && !document.getElementById('updBar')){
@@ -2725,10 +2725,10 @@ function oExport(){
 /* =====================================================================
    الرقابة والتنبيهات
    ===================================================================== */
-const SEC_NAMES={typeFix:'تصحيح نوع الطلب',moveDirect:'نقل طلب لمندوب ثاني (المشرف)',areaDirect:'تعديل منطقة مباشر (المشرف)',moveRequest:'طلب نقل معتمد',moveApproved:'موافقة نقل (الإدارة)',undoReturn:'إلغاء رجوع (الإدارة)',adminAddDelivery:'توصيلة إضافية (الإدارة)',areaRequest:'طلب تعديل منطقة',areaChange:'تعديل منطقة (الإدارة)',farNumber:'رقم طلب غير معتاد',fixOrderNo:'تصحيح رقم طلب (الإدارة)',dupRequest:'طلب موافقة تكرار جوال',dupApproved:'موافقة على تكرار',dupRejected:'رفض تكرار',create:'تسليم جديد',depart:'خروج مندوب',contact:'وقت التواصل',pickedUp:'استلام عميل',addRep:'إضافة مندوب',addArea:'إضافة منطقة',
+const SEC_NAMES={dateChange:'تغيير تاريخ تسليم',addFlorist:'إضافة منسق',typeFix:'تصحيح نوع الطلب',moveDirect:'نقل طلب لمندوب ثاني (المشرف)',areaDirect:'تعديل منطقة مباشر (المشرف)',moveRequest:'طلب نقل معتمد',moveApproved:'موافقة نقل (الإدارة)',undoReturn:'إلغاء رجوع (الإدارة)',adminAddDelivery:'توصيلة إضافية (الإدارة)',areaRequest:'طلب تعديل منطقة',areaChange:'تعديل منطقة (الإدارة)',farNumber:'رقم طلب غير معتاد',fixOrderNo:'تصحيح رقم طلب (الإدارة)',dupRequest:'طلب موافقة تكرار جوال',dupApproved:'موافقة على تكرار',dupRejected:'رفض تكرار',create:'تسليم جديد',depart:'خروج مندوب',contact:'وقت التواصل',pickedUp:'استلام عميل',addRep:'إضافة مندوب',addArea:'إضافة منطقة',
   edit:'تعديل طلب',delete:'حذف طلب',deleteBatch:'حذف تسليم كامل',transfer:'تحويل لمندوب',return:'رجوع للمحل',redelivery:'توصيل ثاني',multi:'توصيل إضافي لنفس الطلب',
   samePhone:'طلب ثاني لنفس الجوال',keep:'رفض اعتراض مندوب',rejectMissing:'رفض بلاغ مندوب',adminDelete:'حذف من الإدارة',exclude:'استبعاد من الحساب',recalc:'إعادة احتساب أسعار'};
-const SEC_RISK={typeFix:1,moveDirect:1,areaDirect:1,moveRequest:1,areaRequest:1,areaChange:1,farNumber:2,dupRequest:1,delete:2,deleteBatch:2,keep:2,rejectMissing:1,edit:1,transfer:1,addRep:1,samePhone:1,multi:1,return:0,redelivery:0};
+const SEC_RISK={dateChange:1,typeFix:1,moveDirect:1,areaDirect:1,moveRequest:1,areaRequest:1,areaChange:1,farNumber:2,dupRequest:1,delete:2,deleteBatch:2,keep:2,rejectMissing:1,edit:1,transfer:1,addRep:1,samePhone:1,multi:1,return:0,redelivery:0};
 let SEC={from:null,to:null,log:[],orders:[]};
 function secLastSeen(){ try{ return Number(localStorage.getItem('secLastSeen')||0); }catch(e){ return 0; } }
 function secMarkSeen(){ try{ localStorage.setItem('secLastSeen', String(Date.now())); }catch(e){} updateNavBadge('navBadgeSecurity',0); }
