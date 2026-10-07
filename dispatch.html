@@ -16,7 +16,7 @@
 <script>
 // تنبيه "فيه نسخة جديدة": لو انرفع تحديث والصفحة مفتوحة من قبل، يطلع شريط يطلب التحديث (عشان ما يشتغل أحد على نسخة قديمة)
 (function(){
-  const APP_V='2026-10-07-1';
+  const APP_V='2026-10-07-2';
   async function chk(){
     try{ const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'}); if(!r.ok) return; const j=await r.json();
       if(j.v && j.v!==APP_V && !document.getElementById('updBar')){
@@ -825,6 +825,41 @@ async function rebuildEntry(wb, entryId, changedId, changedData, remove){
   else wb.update(db.collection('dailyEntries').doc(entryId), buildEntryFrom(its));
 }
 
+// تغيير تاريخ طلب واحد (بدون باقي طلبات التسليم) — ينتقل لتسليم بنفس المندوب بالتاريخ الصحيح
+async function changeOrderDate(id){
+  const o0=DAY_ORDERS[id]; if(!o0) return;
+  const cur=o0.date;
+  const days=[...Array(isFullAdmin?7:3)].map((_,i)=>{ const d=new Date(localDate()+'T12:00:00'); d.setDate(d.getDate()-i); return d.toISOString().slice(0,10); }).filter(d=>d!==cur);
+  const v=await uiPrompt(`تغيير تاريخ الطلب ${o0.orderNo} بس\nتاريخه الحالي: ${cur}\nاختر التاريخ الصحيح:\n${days.map((d,i)=>`${i+1}) ${d}${d===localDate()?' (اليوم)':''}`).join('\n')}`, '1');
+  if(v===null) return;
+  const nd=days[Number(String(v).replace(/[٠-٩]/g,x=>'٠١٢٣٤٥٦٧٨٩'.indexOf(x)))-1]; if(!nd){ toast('اختيار غير صحيح'); return; }
+  const why=await uiPrompt('السبب:','انسجل بعد 12 الليل وهو تابع لأمس'); if(why===null||!why.trim()){ if(why!==null) toast('اكتب السبب'); return; }
+  try{
+    const d0=await db.collection('dispatchOrders').doc(id).get(); if(!d0.exists) return; const o={id,...d0.data()};
+    const wb=db.batch(); let reconfirm=false;
+    if(o.entryId){
+      const ed=await db.collection('dailyEntries').doc(o.entryId).get();
+      if(ed.exists){ const e=ed.data();
+        if(e.status==='approved'){ await uiAlert('الطلب معتمد — تغيير تاريخه من الإدارة (إرجاعه للمندوب أول).'); return; }
+        const all=e.orderIds||[];
+        if(all.length===1 && all[0]===id) wb.update(db.collection('dailyEntries').doc(o.entryId), {date:nd});
+        else { const rest=[]; for(const x of all){ if(x===id) continue; const dd=await db.collection('dispatchOrders').doc(x).get(); if(dd.exists) rest.push({id:dd.id,...dd.data()}); }
+          if(!rest.length) wb.delete(db.collection('dailyEntries').doc(o.entryId)); else wb.update(db.collection('dailyEntries').doc(o.entryId), buildEntryFrom(rest)); reconfirm=true; }
+      }
+    }
+    // تسليم جديد بنفس المندوب ونفس الأوقات، بالتاريخ الصحيح
+    const nb=db.collection('dispatchBatches').doc();
+    wb.set(nb, {date:nd, repPhone:o.repPhone||null, repName:o.repName||'استلام من المتجر', isAmmar:!!o.isAmmar, isPickup:o.fulfillment==='pickup', orderCount:1,
+      handedAt:o.handedAt||TS(), departedAt:o.departedAt||null, movedFromBatch:o.batchId, createdBy:currentUser.uid, createdByName:myName, createdAt:TS()});
+    wb.update(db.collection('dispatchOrders').doc(id), {date:nd, dateBefore:cur, batchId:nb.id, ...(reconfirm?{repStatus:'pending', entryId:null, ibrahimNote:'تغيّر تاريخ الطلب — أكده من جديد'}:{})});
+    const rest=(await db.collection('dispatchOrders').where('batchId','==',o.batchId).get()).docs.filter(x=>x.id!==id).length;
+    if(rest===0) wb.delete(db.collection('dispatchBatches').doc(o.batchId)); else wb.update(db.collection('dispatchBatches').doc(o.batchId),{orderCount:rest});
+    wb.set(db.collection('auditLog').doc(), auditRow('dateChange', o, `${o.repName||'استلام'} · طلب واحد · ${cur} ← ${nd} · ${why.trim()}`));
+    await wb.commit();
+    await uiAlert(`✅ الطلب ${o.orderNo} صار بتاريخ ${nd}${reconfirm?'\nالمندوب يحتاج يأكده من جديد':''}`);
+    loadDay(true);
+  }catch(e){ console.error(e); toast('ما انحفظ ('+(e.code||e.message)+')'); }
+}
 // تغيير تاريخ تسليم كامل (مثلاً انسجل بعد 12 الليل وهو تابع لأمس) — ينسجل في الرقابة
 async function changeBatchDate(batchId){
   const bo=Object.values(DAY_ORDERS).filter(o=>o.batchId===batchId); if(!bo.length) return;
@@ -1415,7 +1450,7 @@ async function loadDay(silent){
     const wait = minsBetween(b.handedAt,b.departedAt);
     const status = b.isPickup ? `<span class="pill f-pick">🏬 ${orders.filter(o=>o.pickedUpAt).length}/${orders.length} استلمها العميل</span>`
       : `<span class="pill p-out">خرج ${fmtTime(b.departedAt||b.handedAt)}</span>`;   // وقت التسليم = وقت الخروج
-    const departBtn = canWrite ? `<button class="mini" onclick="changeBatchDate('${b.id}')">📅 التاريخ</button>` : '';
+    const departBtn = canWrite ? `<button class="mini" onclick="changeBatchDate('${b.id}')">📅 تاريخ التسليم كامل</button>` : '';
     const delBatch = canWrite ? `<button class="danger" onclick="deleteBatch('${b.id}')">حذف التسليم</button>` : '';
     return `<div class="card">
       <div class="batch-head">
@@ -1591,6 +1626,7 @@ function orderActions(o,b){
   const st=repStatusOf(o); let h='';
   h += `<button class="mini" onclick="fixFlorists('${o.id}')">💐 المنسق</button> `;
   h += `<button class="mini" onclick="fixType('${o.id}')">🏷 النوع</button> `;
+  h += `<button class="mini" onclick="changeOrderDate('${o.id}')">📅 التاريخ</button> `;
   if(st!=='confirmed') h+=`<button class="danger" onclick="deleteOrder('${o.id}','${b.id}')">حذف</button>`;
   const pend = AREQ.find(q=>q.orderId===o.id && q.status==='open');
   if(pend) h += ' <span class="rs rs-pending">📍 عند الإدارة</span>';
