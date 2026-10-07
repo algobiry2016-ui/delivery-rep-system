@@ -16,7 +16,7 @@
 <script>
 // تنبيه "فيه نسخة جديدة": لو انرفع تحديث والصفحة مفتوحة من قبل، يطلع شريط يطلب التحديث (عشان ما يشتغل أحد على نسخة قديمة)
 (function(){
-  const APP_V='2026-10-05-3';
+  const APP_V='2026-10-06-2';
   async function chk(){
     try{ const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'}); if(!r.ok) return; const j=await r.json();
       if(j.v && j.v!==APP_V && !document.getElementById('updBar')){
@@ -1431,8 +1431,8 @@ async function loadDiffs(){
     const e = d.data();
     const dateStr = e.createdAt && e.createdAt.toDate ? e.createdAt.toDate().toLocaleDateString('ar-SA') : '—';
     const badgeClass = e.status==='approved' ? 'approved' : (e.status==='rejected' ? 'rejected' : 'pending');
-    const badgeText = e.status==='approved' ? 'تم الاعتماد' : (e.status==='rejected' ? 'مرفوض' : 'قيد المراجعة');
-    const actions = (myRole==='admin' && e.status==='pending')
+    const badgeText = e.status==='approved' ? 'تم الاعتماد' : (e.status==='rejected' ? 'مرفوض' : e.status==='reviewed' ? '✓ راجعه مهند' : 'قيد المراجعة');
+    const actions = (myRole==='admin' && (e.status==='pending'||e.status==='reviewed'))
       ? `<button class="small-approve" onclick="setDiffStatus('${d.id}','approved')">اعتماد</button><button class="small-danger" onclick="setDiffStatus('${d.id}','rejected')" style="margin-inline-end:6px;">رفض</button>`
       : '';
     const diffDeleteBtn = myRole==='admin' ? `<button class="small-danger" onclick="deleteDiff('${d.id}')">حذف</button>` : '';
@@ -1954,7 +1954,7 @@ function renderReport(){
   const reasons={}; deliv.filter(o=>o.returned).forEach(o=>{ const k=String(o.returnReason||'—').split(' — ')[0]; reasons[k]=(reasons[k]||0)+1; });
   const dReasons={}; deliv.filter(o=>o.disputeReason).forEach(o=>{ dReasons[o.disputeReason]=(dReasons[o.disputeReason]||0)+1; });
   const listT=(obj,empty)=>Object.keys(obj).length?Object.entries(obj).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line)"><span>${oEsc(k)}</span><b>${v}</b></div>`).join(''):`<div class="dim">${empty}</div>`;
-  const diffsApproved=D.filter(d=>d.status==='approved'), diffsPending=D.filter(d=>d.status==='pending');
+  const diffsApproved=D.filter(d=>d.status==='approved'), diffsPending=D.filter(d=>d.status==='pending'||d.status==='reviewed');
 
   // ===== البطاقات =====
   const uniq=new Set(O.map(o=>o.orderNo)).size, dayN=days.length;

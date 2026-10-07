@@ -16,7 +16,7 @@
 <script>
 // تنبيه "فيه نسخة جديدة": لو انرفع تحديث والصفحة مفتوحة من قبل، يطلع شريط يطلب التحديث (عشان ما يشتغل أحد على نسخة قديمة)
 (function(){
-  const APP_V='2026-10-05-3';
+  const APP_V='2026-10-06-2';
   async function chk(){
     try{ const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'}); if(!r.ok) return; const j=await r.json();
       if(j.v && j.v!==APP_V && !document.getElementById('updBar')){
@@ -104,6 +104,7 @@
   .jr{display:inline-block;font-size:11.5px;font-weight:700;padding:3px 9px;border-radius:9px;white-space:nowrap;}
   .jr-g{background:#EAF2EC;color:#4C7A5C;} .jr-a{background:#FBF1E2;color:#A9762F;} .jr-r{background:#FBEAEA;color:#B23A3A;}
   .jr-b{background:#E6EEF5;color:#3A6EA5;} .jr-n{background:#F2EEE9;color:#6B615A;}
+  body.sup-limited .sup-hide{display:none !important;}
   .thumb{width:44px;height:44px;border-radius:8px;object-fit:cover;cursor:zoom-in;border:1px solid var(--line);}
   .empty{text-align:center;color:var(--ink-soft);padding:20px;font-size:13.5px;}
   .toast{position:fixed;bottom:calc(20px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);background:var(--black);color:#fff;padding:12px 20px;border-radius:10px;font-size:14px;z-index:100;display:none;max-width:90%;}
@@ -138,8 +139,8 @@
   </div>
   <div class="tabs">
     <button class="tab active" data-pane="orders" onclick="showPane('orders')">🧾 الطلبات والمراجعة<span class="tb" id="tbOrders"></span></button>
-    <button class="tab" data-pane="issues" onclick="showPane('issues')">⚠️ الاعتراضات والبلاغات<span class="tb" id="tbIssues"></span></button>
-    <button class="tab" data-pane="reps" onclick="showPane('reps')">👥 ملخص المناديب</button>
+    <button class="tab sup-hide" data-pane="issues" onclick="showPane('issues')">⚠️ الاعتراضات والبلاغات<span class="tb" id="tbIssues"></span></button>
+    <button class="tab sup-hide" data-pane="reps" onclick="showPane('reps')">👥 ملخص المناديب</button>
     <button class="tab" data-pane="diffs" onclick="showPane('diffs')">🔁 فوارق التوصيل</button>
   </div>
 
@@ -167,7 +168,7 @@
       <div class="tiles" id="oTiles"></div>
       <div class="card">
         <div class="filters">
-          <div><label class="l">حالة الطلب</label><select id="fJourney" onchange="renderOrders()"></select></div>
+          <div class="sup-hide"><label class="l">حالة الطلب</label><select id="fJourney" onchange="renderOrders()"></select></div>
           <div><label class="l">المراجعة</label><select id="fStatus" onchange="renderOrders()">
             <option value="">الكل</option>
             <option value="toReview">تحتاج مراجعتك</option>
@@ -179,11 +180,11 @@
             <option value="pickup">استلام من المتجر</option>
             <option value="transit">ما ضغط تم التوصيل</option>
           </select></div>
-          <div><label class="l">النوع</label><select id="fType" onchange="renderOrders()">
+          <div class="sup-hide"><label class="l">النوع</label><select id="fType" onchange="renderOrders()">
             <option value="">الكل</option><option value="doc">دوكمنتيشن</option><option value="ward">ورد إكسبرس</option><option value="wa">واتس دوكمنتيشن</option><option value="shop">طلبات المحل</option>
           </select></div>
-          <div><label class="l">المنطقة</label><select id="fArea" onchange="renderOrders()"></select></div>
-          <div><label class="l">بحث</label><input id="fSearch" placeholder="رقم الطلب أو جوال" oninput="renderOrders()"></div>
+          <div class="sup-hide"><label class="l">المنطقة</label><select id="fArea" onchange="renderOrders()"></select></div>
+          <div class="sup-hide"><label class="l">بحث</label><input id="fSearch" placeholder="رقم الطلب أو جوال" oninput="renderOrders()"></div>
         </div>
       </div>
       <div class="bulk" id="oBulk"></div>
@@ -252,6 +253,7 @@ const db = firebase.firestore();
 const TS = firebase.firestore.FieldValue.serverTimestamp;
 
 const TYPES = {doc:'دوكمنتيشن', ward:'ورد إكسبرس', wa:'واتس دوكمنتيشن', shop:'طلبات المحل'};
+let SUP_LIMITED=false;
 let myRole=null, AREAS=[], ORDERS=[], ENTRIES={}, DIFFS=[], DIFFMAP={}, DISPUTES=[], MISSING=[], STALE=[], SEL=new Set(), VIEW=[];
 
 /* ---------- helpers ---------- */
@@ -274,8 +276,10 @@ function doLogin(){
   auth.signInWithEmailAndPassword(e,p).catch(()=>{ err.textContent='بيانات الدخول غير صحيحة'; err.style.display='block'; });
 }
 function showScreen(id){ ['loginScreen','deniedScreen','mainScreen'].forEach(s=>document.getElementById(s).classList.toggle('active',s===id)); }
+let CUR_UID=null;
 auth.onAuthStateChanged(async user=>{
   if(!user){ showScreen('loginScreen'); return; }
+  CUR_UID=user.uid;
   try{
     const a = await db.collection('admins').doc(user.uid).get();
     myRole = a.exists ? (a.data().role||'reviewer') : null;
@@ -283,6 +287,10 @@ auth.onAuthStateChanged(async user=>{
     if(!myRole){ showScreen('deniedScreen'); return; }
     document.getElementById('whoami').textContent = ({supervisor:'مشرف المناديب', admin:'الإدارة', reviewer:'مراجع — عرض فقط'})[myRole] + ' · ' + (a.data().name||user.email);
     if(window.self!==window.top) document.getElementById('topbar').style.display='none';   // داخل لوحة الإدارة
+    // مشرف المناديب: صفحة المراجعة بس — بدون تبويبات ثانية ولا بحث ولا تقارير ولا تصدير
+    SUP_LIMITED = myRole==='supervisor';
+    if(SUP_LIMITED){ document.body.classList.add('sup-limited');
+      document.getElementById('fStatus').innerHTML='<option value="toReview">تحتاج مراجعتك</option><option value="reviewed">راجعتها</option>'; }
     showScreen('mainScreen');
     const s = await db.collection('settings').doc('areas').collection('list').orderBy('order').get();
     AREAS = s.docs.map(d=>({id:d.id,...d.data()}));
@@ -404,7 +412,7 @@ function renderAll(){ renderOrders(); renderIssues(); renderReps(); renderDiffs(
 
 /* ---------- orders ---------- */
 function renderOrders(){
-  const base=repFiltered();
+  const base=SUP_LIMITED ? repFiltered().filter(o=>['toReview','reviewed'].includes(stage(o))) : repFiltered();
   const st=document.getElementById('fStatus').value, tp=document.getElementById('fType').value, ar=document.getElementById('fArea').value;
   const jsel=document.getElementById('fJourney'); if(jsel.options.length<2) jsel.innerHTML='<option value="">الكل</option>'+JOURNEY_OPTS.map(([k,t])=>`<option value="${k}">${t}</option>`).join('');
   const jr=jsel.value;
@@ -414,6 +422,10 @@ function renderOrders(){
   VIEW=list;
   const c=k=>base.filter(o=>stage(o)===k), amt=l=>l.reduce((s,o)=>s+rate(o),0);
   const tr=c('toReview');
+  if(SUP_LIMITED){
+    const tl=(k,n,lb,hl)=>`<div class="tile ${hl?'hl':''}" onclick="document.getElementById('fStatus').value='${k}';renderOrders()"><div class="n">${n}</div><div class="lb">${lb}</div></div>`;
+    document.getElementById('oTiles').innerHTML = tl('toReview',tr.length,'تحتاج مراجعتك',tr.length>0)+tl('reviewed',c('reviewed').length,'راجعتها');
+  } else {
   const tile=(k,n,a,lb,hl)=>`<div class="tile ${hl?'hl':''}" onclick="document.getElementById('fStatus').value='${k}';renderOrders()"><div class="n">${n}</div>${a!==null?`<div class="a">${a} ر.س</div>`:''}<div class="lb">${lb}</div></div>`;
   document.getElementById('oTiles').innerHTML =
     `<div class="tile" onclick="document.getElementById('fStatus').value='';renderOrders()"><div class="n">${new Set(base.map(o=>o.orderNo)).size}</div><div class="a">${base.filter(o=>o.fulfillment!=='pickup').length} توصيلة · ${amt(base)} ر.س</div><div class="lb">طلبات (بدون تكرار)</div></div>`+
@@ -423,6 +435,7 @@ function renderOrders(){
     tile('unconfirmed',c('unconfirmed').length,null,'ما أكدها المندوب')+
     tile('disputed',c('disputed').length,null,'اعتراضات')+
     tile('pickup',c('pickup').length,null,'استلام من المتجر');
+  }
   const tb=document.getElementById('tbOrders'); tb.textContent=tr.length; tb.classList.toggle('show',tr.length>0);
 
   document.getElementById('oEmpty').style.display = list.length?'none':'block';
@@ -468,7 +481,7 @@ function renderBulk(){
   document.getElementById('oBulk').innerHTML = `
     <span class="sel">${sel.length?`محدد: ${sel.length} طلب · ${amt} ر.س`:`${VIEW.length} طلب معروض`}</span>
     ${canRev?`<button class="btn btn-green" ${sel.length?'':'disabled'} onclick="markReviewed()">✓ تمت المراجعة${sel.length?` (${sel.length})`:''}</button>`:''}
-    <button class="btn btn-ghost" onclick="exportCSV()">⬇︎ تصدير Excel</button>
+    ${SUP_LIMITED?'':'<button class="btn btn-ghost" onclick="exportCSV()">⬇︎ تصدير Excel</button>'}
     <button class="btn btn-ghost" onclick="loadAll()">↻ تحديث</button>`;
 }
 async function markReviewed(){
@@ -481,6 +494,7 @@ async function markReviewed(){
   }catch(e){ console.error(e); toast('ما انحفظ — تحقق من الاتصال أو الصلاحيات'); }
 }
 function exportCSV(){
+  if(SUP_LIMITED) return;
   const list=VIEW; if(!list.length){ toast('ما فيه بيانات'); return; }
   const stT={toReview:'تحتاج مراجعة',reviewed:'تمت المراجعة',approved:'معتمد',rejected:'مرفوض',unconfirmed:'ما أكدها المندوب',disputed:'اعتراض',pickup:'استلام',orphan:'قيد محذوف'};
   const head=['التاريخ','المندوب','رقم الطلب','النوع','المنطقة','السعر','فارق التوصيل','وقت التسليم','وقت الخروج','حالة المندوب','المراجعة/الاعتماد','ملاحظات'];
@@ -543,6 +557,12 @@ function renderReps(){
 }
 
 /* ---------- diffs ---------- */
+// مشرف المناديب يراجع فارق التوصيل (يتأكد من الإثبات والمطابقة) — والاعتماد للإدارة
+async function reviewDiff(id){
+  try{ await db.collection('deliveryDiffs').doc(id).update({status:'reviewed', reviewedAt:TS(), reviewedBy:(CUR_UID||'')});
+    const x=DIFFS.find(d=>d.id===id); if(x) x.status='reviewed'; renderDiffs(); toast('تمت مراجعة الفارق ✅ — صار عند الإدارة'); }
+  catch(e){ console.error(e); toast('ما انحفظ — تحقق من الاتصال'); }
+}
 function renderDiffs(){
   const r=document.getElementById('fRep').value;
   const tEnd=new Date(document.getElementById('fTo').value+'T00:00:00+03:00'); tEnd.setDate(tEnd.getDate()+1);
@@ -551,7 +571,8 @@ function renderDiffs(){
   document.getElementById('diffsBody').innerHTML = list.length ? list.map(x=>{
     const no=norm(x.orderNo), mine=ORDERS.find(o=>norm(o.orderNo)===no && o.repPhone===x.repUid), other=ORDERS.find(o=>norm(o.orderNo)===no);
     const match = mine ? '<span class="st st-appr">✓ مسلّم له</span>' : other ? `<span class="st st-rej">⚠️ مسلّم لـ ${esc(other.repName)}</span>` : '<span class="st st-await">مو بسجل التسليم</span>';
-    const st = x.status==='approved'?'<span class="st st-appr">معتمد</span>':x.status==='rejected'?'<span class="st st-rej">مرفوض</span>':'<span class="st st-await">بانتظار الإدارة</span>';
+    const canRev=(myRole==='supervisor'||myRole==='admin') && x.status==='pending';
+    const st = x.status==='approved'?'<span class="st st-appr">معتمد</span>':x.status==='rejected'?'<span class="st st-rej">مرفوض</span>':x.status==='reviewed'?'<span class="st st-rev">✓ راجعته · عند الإدارة</span>':(canRev?`<button class="btn btn-green" style="padding:6px 10px;font-size:12px" onclick="reviewDiff('${x.id}')">✓ تمت المراجعة</button>`:'<span class="st st-await">بانتظار المراجعة</span>');
     return `<tr><td class="dim">${x.createdAt?.toDate?riyadh(x.createdAt.toDate()):'—'}</td><td><b>${esc(x.repName)}</b></td><td class="no">${esc(x.orderNo)}</td><td>${match}</td>
       <td>${esc(x.registeredAreaName||'')}</td><td>${esc(x.areaName||'')}</td><td style="font-weight:900">${x.amount} ر.س</td>
       <td>${x.proofImage?`<img class="thumb" src="${x.proofImage}" onclick="viewImg(this.src)" alt="">`:'—'}</td><td>${st}</td></tr>`;
