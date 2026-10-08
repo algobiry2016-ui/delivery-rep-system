@@ -1947,13 +1947,22 @@ function renderReport(){
   const opsTable=tbl(['المندوب','التوصيلات','طلبات مختلفة','مناطق','رجعت','توصيل ثاني','توصيل إضافي','محوّل له','اعترض','متوسط من التواصل للخروج (د)','متوسط من الخروج للوصول (د)','متوسط وقت التأكيد (د)'],
     Object.entries(rp).sort((a,b)=>b[1].n-a[1].n).map(([id,r])=>`<tr><td><b>${oEsc(nm(id))}</b></td><td>${r.n}</td><td>${r.orders.size}</td><td>${r.areas.size}</td><td>${r.ret||'—'}</td><td>${r.re||'—'}</td><td>${r.multi||'—'}</td><td>${r.tr||'—'}</td><td>${r.disp||'—'}</td><td>${avg(cont[id]||[])}</td><td>${avg(dlv[id]||[])}</td><td>${avg(conf[id]||[])}</td></tr>`).join(''),'',1150);
 
-  // ===== ٥ب) ملخص المناديب حسب النوع + المناديب × المناطق (كان في لوحة مهند) =====
-  const byRepT={}; deliv.forEach(o=>{ const k=o.repPhone; const b=byRepT[k]=byRepT[k]||{n:0,c:0,u:0,d:0,ret:0,dl:0,...Object.fromEntries(tk.map(t=>[t,0]))};
-    b.n++; b[o.type]++; if(o.repStatus==='confirmed') b.c++; else if(o.repStatus==='disputed') b.d++; else b.u++; if(o.returned) b.ret++; if(o.deliveredAt) b.dl++; });
+  // ===== ٥ب) ملخص كل مندوب للفترة: حسب النوع + الفلوس (كان في لوحة مهند) + المناديب × المناطق =====
+  const ENTm=Object.fromEntries(RPT.entries.map(e=>[e.id,e]));
+  const dfBy={}; D.forEach(x=>{ if(x.status==='rejected') return; const k=(x.repUid||'')+'|'+oNorm(x.orderNo); dfBy[k]=(dfBy[k]||0)+(x.amount||0); });
+  const stageOf=o=>{ if(o.noPay) return ''; if((o.repStatus||'pending')!=='confirmed') return ''; if(oNeedsDelivery(o)&&!o.deliveredAt) return '';
+    const e=ENTm[o.entryId]; if(!e) return ''; if(e.status==='approved') return 'ap'; if(e.status==='pending'||e.status==='reviewed') return 'aw'; return ''; };
+  const byRepT={}; deliv.forEach(o=>{ const k=o.repPhone; const b=byRepT[k]=byRepT[k]||{n:0,c:0,u:0,d:0,ret:0,dl:0,df:0,ap:0,aw:0,all:0,seen:new Set(),...Object.fromEntries(tk.map(t=>[t,0]))};
+    const r=rateOf(o), s=stageOf(o);
+    b.n++; b[o.type]++; b.all+=r; if(o.repStatus==='confirmed') b.c++; else if(o.repStatus==='disputed') b.d++; else b.u++; if(o.returned) b.ret++; if(o.deliveredAt) b.dl++;
+    if(s) b[s]+=r;
+    const dk=(o.repPhone||'')+'|'+oNorm(o.orderNo); if(dfBy[dk] && !b.seen.has(dk)){ b.df+=dfBy[dk]; b.all+=dfBy[dk]; b.seen.add(dk); } });
   const rtRows=Object.entries(byRepT).sort((a,b)=>b[1].n-a[1].n);
-  const repTypeTable=tbl(['المندوب','التوصيلات',...tk.map(t=>R_TYPES[t]),'أكد','ما أكد','اعترض','وصل (تم التوصيل)','رجعت'],
-    rtRows.map(([id,b])=>`<tr><td><b>${oEsc(nm(id))}</b></td><td><b>${b.n}</b></td>${tk.map(t=>`<td>${b[t]||'—'}</td>`).join('')}<td>${b.c}</td><td>${b.u||'—'}</td><td>${b.d||'—'}</td><td>${b.dl||'—'}</td><td>${b.ret||'—'}</td></tr>`).join(''),
-    rtRows.length?`<td>المجموع</td><td>${deliv.length}</td>${tk.map(t=>`<td>${deliv.filter(o=>o.type===t).length}</td>`).join('')}<td>${rtRows.reduce((x,[,b])=>x+b.c,0)}</td><td>${rtRows.reduce((x,[,b])=>x+b.u,0)}</td><td>${rtRows.reduce((x,[,b])=>x+b.d,0)}</td><td>${rtRows.reduce((x,[,b])=>x+b.dl,0)}</td><td>${rtRows.reduce((x,[,b])=>x+b.ret,0)}</td>`:'',900);
+  const sumT=f=>rtRows.reduce((x,[,b])=>x+b[f],0);
+  const repTypeTable=tbl(['المندوب','التوصيلات',...tk.map(t=>R_TYPES[t]),'أكد','ما أكد','اعترض','وصل (تم التوصيل)','رجعت','فوارق','معتمد','بانتظار','الإجمالي'],
+    rtRows.map(([id,b])=>`<tr><td><b>${oEsc(nm(id))}</b></td><td><b>${b.n}</b></td>${tk.map(t=>`<td>${b[t]||'—'}</td>`).join('')}<td>${b.c}</td><td>${b.u||'—'}</td><td>${b.d||'—'}</td><td>${b.dl||'—'}</td><td>${b.ret||'—'}</td>
+      <td>${b.df?b.df+' ر.س':'—'}</td><td style="color:var(--green);font-weight:700">${b.ap} ر.س</td><td style="color:var(--amber);font-weight:700">${b.aw} ر.س</td><td style="font-weight:900">${b.all} ر.س</td></tr>`).join(''),
+    rtRows.length?`<td>المجموع</td><td>${deliv.length}</td>${tk.map(t=>`<td>${deliv.filter(o=>o.type===t).length}</td>`).join('')}<td>${sumT('c')}</td><td>${sumT('u')}</td><td>${sumT('d')}</td><td>${sumT('dl')}</td><td>${sumT('ret')}</td><td>${sumT('df')} ر.س</td><td>${sumT('ap')} ر.س</td><td>${sumT('aw')} ر.س</td><td>${sumT('all')} ر.س</td>`:'',1250);
   const mAreas=[...new Map(deliv.map(o=>[o.areaId,o.areaName])).entries()];
   const matrixTable=tbl(['المندوب',...mAreas.map(([,n])=>oEsc(n)),'المجموع'],
     rtRows.map(([id,b])=>`<tr><td><b>${oEsc(nm(id))}</b></td>${mAreas.map(([aid])=>{ const c=deliv.filter(o=>o.repPhone===id&&o.areaId===aid).length; return `<td>${c||'<span class="dim">—</span>'}</td>`; }).join('')}<td><b>${b.n}</b></td></tr>`).join(''),
@@ -2037,7 +2046,7 @@ function renderReport(){
     ${card('📍 المناطق', areaTable, 'التوصيلات فقط — الاستلام من المتجر ما له منطقة.')}
     ${dayN>1?card('📅 حسب اليوم', dayTable):''}
     ${card('🛵 أداء المناديب (تشغيل)', opsTable, '"طلبات مختلفة" أقل من "التوصيلات" لما يكون فيه توصيل ثاني أو توصيل إضافي لنفس رقم الطلب.')}
-    ${card('👥 ملخص المناديب حسب النوع', repTypeTable)}
+    ${card('👥 ملخص كل مندوب للفترة', repTypeTable, '"معتمد" = توصيلات اعتمدتها الإدارة. "بانتظار" = أكدها المندوب وتنتظر المراجعة/الاعتماد. "الإجمالي" = كل التوصيلات بسعرها + الفوارق (غير المرفوضة).')}
     ${card('🗺️ المناديب × المناطق (عدد التوصيلات)', matrixTable)}
     ${card('💐 المنسقين', flTable)}
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px">
