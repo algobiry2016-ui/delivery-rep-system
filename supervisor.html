@@ -16,7 +16,7 @@
 <script>
 // تنبيه "فيه نسخة جديدة": لو انرفع تحديث والصفحة مفتوحة من قبل، يطلع شريط يطلب التحديث (عشان ما يشتغل أحد على نسخة قديمة)
 (function(){
-  const APP_V='2026-10-08-2';
+  const APP_V='2026-10-08-3';
   async function chk(){
     try{ const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'}); if(!r.ok) return; const j=await r.json();
       if(j.v && j.v!==APP_V && !document.getElementById('updBar')){
@@ -141,6 +141,7 @@
     <button class="tab active" data-pane="orders" onclick="showPane('orders')">🧾 الطلبات والمراجعة<span class="tb" id="tbOrders"></span></button>
     <button class="tab sup-hide" data-pane="issues" onclick="showPane('issues')">⚠️ الاعتراضات والبلاغات<span class="tb" id="tbIssues"></span></button>
     <button class="tab" data-pane="diffs" onclick="showPane('diffs')">🔁 فوارق التوصيل<span class="tb" id="tbDiffs"></span></button>
+    <button class="tab" data-pane="repcount" onclick="showPane('repcount')">📊 تقرير المناديب</button>
   </div>
 
   <div class="main">
@@ -206,6 +207,17 @@
       <div class="card"><h3>اعتراضات المناديب المفتوحة <span id="cntDisp" class="muted"></span></h3><div id="dispBox"></div></div>
       <div class="card"><h3>بلاغات طلبات وصّلوها وما انسجلت <span id="cntMiss" class="muted"></span></h3><div id="missBox"></div></div>
       <div class="card"><h3>طلبات ما أكدها المندوب من أيام سابقة</h3><div id="staleBox"></div></div>
+    </div>
+
+    <!-- تقرير المناديب: العدد والمبلغ فقط -->
+    <div id="pane-repcount" class="pane">
+      <div class="card"><h3>تقرير المناديب للفترة</h3>
+        <div class="muted" style="margin-bottom:10px">عدد التوصيلات ومبلغها لكل مندوب بالفترة المختارة (بدون الاستلام من المتجر والطلبات اللي رجعت وما تنحسب).</div>
+        <div class="scroll"><table style="min-width:360px">
+          <thead><tr><th>المندوب</th><th>عدد الطلبات</th><th>المبلغ</th></tr></thead>
+          <tbody id="rcBody"></tbody><tfoot id="rcFoot"></tfoot>
+        </table></div>
+      </div>
     </div>
 
     <!-- فوارق التوصيل -->
@@ -398,7 +410,7 @@ function repCell(o){
   return '<span class="st st-await">⏳ ما أكد</span>';
 }
 function repFiltered(){ const r=document.getElementById('fRep').value; return ORDERS.filter(o=>!r||o.repPhone===r); }
-function renderAll(){ renderOrders(); renderIssues(); renderDiffs(); }
+function renderAll(){ renderOrders(); renderIssues(); renderDiffs(); renderRepCount(); }
 
 /* ---------- orders ---------- */
 function renderOrders(){
@@ -512,7 +524,15 @@ function renderIssues(){
     ${Object.entries(by).map(([n,l])=>`<tr><td><b>${esc(n)}</b></td><td>${l.length}</td><td>${l.map(o=>o.date).sort()[0]}</td></tr>`).join('')}</tbody></table></div><div class="muted" style="margin-top:6px">ذكّرهم يدخلون ويأكدون — الطلب ما ينحسب قبل التأكيد.</div>` : '<div class="empty">كل الطلبات السابقة مؤكدة 👍</div>';
 }
 
-/* ---------- reps summary ---------- */
+/* ---------- تقرير المناديب (العدد والمبلغ فقط) ---------- */
+function renderRepCount(){
+  const by={};
+  repFiltered().filter(o=>o.fulfillment!=='pickup' && !o.noPay).forEach(o=>{ const b=by[o.repPhone]=by[o.repPhone]||{name:o.repName,n:0,amt:0}; b.n++; b.amt+=rate(o); });
+  const rows=Object.values(by).sort((a,b)=>b.n-a.n), n=rows.reduce((x,b)=>x+b.n,0), amt=rows.reduce((x,b)=>x+b.amt,0);
+  document.getElementById('rcBody').innerHTML = rows.length ? rows.map(b=>`<tr><td><b>${esc(b.name)}</b></td><td><b>${b.n}</b></td><td style="font-weight:900">${b.amt} ر.س</td></tr>`).join('') : '<tr><td colspan="3" class="empty">ما فيه توصيلات بهذي الفترة</td></tr>';
+  document.getElementById('rcFoot').innerHTML = rows.length ? `<tr><td>المجموع</td><td>${n}</td><td>${amt} ر.س</td></tr>` : '';
+}
+
 /* ---------- diffs ---------- */
 // مشرف المناديب يراجع فارق التوصيل (يتأكد من الإثبات والمطابقة) — والاعتماد للإدارة
 async function reviewDiff(id){
