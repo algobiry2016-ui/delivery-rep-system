@@ -16,7 +16,7 @@
 <script>
 // تنبيه "فيه نسخة جديدة": لو انرفع تحديث والصفحة مفتوحة من قبل، يطلع شريط يطلب التحديث (عشان ما يشتغل أحد على نسخة قديمة)
 (function(){
-  const APP_V='2026-10-08-3';
+  const APP_V='2026-10-08-4';
   async function chk(){
     try{ const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'}); if(!r.ok) return; const j=await r.json();
       if(j.v && j.v!==APP_V && !document.getElementById('updBar')){
@@ -255,6 +255,7 @@ const TS = firebase.firestore.FieldValue.serverTimestamp;
 
 const TYPES = {doc:'دوكمنتيشن', ward:'ورد إكسبرس', wa:'واتس دوكمنتيشن', shop:'طلبات المحل'};
 let SUP_LIMITED=false;
+let DIFF_ORD={}; const dnum=v=>String(v||'').replace(/[٠-٩]/g,d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/\D/g,'');
 let myRole=null, AREAS=[], ORDERS=[], ENTRIES={}, DIFFS=[], DIFFMAP={}, DISPUTES=[], MISSING=[], STALE=[], SEL=new Set(), VIEW=[];
 
 /* ---------- helpers ---------- */
@@ -342,6 +343,9 @@ async function loadAll(silent){
     ORDERS = o.docs.map(d=>({id:d.id,...d.data()}));
     ENTRIES = Object.fromEntries(e.docs.map(d=>[d.id,{id:d.id,...d.data()}]));
     DIFFS = [...new Map([...df.docs,...dfp.docs].map(d=>[d.id,{id:d.id,...d.data()}])).values()];
+    // مطابقة الفارق مع سجل التسليم كامل (زي لوحة الإدارة): الطلب ممكن يكون من تاريخ قبل الفترة
+    const needNos=[...new Set(DIFFS.map(x=>dnum(x.orderNo)).filter(no=>no && !DIFF_ORD[no] && !ORDERS.some(o=>dnum(o.orderNo)===no)))];
+    await Promise.all(needNos.map(async no=>{ try{ const r=await db.collection('dispatchOrders').where('orderNo','==',no).get(); DIFF_ORD[no]=r.docs.map(d=>d.data()); }catch(err){ console.warn('diffMatch',err); } }));
     DIFFMAP = {};
     DIFFS.filter(x=>x.status!=='rejected').forEach(x=>{ const k=(x.repUid||'')+'|'+norm(x.orderNo); DIFFMAP[k]=DIFFMAP[k]?{...DIFFMAP[k],amount:DIFFMAP[k].amount+(x.amount||0)}:{amount:x.amount||0,status:x.status,area:x.areaName}; });
     DISPUTES = ds.docs.map(d=>d.data()); MISSING = ms.docs.map(d=>d.data());
@@ -547,8 +551,8 @@ function renderDiffs(){
   const list=DIFFS.filter(x=>!r||x.repUid===r).filter(x=>x.status==='pending' || (x.createdAt?.toDate?x.createdAt.toDate()<tEnd:true) || ORDERS.some(o=>norm(o.orderNo)===norm(x.orderNo))).sort((a,b)=>(b.createdAt?.toMillis?.()||0)-(a.createdAt?.toMillis?.()||0));
   const np=DIFFS.filter(x=>x.status==='pending').length; const tb=document.getElementById('tbDiffs'); tb.textContent=np; tb.classList.toggle('show',np>0);
   document.getElementById('diffsBody').innerHTML = list.length ? list.map(x=>{
-    const no=norm(x.orderNo), mine=ORDERS.find(o=>norm(o.orderNo)===no && o.repPhone===x.repUid), other=ORDERS.find(o=>norm(o.orderNo)===no);
-    const match = mine ? '<span class="st st-appr">✓ مسلّم له</span>' : other ? `<span class="st st-rej">⚠️ مسلّم لـ ${esc(other.repName)}</span>` : '<span class="st st-await">مو بسجل التسليم</span>';
+    const no=dnum(x.orderNo), pool=ORDERS.filter(o=>dnum(o.orderNo)===no).concat(DIFF_ORD[no]||[]), mine=pool.find(o=>o.repPhone===x.repUid), other=pool[0];
+    const match = mine ? `<span class="st st-appr">✓ مسلّم له${mine.areaName?' · '+esc(mine.areaName):''}</span>` : other ? `<span class="st st-rej">⚠️ مسلّم لـ ${esc(other.repName)}</span>` : '<span class="st st-await">مو بسجل التسليم</span>';
     const canRev=(myRole==='supervisor'||myRole==='admin') && x.status==='pending';
     const st = x.status==='approved'?'<span class="st st-appr">معتمد</span>':x.status==='rejected'?'<span class="st st-rej">مرفوض</span>':x.status==='reviewed'?'<span class="st st-rev">✓ راجعته · عند الإدارة</span>':(canRev?`<button class="btn btn-green" style="padding:6px 10px;font-size:12px" onclick="reviewDiff('${x.id}')">✓ تمت المراجعة</button>`:'<span class="st st-await">بانتظار المراجعة</span>');
     return `<tr><td class="dim">${x.createdAt?.toDate?riyadh(x.createdAt.toDate()):'—'}</td><td><b>${esc(x.repName)}</b></td><td class="no">${esc(x.orderNo)}</td><td>${match}</td>
