@@ -16,7 +16,7 @@
 <script>
 // تنبيه "فيه نسخة جديدة": لو انرفع تحديث والصفحة مفتوحة من قبل، يطلع شريط يطلب التحديث (عشان ما يشتغل أحد على نسخة قديمة)
 (function(){
-  const APP_V='2026-10-08-1';
+  const APP_V='2026-10-08-2';
   async function chk(){
     try{ const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'}); if(!r.ok) return; const j=await r.json();
       if(j.v && j.v!==APP_V && !document.getElementById('updBar')){
@@ -140,7 +140,7 @@
   <div class="tabs">
     <button class="tab active" data-pane="orders" onclick="showPane('orders')">🧾 الطلبات والمراجعة<span class="tb" id="tbOrders"></span></button>
     <button class="tab sup-hide" data-pane="issues" onclick="showPane('issues')">⚠️ الاعتراضات والبلاغات<span class="tb" id="tbIssues"></span></button>
-    <button class="tab" data-pane="diffs" onclick="showPane('diffs')">🔁 فوارق التوصيل</button>
+    <button class="tab" data-pane="diffs" onclick="showPane('diffs')">🔁 فوارق التوصيل<span class="tb" id="tbDiffs"></span></button>
   </div>
 
   <div class="main">
@@ -318,17 +318,18 @@ async function loadAll(silent){
   liveStart(from,to);
   try{
     const f=new Date(from+'T00:00:00+03:00'), t=new Date(to+'T00:00:00+03:00'); t.setDate(t.getDate()+4);
-    const [o,e,df,ds,ms,pend] = await Promise.all([
+    const [o,e,df,ds,ms,pend,dfp] = await Promise.all([
       db.collection('dispatchOrders').where('date','>=',from).where('date','<=',to).get(),
       db.collection('dailyEntries').where('date','>=',from).where('date','<=',to).get(),
       db.collection('deliveryDiffs').where('createdAt','>=',f).get(),   // لين اليوم: فارق طلب قديم ممكن ينرفع متأخر
       db.collection('dispatchOrders').where('repStatus','==','disputed').get(),
       db.collection('missingReports').where('status','==','open').get(),
-      db.collection('dispatchOrders').where('repStatus','==','pending').get()
+      db.collection('dispatchOrders').where('repStatus','==','pending').get(),
+      db.collection('deliveryDiffs').where('status','==','pending').get().catch(e=>{ console.warn('pendingDiffs',e); return {docs:[]}; })   // اللي تنتظر مراجعة المشرف تطلع دايم مهما كانت الفترة
     ]);
     ORDERS = o.docs.map(d=>({id:d.id,...d.data()}));
     ENTRIES = Object.fromEntries(e.docs.map(d=>[d.id,{id:d.id,...d.data()}]));
-    DIFFS = df.docs.map(d=>({id:d.id,...d.data()}));
+    DIFFS = [...new Map([...df.docs,...dfp.docs].map(d=>[d.id,{id:d.id,...d.data()}])).values()];
     DIFFMAP = {};
     DIFFS.filter(x=>x.status!=='rejected').forEach(x=>{ const k=(x.repUid||'')+'|'+norm(x.orderNo); DIFFMAP[k]=DIFFMAP[k]?{...DIFFMAP[k],amount:DIFFMAP[k].amount+(x.amount||0)}:{amount:x.amount||0,status:x.status,area:x.areaName}; });
     DISPUTES = ds.docs.map(d=>d.data()); MISSING = ms.docs.map(d=>d.data());
@@ -523,7 +524,8 @@ function renderDiffs(){
   const r=document.getElementById('fRep').value;
   const tEnd=new Date(document.getElementById('fTo').value+'T00:00:00+03:00'); tEnd.setDate(tEnd.getDate()+1);
   // جدول الفوارق: اللي انرفعت بالفترة، أو اللي تخص طلبات الفترة حتى لو انرفعت بعدها
-  const list=DIFFS.filter(x=>!r||x.repUid===r).filter(x=>(x.createdAt?.toDate?x.createdAt.toDate()<tEnd:true) || ORDERS.some(o=>norm(o.orderNo)===norm(x.orderNo))).sort((a,b)=>(b.createdAt?.toMillis?.()||0)-(a.createdAt?.toMillis?.()||0));
+  const list=DIFFS.filter(x=>!r||x.repUid===r).filter(x=>x.status==='pending' || (x.createdAt?.toDate?x.createdAt.toDate()<tEnd:true) || ORDERS.some(o=>norm(o.orderNo)===norm(x.orderNo))).sort((a,b)=>(b.createdAt?.toMillis?.()||0)-(a.createdAt?.toMillis?.()||0));
+  const np=DIFFS.filter(x=>x.status==='pending').length; const tb=document.getElementById('tbDiffs'); tb.textContent=np; tb.classList.toggle('show',np>0);
   document.getElementById('diffsBody').innerHTML = list.length ? list.map(x=>{
     const no=norm(x.orderNo), mine=ORDERS.find(o=>norm(o.orderNo)===no && o.repPhone===x.repUid), other=ORDERS.find(o=>norm(o.orderNo)===no);
     const match = mine ? '<span class="st st-appr">✓ مسلّم له</span>' : other ? `<span class="st st-rej">⚠️ مسلّم لـ ${esc(other.repName)}</span>` : '<span class="st st-await">مو بسجل التسليم</span>';
