@@ -140,7 +140,6 @@
   <div class="tabs">
     <button class="tab active" data-pane="orders" onclick="showPane('orders')">🧾 الطلبات والمراجعة<span class="tb" id="tbOrders"></span></button>
     <button class="tab sup-hide" data-pane="issues" onclick="showPane('issues')">⚠️ الاعتراضات والبلاغات<span class="tb" id="tbIssues"></span></button>
-    <button class="tab sup-hide" data-pane="reps" onclick="showPane('reps')">👥 ملخص المناديب</button>
     <button class="tab" data-pane="diffs" onclick="showPane('diffs')">🔁 فوارق التوصيل</button>
   </div>
 
@@ -207,16 +206,6 @@
       <div class="card"><h3>اعتراضات المناديب المفتوحة <span id="cntDisp" class="muted"></span></h3><div id="dispBox"></div></div>
       <div class="card"><h3>بلاغات طلبات وصّلوها وما انسجلت <span id="cntMiss" class="muted"></span></h3><div id="missBox"></div></div>
       <div class="card"><h3>طلبات ما أكدها المندوب من أيام سابقة</h3><div id="staleBox"></div></div>
-    </div>
-
-    <!-- ملخص المناديب -->
-    <div id="pane-reps" class="pane">
-      <div class="card"><h3>ملخص كل مندوب للفترة</h3><div class="scroll"><table style="min-width:900px">
-        <thead><tr><th>المندوب</th><th>التوصيلات</th><th>دوكمنتيشن</th><th>ورد إكسبرس</th><th>واتس</th><th>محل</th><th>أكد</th><th>ما أكد</th><th>اعتراض</th><th>رجعت</th><th>فوارق</th><th>معتمد</th><th>بانتظار</th><th>الإجمالي</th></tr></thead>
-        <tbody id="repsBody"></tbody><tfoot id="repsFoot"></tfoot>
-      </table></div></div>
-      <div class="card"><h3>المناديب × المناطق (عدد التوصيلات)</h3><div class="scroll" id="matrixBox"></div></div>
-      <div class="card"><h3>حسب اليوم</h3><div class="scroll" id="dailyBox"></div></div>
     </div>
 
     <!-- فوارق التوصيل -->
@@ -408,7 +397,7 @@ function repCell(o){
   return '<span class="st st-await">⏳ ما أكد</span>';
 }
 function repFiltered(){ const r=document.getElementById('fRep').value; return ORDERS.filter(o=>!r||o.repPhone===r); }
-function renderAll(){ renderOrders(); renderIssues(); renderReps(); renderDiffs(); }
+function renderAll(){ renderOrders(); renderIssues(); renderDiffs(); }
 
 /* ---------- orders ---------- */
 function renderOrders(){
@@ -523,39 +512,6 @@ function renderIssues(){
 }
 
 /* ---------- reps summary ---------- */
-function renderReps(){
-  const list=repFiltered().filter(o=>o.fulfillment!=='pickup');
-  const by={}, tot={n:0,doc:0,ward:0,wa:0,shop:0,c:0,u:0,d:0,ret:0,df:0,ap:0,aw:0,all:0};
-  list.forEach(o=>{
-    const k=o.repPhone; by[k]=by[k]||{name:o.repName,n:0,doc:0,ward:0,wa:0,shop:0,c:0,u:0,d:0,ret:0,df:0,ap:0,aw:0,all:0,seen:new Set()};
-    const b=by[k], s=stage(o), r=rate(o);
-    b.n++; b[o.type]=(b[o.type]||0)+1; b.all+=r;
-    if(o.repStatus==='confirmed') b.c++; else if(o.repStatus==='disputed') b.d++; else b.u++;
-    if(o.returned) b.ret++;
-    if(s==='approved') b.ap+=r; if(s==='toReview'||s==='reviewed') b.aw+=r;
-    const df=diffOf(o); if(df && !b.seen.has(o.orderNo)){ b.df+=df.amount; b.all+=df.amount; b.seen.add(o.orderNo); }
-  });
-  const rows=Object.values(by).sort((a,b)=>b.n-a.n);
-  rows.forEach(b=>Object.keys(tot).forEach(k=>tot[k]+=b[k]||0));
-  document.getElementById('repsBody').innerHTML = rows.length ? rows.map(b=>`<tr><td><b>${esc(b.name)}</b></td><td><b>${b.n}</b></td><td>${b.doc}</td><td>${b.ward}</td><td>${b.wa}</td><td>${b.shop}</td>
-    <td>${b.c}</td><td>${b.u||'—'}</td><td>${b.d||'—'}</td><td>${b.ret||'—'}</td><td>${b.df?b.df+' ر.س':'—'}</td>
-    <td style="color:var(--green);font-weight:700">${b.ap} ر.س</td><td style="color:var(--amber);font-weight:700">${b.aw} ر.س</td><td style="font-weight:900">${b.all} ر.س</td></tr>`).join('') : '<tr><td colspan="14" class="empty">—</td></tr>';
-  document.getElementById('repsFoot').innerHTML = rows.length ? `<tr><td>المجموع</td><td>${tot.n}</td><td>${tot.doc}</td><td>${tot.ward}</td><td>${tot.wa}</td><td>${tot.shop}</td><td>${tot.c}</td><td>${tot.u}</td><td>${tot.d}</td><td>${tot.ret}</td><td>${tot.df} ر.س</td><td>${tot.ap} ر.س</td><td>${tot.aw} ر.س</td><td>${tot.all} ر.س</td></tr>` : '';
-
-  // المناديب × المناطق
-  const areas=[...new Map(list.map(o=>[o.areaId,o.areaName])).entries()];
-  const reps=Object.entries(by);
-  document.getElementById('matrixBox').innerHTML = reps.length ? `<table style="min-width:${300+areas.length*90}px"><thead><tr><th>المندوب</th>${areas.map(([,n])=>`<th>${esc(n)}</th>`).join('')}<th>المجموع</th></tr></thead><tbody>
-    ${reps.map(([p,b])=>`<tr><td><b>${esc(b.name)}</b></td>${areas.map(([id])=>{ const n=list.filter(o=>o.repPhone===p&&o.areaId===id).length; return `<td>${n||'<span class="dim">—</span>'}</td>`; }).join('')}<td><b>${b.n}</b></td></tr>`).join('')}</tbody>
-    <tfoot><tr><td>المجموع</td>${areas.map(([id])=>`<td>${list.filter(o=>o.areaId===id).length}</td>`).join('')}<td>${list.length}</td></tr></tfoot></table>` : '<div class="empty">—</div>';
-
-  // حسب اليوم
-  const days=[...new Set(repFiltered().map(o=>o.date))].sort().reverse();
-  const all=repFiltered();
-  document.getElementById('dailyBox').innerHTML = days.length ? `<table style="min-width:640px"><thead><tr><th>التاريخ</th><th>اليوم</th>${Object.values(TYPES).map(t=>`<th>${t}</th>`).join('')}<th>استلام</th><th>التوصيلات</th></tr></thead><tbody>
-    ${days.map(d=>{ const l=all.filter(o=>o.date===d); return `<tr><td>${d}</td><td>${new Date(d+'T12:00:00').toLocaleDateString('ar-SA',{weekday:'long'})}</td>${Object.keys(TYPES).map(t=>`<td>${l.filter(o=>o.type===t&&o.fulfillment!=='pickup').length}</td>`).join('')}<td>${l.filter(o=>o.fulfillment==='pickup').length}</td><td><b>${l.filter(o=>o.fulfillment!=='pickup').length}</b></td></tr>`; }).join('')}</tbody></table>` : '<div class="empty">—</div>';
-}
-
 /* ---------- diffs ---------- */
 // مشرف المناديب يراجع فارق التوصيل (يتأكد من الإثبات والمطابقة) — والاعتماد للإدارة
 async function reviewDiff(id){
