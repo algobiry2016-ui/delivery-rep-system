@@ -16,7 +16,7 @@
 <script>
 // تنبيه "فيه نسخة جديدة": لو انرفع تحديث والصفحة مفتوحة من قبل، يطلع شريط يطلب التحديث (عشان ما يشتغل أحد على نسخة قديمة)
 (function(){
-  const APP_V='2026-10-07-2';
+  const APP_V='2026-10-07-5';
   async function chk(){
     try{ const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'}); if(!r.ok) return; const j=await r.json();
       if(j.v && j.v!==APP_V && !document.getElementById('updBar')){
@@ -908,7 +908,10 @@ async function submitDiff(){
   if(!registeredAreaId){ toast('اختر المنطقة المسجّلة بالطلب'); return; }
   if(!actualAreaText){ toast('اكتب المنطقة الفعلية'); return; }
   if(!amount || amount <= 0){ toast('أدخل المبلغ'); return; }
-  if(!diffPhotoBase64){ toast('إرفاق صورة التحويل إلزامي'); return; }
+  // صورة التحويل إلزامية دايماً — إلا طلب واتس/محل في منطقة مسجّلة للواتس (سعرها متفق عليه مع العميل)
+  const linkedArea = linked ? AREAS.find(a=>a.id===linked.areaId) : null;
+  const proofOptional = !!(linked && (linked.type==='wa'||linked.type==='shop') && linkedArea && linkedArea.waOnly);
+  if(!diffPhotoBase64 && !proofOptional){ toast('إرفاق صورة التحويل إلزامي'); return; }
 
   try{
     const registeredArea = AREAS.find(a=>a.id===registeredAreaId);
@@ -923,7 +926,8 @@ async function submitDiff(){
       registeredAreaName: registeredArea ? registeredArea.name : registeredAreaId,
       areaName: actualAreaText,
       amount,
-      proofImage: diffPhotoBase64, // صورة الإثبات كنص Base64
+      proofImage: diffPhotoBase64 || null, // صورة الإثبات كنص Base64
+      proofOptional,
       status: 'pending', // pending -> approved / rejected من لوحة الإدارة
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     });

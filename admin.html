@@ -16,7 +16,7 @@
 <script>
 // تنبيه "فيه نسخة جديدة": لو انرفع تحديث والصفحة مفتوحة من قبل، يطلع شريط يطلب التحديث (عشان ما يشتغل أحد على نسخة قديمة)
 (function(){
-  const APP_V='2026-10-07-2';
+  const APP_V='2026-10-07-5';
   async function chk(){
     try{ const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'}); if(!r.ok) return; const j=await r.json();
       if(j.v && j.v!==APP_V && !document.getElementById('updBar')){
@@ -598,6 +598,7 @@
             <div class="field"><label>اسم المنطقة</label><input id="areaName" placeholder="مثال: أبها"></div>
             <div class="field"><label>سعر دوكمنتيشن (ر.س)</label><input id="areaRateDoc" type="number" placeholder="0"></div>
             <div class="field"><label>سعر ورد إكسبرس (ر.س)</label><input id="areaRateWard" type="number" placeholder="0"></div>
+            <div class="field"><label>المنطقة لـ</label><select id="areaKind" onchange="document.getElementById('areaRateWard').disabled=this.value==='wa'"><option value="all">كل الطلبات</option><option value="wa">الواتس والمحل بس</option></select></div>
             <div class="field"><label>الترتيب</label><input id="areaOrder" type="number" placeholder="1"></div>
           </div>
           <button class="primary" onclick="saveArea()">حفظ المنطقة</button>
@@ -969,15 +970,17 @@ async function saveArea(){
   // نقبل الأرقام العربية (٦) والإنجليزية (6)
   const toEn = v => String(v||'').replace(/[٠-٩]/g,d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[۰-۹]/g,d=>'۰۱۲۳۴۵۶۷۸۹'.indexOf(d));
   const rateDoc = parseFloat(toEn(document.getElementById('areaRateDoc').value));
-  const rateWard = parseFloat(toEn(document.getElementById('areaRateWard').value));
+  const waOnly = document.getElementById('areaKind').value==='wa';
+  // منطقة الواتس والمحل: سعر واحد (سعر دوكمنتيشن) — ما تطلع لطلبات الموقع، وما فيها فارق توصيل لأن السعر متفق عليه مع العميل
+  const rateWard = waOnly ? parseFloat(toEn(document.getElementById('areaRateDoc').value)) : parseFloat(toEn(document.getElementById('areaRateWard').value));
   const order = parseInt(toEn(document.getElementById('areaOrder').value)) || 99;
-  if(!name || !rateDoc || !rateWard){ toast('عبّي اسم المنطقة وسعري البراندين'); return; }
+  if(!name || !rateDoc || !rateWard){ toast(waOnly?'عبّي اسم المنطقة والسعر':'عبّي اسم المنطقة وسعري البراندين'); return; }
 
   // الـ ID ما يقبل "/" — نحولها لشرطة (مثال: الفرعاء/الوادين)
   const id = name.replace(/[\/\s]+/g,'_');
   try{
     await db.collection('settings').doc('areas').collection('list').doc(id).set({
-      name, rateDoc, rateWard, order
+      name, rateDoc, rateWard, order, waOnly
     }, {merge:true});
   }catch(e){ console.error(e); toast('ما انحفظت المنطقة — تحقق من الاتصال أو الصلاحيات'); return; }
 
@@ -986,6 +989,7 @@ async function saveArea(){
   document.getElementById('areaRateDoc').value='';
   document.getElementById('areaRateWard').value='';
   document.getElementById('areaOrder').value='';
+  document.getElementById('areaKind').value='all'; document.getElementById('areaRateWard').disabled=false;
   await loadAreas();
   loadAreasTable();
 }
@@ -999,7 +1003,7 @@ async function loadAreasTable(){
   const priced = a => a.rateDoc>0 && a.rateWard>0;
   body.innerHTML = AREAS.map(a=>`
     <tr>
-      <td>${a.name}${a.addedByDispatcher?' <span style="font-size:11px;color:var(--amber)">(أضافها المشرف (إبراهيم))</span>':''}</td>
+      <td>${a.name}${a.waOnly?' <span style="font-size:11px;background:#EAF2EC;color:#4C7A5C;padding:2px 8px;border-radius:8px;font-weight:700">واتس ومحل بس</span>':''}${a.addedByDispatcher?' <span style="font-size:11px;color:var(--amber)">(أضافها المشرف (إبراهيم))</span>':''}</td>
       ${priced(a) ? `<td>${a.rateDoc} / ${Math.max(0,a.rateDoc-5)} ر.س</td>
       <td>${a.rateWard} / ${Math.max(0,a.rateWard-5)} ر.س</td>`
       : `<td colspan="2"><span style="background:var(--amber-bg);color:var(--amber);padding:3px 10px;border-radius:10px;font-size:12px;font-weight:700">⏳ بانتظار السعر</span>
@@ -1439,7 +1443,7 @@ async function loadDiffs(){
     return `<tr>
       <td>${dateStr}</td><td>${e.repName||'—'}</td><td>#${e.orderNo}${checkTag(e)}</td>
       <td>${e.registeredAreaName || '—'}</td><td>${e.areaName}</td><td>${e.amount} ر.س</td>
-      <td>${e.proofImage ? `<img class="thumb" src="${e.proofImage}" onclick="openImgModal('${e.proofImage.replace(/'/g,"")}')">` : '—'}</td>
+      <td>${e.proofImage ? `<img class="thumb" src="${e.proofImage}" onclick="openImgModal('${e.proofImage.replace(/'/g,"")}')">` : (e.proofOptional?'<span style="font-size:11px;color:var(--ink-soft)">بدون إيصال<br>(منطقة واتس)</span>':'—')}</td>
       <td><span class="badge ${badgeClass}">${badgeText}</span></td>
       <td>${actions}${diffDeleteBtn}</td>
     </tr>`;
@@ -1943,6 +1947,17 @@ function renderReport(){
   const opsTable=tbl(['المندوب','التوصيلات','طلبات مختلفة','مناطق','رجعت','توصيل ثاني','توصيل إضافي','محوّل له','اعترض','متوسط من التواصل للخروج (د)','متوسط من الخروج للوصول (د)','متوسط وقت التأكيد (د)'],
     Object.entries(rp).sort((a,b)=>b[1].n-a[1].n).map(([id,r])=>`<tr><td><b>${oEsc(nm(id))}</b></td><td>${r.n}</td><td>${r.orders.size}</td><td>${r.areas.size}</td><td>${r.ret||'—'}</td><td>${r.re||'—'}</td><td>${r.multi||'—'}</td><td>${r.tr||'—'}</td><td>${r.disp||'—'}</td><td>${avg(cont[id]||[])}</td><td>${avg(dlv[id]||[])}</td><td>${avg(conf[id]||[])}</td></tr>`).join(''),'',1150);
 
+  // ===== ٥ب) ملخص المناديب حسب النوع + المناديب × المناطق (كان في لوحة مهند) =====
+  const byRepT={}; deliv.forEach(o=>{ const k=o.repPhone; const b=byRepT[k]=byRepT[k]||{n:0,c:0,u:0,d:0,ret:0,dl:0,...Object.fromEntries(tk.map(t=>[t,0]))};
+    b.n++; b[o.type]++; if(o.repStatus==='confirmed') b.c++; else if(o.repStatus==='disputed') b.d++; else b.u++; if(o.returned) b.ret++; if(o.deliveredAt) b.dl++; });
+  const rtRows=Object.entries(byRepT).sort((a,b)=>b[1].n-a[1].n);
+  const repTypeTable=tbl(['المندوب','التوصيلات',...tk.map(t=>R_TYPES[t]),'أكد','ما أكد','اعترض','وصل (تم التوصيل)','رجعت'],
+    rtRows.map(([id,b])=>`<tr><td><b>${oEsc(nm(id))}</b></td><td><b>${b.n}</b></td>${tk.map(t=>`<td>${b[t]||'—'}</td>`).join('')}<td>${b.c}</td><td>${b.u||'—'}</td><td>${b.d||'—'}</td><td>${b.dl||'—'}</td><td>${b.ret||'—'}</td></tr>`).join(''),
+    rtRows.length?`<td>المجموع</td><td>${deliv.length}</td>${tk.map(t=>`<td>${deliv.filter(o=>o.type===t).length}</td>`).join('')}<td>${rtRows.reduce((x,[,b])=>x+b.c,0)}</td><td>${rtRows.reduce((x,[,b])=>x+b.u,0)}</td><td>${rtRows.reduce((x,[,b])=>x+b.d,0)}</td><td>${rtRows.reduce((x,[,b])=>x+b.dl,0)}</td><td>${rtRows.reduce((x,[,b])=>x+b.ret,0)}</td>`:'',900);
+  const mAreas=[...new Map(deliv.map(o=>[o.areaId,o.areaName])).entries()];
+  const matrixTable=tbl(['المندوب',...mAreas.map(([,n])=>oEsc(n)),'المجموع'],
+    rtRows.map(([id,b])=>`<tr><td><b>${oEsc(nm(id))}</b></td>${mAreas.map(([aid])=>{ const c=deliv.filter(o=>o.repPhone===id&&o.areaId===aid).length; return `<td>${c||'<span class="dim">—</span>'}</td>`; }).join('')}<td><b>${b.n}</b></td></tr>`).join(''),
+    rtRows.length?`<td>المجموع</td>${mAreas.map(([aid])=>`<td>${deliv.filter(o=>o.areaId===aid).length}</td>`).join('')}<td>${deliv.length}</td>`:'',300+mAreas.length*90);
   // ===== ٦) المنسقين =====
   // الطلب اللي جهّزه أكثر من منسق ينحسب لكل واحد منهم
   const fl={}; O.forEach(o=>{ const fs=(Array.isArray(o.florists)&&o.florists.length?o.florists:String(o.florist||'').split(' + ').filter(Boolean)); (fs.length?fs:['—']).forEach(k=>{ fl[k]=fl[k]||{n:0,...Object.fromEntries(tk.map(t=>[t,0]))}; fl[k].n++; fl[k][o.type]++; }); });
@@ -2022,6 +2037,8 @@ function renderReport(){
     ${card('📍 المناطق', areaTable, 'التوصيلات فقط — الاستلام من المتجر ما له منطقة.')}
     ${dayN>1?card('📅 حسب اليوم', dayTable):''}
     ${card('🛵 أداء المناديب (تشغيل)', opsTable, '"طلبات مختلفة" أقل من "التوصيلات" لما يكون فيه توصيل ثاني أو توصيل إضافي لنفس رقم الطلب.')}
+    ${card('👥 ملخص المناديب حسب النوع', repTypeTable)}
+    ${card('🗺️ المناديب × المناطق (عدد التوصيلات)', matrixTable)}
     ${card('💐 المنسقين', flTable)}
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px">
       ${card('↩︎ أسباب رجوع الطلبات', listT(reasons,'ما رجع أي طلب 👍'))}

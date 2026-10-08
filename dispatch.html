@@ -16,7 +16,7 @@
 <script>
 // تنبيه "فيه نسخة جديدة": لو انرفع تحديث والصفحة مفتوحة من قبل، يطلع شريط يطلب التحديث (عشان ما يشتغل أحد على نسخة قديمة)
 (function(){
-  const APP_V='2026-10-07-2';
+  const APP_V='2026-10-07-5';
   async function chk(){
     try{ const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'}); if(!r.ok) return; const j=await r.json();
       if(j.v && j.v!==APP_V && !document.getElementById('updBar')){
@@ -587,9 +587,10 @@ async function loadFloristList(){
     if(canWrite){ try{ await ref.set({names:FLORISTS}); }catch(e){} }
   }
 }
-function areaOptions(sel, ph='المنطقة...'){ return `<option value="">${ph}</option>`+AREAS.map(a=>`<option value="${esc(a.id)}" ${a.id===sel?'selected':''}>${esc(a.name)}</option>`).join('')+(canWrite?'<option value="__new">+ منطقة جديدة...</option>':''); }
+// المناطق "الخاصة بالواتس والمحل" ما تطلع لطلبات دوكمنتيشن وورد إكسبرس (الموقع)
+function areaOptions(sel, ph='المنطقة...', type){ return `<option value="">${ph}</option>`+AREAS.filter(a=>!a.waOnly || !type || PHONE_TYPES.includes(type) || a.id===sel).map(a=>`<option value="${esc(a.id)}" ${a.id===sel?'selected':''}>${esc(a.name)}</option>`).join('')+(canWrite?'<option value="__new">+ منطقة جديدة...</option>':''); }
 function refreshAreaSelects(){
-  document.querySelectorAll('.o-area,.o-area-x').forEach(s=>{ const v=s.value; s.innerHTML=areaOptions(v==='__new'?'':v); });
+  document.querySelectorAll('.o-area,.o-area-x').forEach(s=>{ const v=s.value; const t=s.closest('.orow')?.dataset.type; s.innerHTML=areaOptions(v==='__new'?'':v,'المنطقة...',t); if(s.value!==v) s.value=''; });
 }
 
 /* ---------------- QUICK ADD: REP / AREA ---------------- */
@@ -639,9 +640,9 @@ function renderLists(){
   const bl={both:'الكل',documentation:'دوكمنتيشن',ward:'ورد إكسبرس'};
   document.getElementById('repsBody').innerHTML = REPS.map(r=>`<tr><td><b>${esc(r.name)}</b>${(r.isAmmar&&isFullAdmin)?' <span class="muted">(خصم 5)</span>':''}${r.addedByDispatcher?'<span class="new-tag">مضاف من المشرف</span>':''}</td><td>${esc(r.phone||r.id)}</td><td>${bl[r.brand]||'الكل'}</td></tr>`).join('');
   // المشرف ما يشوف أي مبالغ — الأسعار للإدارة فقط
-  if(!isFullAdmin){ document.getElementById('areasTitle').textContent='المناطق'; document.getElementById('areasHead').innerHTML='<tr><th>المنطقة</th><th>الحالة</th></tr>'; }
+  document.getElementById('areasTitle').textContent='المناطق'; document.getElementById('areasHead').innerHTML='<tr><th>المنطقة</th><th>الحالة</th></tr>';   // الأسعار في لوحة الإدارة بس
   document.getElementById('areasBody').innerHTML = AREAS.map(a=>`<tr><td><b>${esc(a.name)}</b>${a.addedByDispatcher?'<span class="new-tag">مضافة من المشرف</span>':''}</td>${
-    !isFullAdmin ? (isPriced(a)?'<td><span class="rs rs-confirmed">✓ جاهزة</span></td>':'<td><span class="new-tag">بانتظار الإدارة</span></td>')
+    true ? (isPriced(a)?`<td><span class="rs rs-confirmed">✓ جاهزة</span>${a.waOnly?' <span class="new-tag">واتس ومحل بس</span>':''}</td>`:'<td><span class="new-tag">بانتظار الإدارة</span></td>')
     : (isPriced(a)?`<td>${a.rateDoc} ر.س</td><td>${a.rateWard} ر.س</td>`:'<td colspan="2"><span class="new-tag">بانتظار السعر من الإدارة</span></td>')}</tr>`).join('');
 }
 function isPriced(a){ return a && a.rateDoc>0 && a.rateWard>0; }
@@ -713,7 +714,7 @@ function addRow(prep, redel){
     <div class="row2">
       <div class="field"><select class="o-florist" onchange="onFloristSelect(this)" ${prep?'disabled':''}>${floristOptions(prep?prep.floristName:(redel?floristsOf(redel)[0]:''))}</select>
         <div class="flor-x"></div>${prep?'':`<button type="button" class="mini" style="margin-top:6px" onclick="addRowFlorist(this)">＋ منسق ثاني</button>`}</div>
-      <div class="field o-area-field" style="${MODE==='pickup'?'display:none':''}"><select class="o-area" onchange="onAreaSelect(this)">${areaOptions(redel?redel.areaId:prevArea)}</select></div>
+      <div class="field o-area-field" style="${MODE==='pickup'?'display:none':''}"><select class="o-area" onchange="onAreaSelect(this)">${areaOptions(redel?redel.areaId:prevArea,'المنطقة...',redel?redel.type:prevType)}</select></div>
     </div>
     <div class="field" style="margin:0"><input class="o-notes" placeholder="ملاحظات (اختياري)" value="${redel?esc('توصيل ثاني — '+(redel.returnReason||'')):''}"></div>
     <div class="extra-areas"></div>
@@ -955,7 +956,7 @@ function addExtraArea(rowId){
   const n=box.children.length+2;
   const div=document.createElement('div');
   div.className='row2 xrow'; div.style.marginTop='8px';
-  div.innerHTML=`<div class="field" style="margin:0"><label style="font-size:11.5px">المنطقة ${n} (مستلم آخر)</label><select class="o-area-x" onchange="onAreaSelect(this)">${areaOptions('')}</select></div>
+  div.innerHTML=`<div class="field" style="margin:0"><label style="font-size:11.5px">المنطقة ${n} (مستلم آخر)</label><select class="o-area-x" onchange="onAreaSelect(this)">${areaOptions('','المنطقة...',r.dataset.type)}</select></div>
     <div style="display:flex;align-items:end"><button type="button" class="danger" onclick="this.closest('.xrow').remove();renumberX('${rowId}')">✕ إزالة</button></div>`;
   box.appendChild(div);
 }
@@ -1028,6 +1029,7 @@ function pickType(id,t){
   const r=document.getElementById(id); r.dataset.type=t;
   r.querySelectorAll('.seg button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
   const inp=r.querySelector('.o-no'); if(!inp.readOnly) inp.placeholder = noPlaceholder(t);
+  r.querySelectorAll('.o-area,.o-area-x').forEach(s=>{ const v=s.value; s.innerHTML=areaOptions(v,'المنطقة...',t); if(s.value!==v) s.value=''; });
 }
 
 async function saveHandover(){
@@ -1073,6 +1075,7 @@ async function saveHandover(){
         continue;
       }
     }
+    { const ar=AREAS.find(a=>a.id===r.querySelector('.o-area').value); if(!pickup && ar && ar.waOnly && !PHONE_TYPES.includes(r.dataset.type||'doc')){ toast(`طلب ${n}: منطقة ${ar.name} خاصة بالواتس والمحل`); return; } }
     const isRedel = !!r.dataset.redeliveryOf;
     const multi = false;
     const cTime = handCT;
@@ -1878,13 +1881,11 @@ async function loadReports(){
       ${tkeys.map(t=>`<div class="stat"><div class="v">${sumOf(orders,t)}</div><div class="l">${TYPES[t].full}</div></div>`).join('')}
       <div class="stat"><div class="v">${returned.length}</div><div class="l">رجعت للمحل</div></div>
       <div class="stat"><div class="v">${dayCount?Math.round(orders.length/dayCount*10)/10:'—'}</div><div class="l">متوسط الطلبات باليوم</div></div>
-      <div class="stat"><div class="v">${avg(allWaits)}</div><div class="l">متوسط الانتظار قبل الخروج (د)</div></div>
     </div>
-    ${table('المناديب (توصيل)','المندوب',reps,deliv,'<th>أكد</th><th>ما أكد</th><th>اعترض</th><th>رجع</th><th>متوسط من التواصل للخروج (د)</th>'+(isFullAdmin?'<th>المستحق التقديري</th>':''),
-      (k,v)=>{ const l=deliv.filter(o=>o.repPhone===k); const cg=l.map(o=>minsBetween(o.contactedAt,o.departedAt)).filter(x=>x!==null&&x>=0); return `${stCols(l)}<td>${l.filter(o=>o.returned).length}</td><td>${avg(cg)}</td>${isFullAdmin?`<td><b>${v.amount} ر.س</b>${v.unpriced?`<br><span class="new-tag">+${v.unpriced} طلب بدون سعر</span>`:''}</td>`:''}`; },
-      `${stCols(deliv)}<td>${returned.length}</td><td>${avg(deliv.map(o=>minsBetween(o.contactedAt,o.departedAt)).filter(x=>x!==null&&x>=0))}</td>${isFullAdmin?`<td>${totalAmount} ر.س</td>`:''}`)}
+    ${table('المناديب (توصيل)','المندوب',reps,deliv,'<th>أكد</th><th>ما أكد</th><th>اعترض</th><th>رجع</th>',
+      (k,v)=>{ const l=deliv.filter(o=>o.repPhone===k); return `${stCols(l)}<td>${l.filter(o=>o.returned).length}</td>`; },
+      `${stCols(deliv)}<td>${returned.length}</td>`)}
     ${dayCount>1 ? dailyTable : ''}
-    ${table('المناطق (توصيل)','المنطقة',areas,deliv)}
     ${!FLORIST_FLOW ? table('المنسقين','المنسق',florists,florOrders) : table('المنسقين','المنسق',florists,orders,'<th>متوسط التجهيز (د)</th><th>متوسط انتظار الجاهز (د)</th><th>يدوي</th>',
       (k)=>{ const l=florOrders.filter(o=>o._fl===k);
         const prepT=l.map(o=>minsBetween(o.floristReceivedAt,o.floristReadyAt)).filter(x=>x!==null&&x>=0);
@@ -1893,12 +1894,7 @@ async function loadReports(){
       (()=>{ const p=orders.map(o=>minsBetween(o.floristReceivedAt,o.floristReadyAt)).filter(x=>x!==null&&x>=0);
         const w=orders.map(o=>minsBetween(o.floristReadyAt,o.handedAt)).filter(x=>x!==null&&x>=0);
         return `<td>${avg(p)}</td><td>${avg(w)}</td><td>${orders.filter(o=>o.manual).length}</td>`; })())}
-    ${(returned.length||transferred.length)?`<div class="card"><h3>الطلبات الراجعة والمحوّلة</h3><div class="scroll"><table>
-      <thead><tr><th>التاريخ</th><th>رقم الطلب</th><th>المندوب</th><th>الحالة</th><th>التفاصيل</th></tr></thead>
-      <tbody>${returned.map(o=>`<tr><td>${o.date}</td><td style="direction:ltr;unicode-bidi:isolate"><b>${esc(o.orderNo)}</b></td><td>${esc(o.repName)}</td><td><span class="flag f-ret">رجع</span>${o.redeliveryId?' <span class="flag f-re">أُعيد توصيله</span>':''}</td><td>${esc(o.returnReason||'')}${o.secondFeePaid===false?' · <b>بدون رسوم توصيل ثاني</b>':''}</td></tr>`).join('')}
-        ${transferred.map(o=>`<tr><td>${o.date}</td><td style="direction:ltr;unicode-bidi:isolate"><b>${esc(o.orderNo)}</b></td><td>${esc(o.repName)}</td><td><span class="flag f-tr">محوّل من ${esc(o.transferredFrom)}</span></td><td>${esc(o.transferNote||'')}</td></tr>`).join('')}</tbody></table></div></div>`:''}
-    ${isFullAdmin && unpricedTotal?`<div class="note">فيه ${unpricedTotal} طلب على مناطق بانتظار السعر — ما انحسبت في المستحق.</div>`:''}
-    ${isFullAdmin?'<div class="muted">المستحق التقديري = التوصيل فقط حسب أسعار المناطق (مع خصم عمار). التوصيل الثاني لطلب راجع ينحسب توصيلة مستقلة. الاستلام من المتجر ما عليه رسوم.</div>':''}`;
+    <div class="muted">التقارير التفصيلية (المبالغ، المناطق، الأوقات) في لوحة الإدارة.</div>`;
 }
 
 function exportCSV(){
