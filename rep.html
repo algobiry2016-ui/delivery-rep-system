@@ -16,7 +16,7 @@
 <script>
 // تنبيه "فيه نسخة جديدة": لو انرفع تحديث والصفحة مفتوحة من قبل، يطلع شريط يطلب التحديث (عشان ما يشتغل أحد على نسخة قديمة)
 (function(){
-  const APP_V='2026-10-08-4';
+  const APP_V='2026-10-09-1';
   async function chk(){
     try{ const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'}); if(!r.ok) return; const j=await r.json();
       if(j.v && j.v!==APP_V && !document.getElementById('updBar')){
@@ -357,6 +357,14 @@
 
       <!-- ---- HOME ---- -->
       <div id="tab-home" class="tab-panel">
+        <div class="card" id="moneyCard">
+          <h3>💰 فلوسي</h3>
+          <div class="row"><span class="muted">الباقي لي (معتمد)</span><b id="mnApproved" style="font-size:17px;color:var(--green)">—</b></div>
+          <div class="row" style="margin-top:8px;"><span class="muted">بانتظار اعتماد الإدارة</span><b id="mnReviewed">—</b></div>
+          <div class="row" style="margin-top:8px;"><span class="muted">بانتظار مراجعة مشرف المناديب</span><b id="mnPending">—</b></div>
+          <div class="row" id="mnHeldRow" style="margin-top:8px;display:none"><span class="muted" style="color:#B23A3A">⏸ موقوفة للتأكد — مشرف المناديب بيتواصل معك</span><b id="mnHeld" style="color:#B23A3A"></b></div>
+          <div class="muted" style="margin-top:10px;font-size:12px">المبالغ اللي «بانتظار» ما تنضاف لرصيدك إلا بعد اعتماد الإدارة.</div>
+        </div>
         <div class="tiles">
           <div class="tile"><div class="num" id="todayCount">0</div><div class="lbl">طلبات اليوم (معتمدة)</div></div>
           <div class="tile"><div class="num" id="todayAmount">0</div><div class="lbl">مستحق اليوم معتمد (ريال)</div></div>
@@ -632,7 +640,7 @@ auth.onAuthStateChanged(async user=>{
     listenPendingBadge();
     loadDiffOrders();
   } else {
-    currentUser = null;
+    currentUser = null; MY_PAID = null;
     document.getElementById('mainScreen').classList.remove('active');
     document.getElementById('loginScreen').classList.add('active');
     document.getElementById('navbar').style.display = 'none';
@@ -1138,16 +1146,17 @@ function attachNotificationListeners(){
     cachedEntriesForBadge = snap.docs.map(d=>d.data());
     ENTRY_STATUS = Object.fromEntries(snap.docs.map(d=>[d.id, d.data().status||'pending']));
     ENTRY_REASON = Object.fromEntries(snap.docs.map(d=>[d.id, d.data().rejectReason||'']));
-    recomputeLogBadge();
+    ENTRY_HOLD = Object.fromEntries(snap.docs.map(d=>[d.id, d.data().holdNote||'']));
+    recomputeLogBadge(); renderMoney();
     if(typeof renderMyOrders==='function') renderMyOrders();
   });
   db.collection('deliveryDiffs').where('repUid','==',myPhone()).onSnapshot(snap=>{
     cachedDiffsForBadge = snap.docs.map(d=>d.data());
-    recomputeLogBadge();
+    recomputeLogBadge(); renderMoney();
   });
   db.collection('penalties').where('repUid','==',myPhone()).onSnapshot(snap=>{
     cachedPenaltiesForBadge = snap.docs.map(d=>d.data());
-    recomputePenaltiesBadge();
+    recomputePenaltiesBadge(); renderMoney();
   });
 }
 
@@ -1186,7 +1195,7 @@ function listenMyOrders(){
     .onSnapshot(s=>renderMyMissing(s.docs.map(d=>({id:d.id,...d.data()}))), e=>console.error(e));
 }
 
-let ENTRY_STATUS = {}, ENTRY_REASON = {};
+let ENTRY_STATUS = {}, ENTRY_REASON = {}, ENTRY_HOLD = {};
 // حالة الطلب عند المندوب: تأكيده ← ثم اعتماد الإدارة لقيده اليومي
 // "تم التوصيل": شرط للحساب من هذا التاريخ وبعده (الطلبات اللي قبله تمشي على الطريقة القديمة)
 const DELIVERY_FROM='2026-10-05';
@@ -1209,6 +1218,7 @@ function orderStage(o){
     if(es==='approved') return {k:'appr'};
     if(es==='rejected') return {k:'rej'};
     if(es==='reviewed') return {k:'rev'};      // راجعها المشرف — بانتظار الإدارة
+    if(ENTRY_HOLD[o.entryId]) return {k:'held'};   // الإدارة أوقفتها — مشرف المناديب يتأكد مع المندوب
     return {k:'conf'};                         // أكدتها — بانتظار مراجعة المشرف
   }
   if(orderRate(o)<=0) return {k:'nop'};
@@ -1226,6 +1236,7 @@ function stageCell(o){
   if(k==='rej') return `<span class="sp rej">رفضته الإدارة</span>${ENTRY_REASON[o.entryId]?`<div class="sub" style="color:#B23A3A">${escH(ENTRY_REASON[o.entryId])}</div>`:''}`;
   const step=(label,state)=>`<span class="stp ${state}">${state==='on'?'✓ ':''}${label}</span>`;
   const nd=needsDelivery(o);
+  if(k==='held') return '<span class="sp rej">⏸ موقوف للتأكد</span><div class="stxt">مشرف المناديب بيتواصل معك بخصوص هذا الطلب</div>';
   if(k==='transit') return `<button class="btn-ok" style="background:#3A6EA5;white-space:nowrap" onclick="markDelivered('${o.id}')">📦 تم التوصيل</button>`;
   const s2 = k==='rev'||k==='appr' ? 'on' : 'cur';
   const s3 = k==='appr' ? 'on' : (k==='rev' ? 'cur' : '');
@@ -1252,6 +1263,7 @@ function renderMyOrders(){
     n.appr ? `✓ معتمد ${n.appr} (${a.appr} ر.س)` : '',
     n.rev ? `بانتظار الإدارة ${n.rev} (${a.rev} ر.س)` : '',
     n.conf ? `بانتظار مشرف المناديب ${n.conf} (${a.conf} ر.س)` : '',
+    n.held ? `⏸ موقوف للتأكد ${n.held} (${a.held} ر.س)` : '',
     n.pend ? `⏳ تحتاج تأكيدك ${n.pend} (${a.pend} ر.س)` : '',
     n.transit ? `📦 باقي تضغط "تم التوصيل" ${n.transit}` : '',
     n.disp ? `⚠️ معترض ${n.disp}` : '',
@@ -1462,6 +1474,31 @@ function goToOrders(date){
   setTimeout(()=>document.getElementById('myOrdersCard')?.scrollIntoView({behavior:'smooth',block:'start'}),150);
 }
 
+/* ---------------- فلوسي (الرئيسية) ---------------- */
+// من البيانات المباشرة: المعتمد (ناقص الجزاءات والدفعات) + اللي بانتظار الإدارة + اللي بانتظار المشرف
+let MY_PAID = null, PAID_LOADING = false;
+async function loadMyPaid(){
+  PAID_LOADING = true;
+  try{ const s=await db.collection('payouts').where('repUid','==',myPhone()).get(); MY_PAID=s.docs.reduce((t,d)=>t+(d.data().amount||0),0); }
+  catch(e){ console.warn('paid',e); }
+  PAID_LOADING = false; renderMoney();
+}
+function renderMoney(){
+  if(!document.getElementById('mnApproved')) return;
+  let appr=0, rev=0, pend=0, held=0;
+  cachedEntriesForBadge.forEach(e=>{ const a=e.totalAmount||0;
+    if(e.status==='approved') appr+=a; else if(e.status==='reviewed') rev+=a; else if(e.status==='pending'){ if(e.holdNote) held+=a; else pend+=a; } });
+  (cachedDiffsForBadge||[]).forEach(x=>{ const a=x.amount||0;
+    if(x.status==='approved') appr+=a; else if(x.status==='reviewed') rev+=a; else if(x.status==='pending') pend+=a; });
+  (cachedPenaltiesForBadge||[]).forEach(p=>appr-=(p.amount||0));
+  if(MY_PAID===null && !PAID_LOADING && currentUser) loadMyPaid();
+  document.getElementById('mnApproved').textContent = MY_PAID===null ? '…' : (appr-MY_PAID)+' ر.س';
+  document.getElementById('mnReviewed').textContent = rev+' ر.س';
+  document.getElementById('mnPending').textContent = pend+' ر.س';
+  document.getElementById('mnHeldRow').style.display = held?'flex':'none';
+  document.getElementById('mnHeld').textContent = held+' ر.س';
+}
+
 /* ---------------- MY BALANCE ---------------- */
 // الرصيد التراكمي: كل الطلبات والفوارق المعتمدة منذ الأول، ناقص الجزاءات
 // والهدايا، ناقص كل الدفعات اللي استلمتها. نفس حساب لوحة الإدارة بالضبط،
@@ -1483,6 +1520,7 @@ async function loadMyBalance(){
   const payoutsSnap = await db.collection('payouts').where('repUid','==',myPhone()).get();
   payoutsSnap.forEach(d=> paid += (d.data().amount || 0));
 
+  MY_PAID = paid; renderMoney();
   const remaining = earned - paid;
   document.getElementById('balEarned').textContent = earned + ' ر.س';
   document.getElementById('balPaid').textContent = paid + ' ر.س';
