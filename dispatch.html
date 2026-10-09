@@ -16,7 +16,7 @@
 <script>
 // تنبيه "فيه نسخة جديدة": لو انرفع تحديث والصفحة مفتوحة من قبل، يطلع شريط يطلب التحديث (عشان ما يشتغل أحد على نسخة قديمة)
 (function(){
-  const APP_V='2026-10-09-3';
+  const APP_V='2026-10-09-4';
   async function chk(){
     try{ const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'}); if(!r.ok) return; const j=await r.json();
       if(j.v && j.v!==APP_V && !document.getElementById('updBar')){
@@ -741,6 +741,7 @@ async function checkExisting(inp){
   // حالة الاعتماد لكل توصيلة (عشان نعرف إذا يحتاج موافقة الإدارة)
   for(const o of list){ o._approved=false; if(o.entryId){ try{ const e=await db.collection('dailyEntries').doc(o.entryId).get(); o._approved = e.exists && e.data().status==='approved'; }catch(err){} } }
   EXIST[row.id]=list;
+  setTimeout(()=>{ box.querySelectorAll('input[type=radio]').forEach(x=>x.addEventListener('change',()=>exPrefill(row))); },0);
   const st=o=> o.noPay?'رجع — ما تنحسب' : o._approved?'معتمد' : o.repStatus==='confirmed'?'أكده المندوب' : o.repStatus==='disputed'?'اعترض' : 'ما أكده';
   box.innerHTML=`<div class="eh">⚠️ هذا الطلب مسجّل قبل${list.length>1?' (أكثر من توصيلة)':''} — اختر التوصيلة ووش تبي تسوي:</div>
     ${list.map((o,i)=>`<label class="opt dv"><input type="radio" name="ex_${row.id}" value="${o.id}" ${i===0?'checked':''}> <span><b>${esc(o.repName||'—')}</b> · ${esc(o.areaName||'')} · ${o.date} · <span class="muted">${st(o)}</span>${o.multiDelivery?' · مستلم إضافي':''}${o.returned?' · رجع':''}</span></label>`).join('')}
@@ -750,6 +751,13 @@ async function checkExisting(inp){
     ${isPhone?`<label class="opt"><input type="radio" name="ac_${row.id}" value="new"> <span><b>طلب جديد لنفس العميل</b> — طلب ثاني فعلاً بنفس اليوم (يحتاج موافقة الإدارة)</span></label>`:''}
     <input class="ex-why" placeholder="السبب (إلزامي) — مثال: الموقع طلع أبها مو أحد رفيدة" style="margin-top:6px">
     ${list.some(o=>o._approved)?'<div class="muted" style="font-size:12px;margin-top:6px">ملاحظة: التوصيلة المعتمدة — النقل وتعديل المنطقة يروح للإدارة توافق عليه.</div>':''}`;
+}
+// النقل وتعديل المنطقة يحتفظون بكل شي: نعبّي المنطقة والمنسق من الطلب المسجّل
+function exPrefill(row){
+  const e=rowExisting(row); if(!e||!e.target||!['move','area'].includes(e.action)) return;
+  const ar=row.querySelector('.o-area'); if(ar && !ar.value){ ar.innerHTML=areaOptions(e.target.areaId,'المنطقة...',e.target.type); ar.value=e.target.areaId||''; }
+  const fl=row.querySelector('.o-florist'), f0=floristsOf(e.target)[0];
+  if(fl && !fl.value && f0){ if(![...fl.options].some(x=>x.value===f0)) fl.insertAdjacentHTML('beforeend',`<option>${esc(f0)}</option>`); fl.value=f0; }
 }
 function rowExisting(row){
   const list=EXIST[row.id]; if(!list||!list.length) return null;
@@ -790,8 +798,9 @@ async function processExOps(ops, rep){
       } else {
         // نقل لمندوب ثاني: تسليم جديد له، والطلب ينشال من الأول (ومن قيده لو كان أكده)
         const nb=db.collection('dispatchBatches').doc();
-        wb.set(nb, {date:localDate(), repPhone:toRep.id, repName:toRep.name, isAmmar:!!toRep.isAmmar, orderCount:1, handedAt:TS(), departedAt:TS(), transferIn:true, createdBy:currentUser.uid, createdByName:myName, createdAt:TS()});
-        const upd={repPhone:toRep.id, repName:toRep.name, isAmmar:!!toRep.isAmmar, batchId:nb.id, handedAt:TS(), departedAt:TS(),
+        // النقل يحتفظ بكل شي (التاريخ، وقت التسليم والخروج والتواصل، المنسق) — يتغيّر المندوب بس (والمنطقة لو اخترت غيرها)
+        wb.set(nb, {date:o.date||localDate(), repPhone:toRep.id, repName:toRep.name, isAmmar:!!toRep.isAmmar, orderCount:1, handedAt:o.handedAt||TS(), departedAt:o.departedAt||TS(), transferIn:true, createdBy:currentUser.uid, createdByName:myName, createdAt:TS()});
+        const upd={repPhone:toRep.id, repName:toRep.name, isAmmar:!!toRep.isAmmar, batchId:nb.id, handedAt:o.handedAt||TS(), departedAt:o.departedAt||TS(),
           areaId:op.areaId, areaName:area?area.name:'', rate:newRate, repStatus:'pending', entryId:null, disputeReason:null, disputeNote:null,
           transferredFrom:o.repName, transferNote:op.why, transferCount:(o.transferCount||0)+1, transferredAt:TS(), ...(op.areaId!==o.areaId?{areaBefore:o.areaName}:{}),
           deliveredAt:null, repActionAt:null,
@@ -1068,16 +1077,15 @@ async function saveHandover(){
     if(ex && ex.action!=='new'){
       if(!ex.action){ toast(`طلب ${n}: الرقم مسجّل قبل — اختر: ${PHONE_TYPES.includes(type)?'تعديل منطقة أو نقل أو توصيل ثاني أو طلب جديد':'نقل أو تعديل منطقة أو توصيل ثاني'}`); return; }
       if(!ex.why){ toast(`طلب ${n}: اكتب السبب`); return; }
-      const exArea = r.querySelector('.o-area').value;
+      const exArea = r.querySelector('.o-area').value || (ex.action==='move' ? (ex.target.areaId||'') : '');
       if((ex.action==='move'||ex.action==='area') && !exArea){ toast(`طلب ${n}: اختر المنطقة`); return; }
       if(ex.action==='area' && exArea===ex.target.areaId){ toast(`طلب ${n}: المنطقة نفسها ما تغيّرت`); return; }
       if(ex.action==='redel'){
         // يمشي كتوصيل ثاني عادي (التوصيلة الأولى تبقى للأول، والجديد يرفع الإيصال)
         r.dataset.redeliveryOf = ex.target.id; r.dataset.exReason = ex.why;
       } else {
-        const exCT = handCT;
-        if(ex.action==='move' && !exCT){ toast('اكتب وقت تواصل المندوب مع المستلمين فوق (إلزامي)'); return; }
-        exOps.push({...ex, areaId:exArea, n, florist, contactTime:exCT||null});
+        // وقت التواصل: يبقى وقت الطلب الأصلي — ناخذ اللي فوق بس لو الطلب ما له وقت
+        exOps.push({...ex, areaId:exArea, n, florist, contactTime:ex.target.contactTime ? null : (handCT||null)});
         continue;
       }
     }
