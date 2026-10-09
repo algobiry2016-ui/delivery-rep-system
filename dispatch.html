@@ -16,7 +16,7 @@
 <script>
 // تنبيه "فيه نسخة جديدة": لو انرفع تحديث والصفحة مفتوحة من قبل، يطلع شريط يطلب التحديث (عشان ما يشتغل أحد على نسخة قديمة)
 (function(){
-  const APP_V='2026-10-09-2';
+  const APP_V='2026-10-09-3';
   async function chk(){
     try{ const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'}); if(!r.ok) return; const j=await r.json();
       if(j.v && j.v!==APP_V && !document.getElementById('updBar')){
@@ -729,11 +729,13 @@ const EXIST={};   // rowId -> قائمة التوصيلات الموجودة ب�
 async function checkExisting(inp){
   const row=inp.closest('.orow'), box=row.querySelector('.exist-box');
   const type=row.dataset.type||'doc', no=normOrderNo(inp.value);
-  if(PHONE_TYPES.includes(type) || !no || no.length!==SALLA_LEN){ box.innerHTML=''; delete EXIST[row.id]; return; }
-  if(box.dataset.no===no) return;   // نفس الرقم — لا نعيد البناء
-  box.dataset.no=no;
+  const isPhone=PHONE_TYPES.includes(type);
+  // طلبات الواتس والمحل تتعرّف بجوال العميل: نطلع خيارات التعديل لو الجوال مسجّل اليوم (عشان تصحيح المنطقة ما ينحسب تكرار)
+  if(!no || (isPhone ? !/^05\d{8}$/.test(no) : no.length!==SALLA_LEN)){ box.innerHTML=''; box.dataset.no=''; delete EXIST[row.id]; return; }
+  if(box.dataset.no===type+'|'+no) return;   // نفس الرقم — لا نعيد البناء
+  box.dataset.no=type+'|'+no;
   let list=[];
-  try{ list=(await db.collection('dispatchOrders').where('orderNo','==',no).get()).docs.map(d=>({id:d.id,...d.data()})).filter(o=>o.fulfillment!=='pickup'); }catch(e){ return; }
+  try{ list=(await db.collection('dispatchOrders').where('orderNo','==',no).get()).docs.map(d=>({id:d.id,...d.data()})).filter(o=>o.fulfillment!=='pickup' && (!isPhone || o.date===localDate())); }catch(e){ return; }
   if(normOrderNo(inp.value)!==no) return;
   if(!list.length){ box.innerHTML=''; delete EXIST[row.id]; return; }
   // حالة الاعتماد لكل توصيلة (عشان نعرف إذا يحتاج موافقة الإدارة)
@@ -745,6 +747,7 @@ async function checkExisting(inp){
     <label class="opt"><input type="radio" name="ac_${row.id}" value="move"> <span><b>انقله لهذا التسليم</b> — ينشال من المندوب الأول ويصير للمندوب المختار فوق، بالمنطقة المختارة تحت</span></label>
     <label class="opt"><input type="radio" name="ac_${row.id}" value="area"> <span><b>عدّل منطقته بس</b> — يبقى مع نفس المندوب، والمنطقة تصير المختارة تحت (والسعر يتعدّل)</span></label>
     <label class="opt"><input type="radio" name="ac_${row.id}" value="redel"> <span><b>توصيل ثاني</b> — المندوب الأول راح ورجع والعميل دفع رسوم توصيل ثاني. المندوب الجديد يرفع الإيصال قبل ما يأكد</span></label>
+    ${isPhone?`<label class="opt"><input type="radio" name="ac_${row.id}" value="new"> <span><b>طلب جديد لنفس العميل</b> — طلب ثاني فعلاً بنفس اليوم (يحتاج موافقة الإدارة)</span></label>`:''}
     <input class="ex-why" placeholder="السبب (إلزامي) — مثال: الموقع طلع أبها مو أحد رفيدة" style="margin-top:6px">
     ${list.some(o=>o._approved)?'<div class="muted" style="font-size:12px;margin-top:6px">ملاحظة: التوصيلة المعتمدة — النقل وتعديل المنطقة يروح للإدارة توافق عليه.</div>':''}`;
 }
@@ -1030,6 +1033,7 @@ function pickType(id,t){
   r.querySelectorAll('.seg button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
   const inp=r.querySelector('.o-no'); if(!inp.readOnly) inp.placeholder = noPlaceholder(t);
   r.querySelectorAll('.o-area,.o-area-x').forEach(s=>{ const v=s.value; s.innerHTML=areaOptions(v,'المنطقة...',t); if(s.value!==v) s.value=''; });
+  if(!inp.readOnly && inp.value) checkExisting(inp);   // النوع تغيّر: نعيد البحث (واتس/محل بالجوال، الموقع برقم سلة)
 }
 
 async function saveHandover(){
@@ -1048,6 +1052,7 @@ async function saveHandover(){
   if(handCT===null){ toast('وقت التواصل غير مفهوم — اكتبه مثل 2:30'); return; }
   const orders = [];
   const exOps = [];   // نقل / تعديل منطقة لطلبات موجودة
+  const newPhones = new Set();   // جوال مسجّل اليوم واختار إبراهيم "طلب جديد لنفس العميل"
   const seen = new Set();
   for(const [i,r] of [...document.querySelectorAll('.orow')].entries()){
     const no = normOrderNo(r.querySelector('.o-no').value);
@@ -1059,8 +1064,9 @@ async function saveHandover(){
     const type = r.dataset.type||'doc';
     // رقم مسجّل قبل واختار إبراهيم إجراء من نفس الشاشة
     const ex = (!pickup && !r.dataset.redeliveryOf && !r.dataset.prepId) ? rowExisting(r) : null;
-    if(ex){
-      if(!ex.action){ toast(`طلب ${n}: الرقم مسجّل قبل — اختر: نقل أو تعديل منطقة أو توصيل ثاني`); return; }
+    if(ex && ex.action==='new') newPhones.add(no);
+    if(ex && ex.action!=='new'){
+      if(!ex.action){ toast(`طلب ${n}: الرقم مسجّل قبل — اختر: ${PHONE_TYPES.includes(type)?'تعديل منطقة أو نقل أو توصيل ثاني أو طلب جديد':'نقل أو تعديل منطقة أو توصيل ثاني'}`); return; }
       if(!ex.why){ toast(`طلب ${n}: اكتب السبب`); return; }
       const exArea = r.querySelector('.o-area').value;
       if((ex.action==='move'||ex.action==='area') && !exArea){ toast(`طلب ${n}: اختر المنطقة`); return; }
@@ -1121,7 +1127,7 @@ async function saveHandover(){
   const btn=document.getElementById('saveBtn'), btnTxt=btn.textContent; btn.disabled=true; btn.textContent='جاري الحفظ...';
   try{
     // منع التكرار: نفس رقم الطلب ما ينسجل مرتين. التوصيل الثاني لطلب رجع يتم فقط من زر "رجع" بسجل اليوم
-    const dups=[], samePhone=[];
+    const dups=[], samePhone=[], editable=new Set();
     const today = localDate();
     for(const o of orders.filter(x=>x.orderNo && !x.redeliveryOf && !x.prepId && !x.multiDelivery)){
       const s = await db.collection('dispatchOrders').where('orderNo','==',o.orderNo).get();
@@ -1129,10 +1135,18 @@ async function saveHandover(){
       if(PHONE_TYPES.includes(o.type)){
         // نفس العميل ممكن يطلب أكثر من مرة — نمنع التكرار بنفس اليوم إلا بتأكيد، وينسجل في سجل التعديلات
         if(s.docs.some(d=>d.data().date===today)) samePhone.push(o);
+        if(s.docs.some(d=>d.data().date===today && d.data().fulfillment!=='pickup')) editable.add(o.orderNo);   // له توصيلة اليوم تقدر تتعدّل
       } else dups.push(o.orderNo);
     }
     // تكرار نفس جوال العميل بنفس اليوم: غير مسموح لالمشرف — ينرسل طلب للإدارة توافق عليه
     let dupReqs=[];
+    // الجوال مسجّل اليوم وما اختار إبراهيم وش يبي: نوقف ونطلع له الخيارات تحت الجوال (تعديل منطقة / نقل / توصيل ثاني / طلب جديد)
+    const unresolved=[...new Set(samePhone.filter(o=>editable.has(o.orderNo) && !newPhones.has(o.orderNo)).map(o=>o.orderNo))];
+    if(unresolved.length){
+      document.querySelectorAll('.orow').forEach(r=>{ const i=r.querySelector('.o-no'); if(i && unresolved.includes(normOrderNo(i.value))){ r.querySelector('.exist-box').dataset.no=''; checkExisting(i); } });
+      await uiAlert(`رقم الجوال مسجّل اليوم:\n${unresolved.join('\n')}\n\nتحت الرقم يطلع لك الطلب المسجّل — اختر:\n• عدّل منطقته بس (لو المنطقة انكتبت غلط)\n• انقله لمندوب ثاني\n• توصيل ثاني\n• طلب جديد لنفس العميل (يحتاج موافقة الإدارة)\nواكتب السبب، وبعدها احفظ.`);
+      btn.disabled=false; btn.textContent=btnTxt; return;
+    }
     if(samePhone.length){
       const nos=[...new Set(samePhone.map(o=>o.orderNo))];
       const why=await uiPrompt(`⛔ غير مسموح بتكرار رقم الجوال بنفس اليوم:\n${nos.join('\n')}\n\nلو هو طلب جديد فعلاً، اكتب السبب ونرسله للإدارة توافق عليه.\n(لو الطلب رجع ويبي توصيل ثاني: استخدم زر "رجع" من سجل اليوم)`, '');
