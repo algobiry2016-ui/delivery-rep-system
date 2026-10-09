@@ -16,7 +16,7 @@
 <script>
 // تنبيه "فيه نسخة جديدة": لو انرفع تحديث والصفحة مفتوحة من قبل، يطلع شريط يطلب التحديث (عشان ما يشتغل أحد على نسخة قديمة)
 (function(){
-  const APP_V='2026-10-09-1';
+  const APP_V='2026-10-09-2';
   async function chk(){
     try{ const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'}); if(!r.ok) return; const j=await r.json();
       if(j.v && j.v!==APP_V && !document.getElementById('updBar')){
@@ -737,7 +737,7 @@ function buildAreaInputs(){
   waGrid.innerHTML = '';
   AREAS.forEach(area=>{
     const rate = rateForRep(area, brand);
-    grid.innerHTML += `
+    if(!area.waOnly) grid.innerHTML += `
       <div class="area-row">
         <span class="area-name">${area.name}</span>
         <span class="rate">${rate} ر.س</span>
@@ -764,15 +764,19 @@ function switchEntrySource(which){
     : '📝 تعبّي الآن: طلبات واتساب';
 }
 
-function populateDiffAreaSelect(){
+function populateDiffAreaSelect(keepId){
   const brand = document.getElementById('diffBrand') ? document.getElementById('diffBrand').value : 'documentation';
-  const optionsHtml = AREAS.map(a=>{
+  const regEl = document.getElementById('diffAreaRegistered');
+  if(keepId===undefined) keepId = regEl ? regEl.value : '';
+  // مناطق الواتس والمحل ما تطلع كمنطقة مسجّلة — إلا لو هي منطقة الطلب المختار نفسه (طلب واتس/محل)
+  const optionsHtml = AREAS.filter(a=>!a.waOnly || a.id===keepId).map(a=>{
     const rate = rateForRep(a, brand);
     return `<option value="${a.id}">${a.name} (${rate} ر.س)</option>`;
   }).join('');
   // المنطقة المسجّلة دايماً من ضمن مناطقنا الرسمية، فتبقى قائمة منسدلة.
   // المنطقة الفعلية (بفارق التوصيل) قد تكون منطقة مو من ضمن قائمتنا أصلاً — لذلك صارت حقل كتابة حر بالفورم.
-  document.getElementById('diffAreaRegistered').innerHTML = '<option value="">اختر المنطقة المسجّلة...</option>' + optionsHtml;
+  regEl.innerHTML = '<option value="">اختر المنطقة المسجّلة...</option>' + optionsHtml;
+  if(keepId && [...regEl.options].some(x=>x.value===keepId)) regEl.value = keepId;
 }
 
 /* ---------------- SUBMIT DAILY ENTRY ---------------- */
@@ -787,7 +791,7 @@ async function submitDailyEntry(){
 
   AREAS.forEach(area=>{
     const rate = rateForRep(area, brand);
-    const siteCount = parseInt(document.getElementById('site_'+area.id).value) || 0;
+    const siteCount = parseInt(document.getElementById('site_'+area.id)?.value) || 0;   // مناطق الواتس ما لها خانة موقع
     const waCount = (brand === 'ward') ? 0 : (parseInt(document.getElementById('wa_'+area.id).value) || 0);
     if(siteCount > 0){
       entries.push({areaId:area.id, areaName:area.name, source:'site', count:siteCount, rate, amount: siteCount*rate});
@@ -815,7 +819,7 @@ async function submitDailyEntry(){
     });
     toast('تم الإرسال ✅ — بانتظار اعتماد الإدارة قبل ما يُحتسب برصيدك');
     AREAS.forEach(area=>{
-      document.getElementById('site_'+area.id).value = '';
+      const si=document.getElementById('site_'+area.id); if(si) si.value = '';
       document.getElementById('wa_'+area.id).value = '';
     });
     loadLog();
@@ -895,7 +899,7 @@ function onDiffOrderPick(){
   inp.style.display='none';
   const o=DIFF_ORDERS.find(x=>x.id===v); if(!o){ inp.value=''; return; }
   inp.value=o.orderNo;
-  const b=document.getElementById('diffBrand'); b.value = o.brand==='ward'?'ward':'documentation'; populateDiffAreaSelect();
+  const b=document.getElementById('diffBrand'); b.value = o.brand==='ward'?'ward':'documentation'; populateDiffAreaSelect(o.areaId||'');
   const ar=document.getElementById('diffAreaRegistered'); if([...ar.options].some(x=>x.value===o.areaId)) ar.value=o.areaId;
 }
 async function submitDiff(){
