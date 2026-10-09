@@ -16,7 +16,7 @@
 <script>
 // تنبيه "فيه نسخة جديدة": لو انرفع تحديث والصفحة مفتوحة من قبل، يطلع شريط يطلب التحديث (عشان ما يشتغل أحد على نسخة قديمة)
 (function(){
-  const APP_V='2026-10-09-4';
+  const APP_V='2026-10-09-5';
   async function chk(){
     try{ const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'}); if(!r.ok) return; const j=await r.json();
       if(j.v && j.v!==APP_V && !document.getElementById('updBar')){
@@ -731,17 +731,17 @@ async function checkExisting(inp){
   const type=row.dataset.type||'doc', no=normOrderNo(inp.value);
   const isPhone=PHONE_TYPES.includes(type);
   // طلبات الواتس والمحل تتعرّف بجوال العميل: نطلع خيارات التعديل لو الجوال مسجّل اليوم (عشان تصحيح المنطقة ما ينحسب تكرار)
-  if(!no || (isPhone ? !/^05\d{8}$/.test(no) : no.length!==SALLA_LEN)){ box.innerHTML=''; box.dataset.no=''; delete EXIST[row.id]; return; }
+  if(!no || (isPhone ? !/^05\d{8}$/.test(no) : no.length!==SALLA_LEN)){ box.innerHTML=''; box.dataset.no=''; delete EXIST[row.id]; exClearAuto(row); return; }
   if(box.dataset.no===type+'|'+no) return;   // نفس الرقم — لا نعيد البناء
   box.dataset.no=type+'|'+no;
   let list=[];
   try{ list=(await db.collection('dispatchOrders').where('orderNo','==',no).get()).docs.map(d=>({id:d.id,...d.data()})).filter(o=>o.fulfillment!=='pickup' && (!isPhone || o.date===localDate())); }catch(e){ return; }
   if(normOrderNo(inp.value)!==no) return;
-  if(!list.length){ box.innerHTML=''; delete EXIST[row.id]; return; }
+  if(!list.length){ box.innerHTML=''; delete EXIST[row.id]; exClearAuto(row); return; }
   // حالة الاعتماد لكل توصيلة (عشان نعرف إذا يحتاج موافقة الإدارة)
   for(const o of list){ o._approved=false; if(o.entryId){ try{ const e=await db.collection('dailyEntries').doc(o.entryId).get(); o._approved = e.exists && e.data().status==='approved'; }catch(err){} } }
   EXIST[row.id]=list;
-  setTimeout(()=>{ box.querySelectorAll('input[type=radio]').forEach(x=>x.addEventListener('change',()=>exPrefill(row))); },0);
+  setTimeout(()=>{ box.querySelectorAll('input[type=radio]').forEach(x=>x.addEventListener('change',()=>exPrefill(row))); exPrefill(row); },0);
   const st=o=> o.noPay?'رجع — ما تنحسب' : o._approved?'معتمد' : o.repStatus==='confirmed'?'أكده المندوب' : o.repStatus==='disputed'?'اعترض' : 'ما أكده';
   box.innerHTML=`<div class="eh">⚠️ هذا الطلب مسجّل قبل${list.length>1?' (أكثر من توصيلة)':''} — اختر التوصيلة ووش تبي تسوي:</div>
     ${list.map((o,i)=>`<label class="opt dv"><input type="radio" name="ex_${row.id}" value="${o.id}" ${i===0?'checked':''}> <span><b>${esc(o.repName||'—')}</b> · ${esc(o.areaName||'')} · ${o.date} · <span class="muted">${st(o)}</span>${o.multiDelivery?' · مستلم إضافي':''}${o.returned?' · رجع':''}</span></label>`).join('')}
@@ -752,13 +752,17 @@ async function checkExisting(inp){
     <input class="ex-why" placeholder="السبب (إلزامي) — مثال: الموقع طلع أبها مو أحد رفيدة" style="margin-top:6px">
     ${list.some(o=>o._approved)?'<div class="muted" style="font-size:12px;margin-top:6px">ملاحظة: التوصيلة المعتمدة — النقل وتعديل المنطقة يروح للإدارة توافق عليه.</div>':''}`;
 }
-// النقل وتعديل المنطقة يحتفظون بكل شي: نعبّي المنطقة والمنسق من الطلب المسجّل
+// أول ما يطلع إن الطلب مسجّل: نعبّي المنطقة والمنسق من التوصيلة المختارة على طول (النقل وتعديل المنطقة يحتفظون بكل شي)
+// نعبّي الخانة لو فاضية أو كنا عبّيناها تلقائياً قبل (لو اختار توصيلة ثانية) — وما نلمس اللي اختاره إبراهيم بنفسه
 function exPrefill(row){
-  const e=rowExisting(row); if(!e||!e.target||!['move','area'].includes(e.action)) return;
-  const ar=row.querySelector('.o-area'); if(ar && !ar.value){ ar.innerHTML=areaOptions(e.target.areaId,'المنطقة...',e.target.type); ar.value=e.target.areaId||''; }
+  const e=rowExisting(row); if(!e||!e.target) return;
+  const ar=row.querySelector('.o-area');
+  if(ar && (!ar.value || ar.dataset.auto==='1')){ ar.innerHTML=areaOptions(e.target.areaId,'المنطقة...',e.target.type); ar.value=e.target.areaId||''; ar.dataset.auto='1'; ar.addEventListener('change',()=>{ ar.dataset.auto=''; },{once:true}); }
   const fl=row.querySelector('.o-florist'), f0=floristsOf(e.target)[0];
-  if(fl && !fl.value && f0){ if(![...fl.options].some(x=>x.value===f0)) fl.insertAdjacentHTML('beforeend',`<option>${esc(f0)}</option>`); fl.value=f0; }
+  if(fl && f0 && (!fl.value || fl.dataset.auto==='1')){ if(![...fl.options].some(x=>x.value===f0)) fl.insertAdjacentHTML('beforeend',`<option>${esc(f0)}</option>`); fl.value=f0; fl.dataset.auto='1'; fl.addEventListener('change',()=>{ fl.dataset.auto=''; },{once:true}); }
 }
+// الرقم تغيّر لطلب جديد: نفضّي اللي عبّيناه تلقائياً (عشان ما ينسجل الطلب الجديد بمنسق/منطقة الطلب القديم)
+function exClearAuto(row){ row.querySelectorAll('.o-area,.o-florist').forEach(x=>{ if(x.dataset.auto==='1'){ x.value=''; x.dataset.auto=''; } }); }
 function rowExisting(row){
   const list=EXIST[row.id]; if(!list||!list.length) return null;
   const pick=row.querySelector(`input[name="ex_${row.id}"]:checked`), ac=row.querySelector(`input[name="ac_${row.id}"]:checked`);
