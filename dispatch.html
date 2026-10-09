@@ -16,7 +16,7 @@
 <script>
 // تنبيه "فيه نسخة جديدة": لو انرفع تحديث والصفحة مفتوحة من قبل، يطلع شريط يطلب التحديث (عشان ما يشتغل أحد على نسخة قديمة)
 (function(){
-  const APP_V='2026-10-10-1';
+  const APP_V='2026-10-10-2';
   async function chk(){
     try{ const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'}); if(!r.ok) return; const j=await r.json();
       if(j.v && j.v!==APP_V && !document.getElementById('updBar')){
@@ -779,6 +779,7 @@ function exPrefill(row){
     hb.querySelector('.now')?.addEventListener('click',()=>{ hb.dataset.auto=''; },{once:true}); }
   // ملخص التوصيلة المسجّلة: كل هذا ينتقل زي ما هو
   const info=row.querySelector('.ex-info');
+  if(info) info.style.display = isNew ? 'none' : '';   // طلع مع المندوب الجديد: البيانات القديمة ما لها داعي
   if(info) info.innerHTML=(isNew?`<b>بيانات الطلب المسجّل:</b> <span style="color:#A9762F;font-weight:700">المنسق والمنطقة يبقون — التاريخ والأوقات بتصير جديدة</span>`:`<b>بيانات الطلب المسجّل (تبقى زي ما هي):</b>`)+`<br>📅 التاريخ: <b>${esc(t.date||'—')}</b> · 🚚 التسليم: <b>${fmtTime(t.handedAt)}</b>${t.departedAt?` · الخروج: <b>${fmtTime(t.departedAt)}</b>`:''} · 📞 التواصل: <b>${t.contactTime?to12ar(t.contactTime):'—'}</b><br>💐 المنسق: <b>${esc(floristsOf(t).join(' + ')||'—')}</b> · 📍 المنطقة: <b>${esc(t.areaName||'—')}</b>${t.deliveredAt?` · 📦 وصل: <b>${fmtTime(t.deliveredAt)}</b>`:''}`;
 }
 // الرقم تغيّر لطلب جديد: نفضّي اللي عبّيناه تلقائياً (عشان ما ينسجل الطلب الجديد بمنسق/منطقة الطلب القديم)
