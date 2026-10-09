@@ -16,7 +16,7 @@
 <script>
 // تنبيه "فيه نسخة جديدة": لو انرفع تحديث والصفحة مفتوحة من قبل، يطلع شريط يطلب التحديث (عشان ما يشتغل أحد على نسخة قديمة)
 (function(){
-  const APP_V='2026-10-09-5';
+  const APP_V='2026-10-09-6';
   async function chk(){
     try{ const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'}); if(!r.ok) return; const j=await r.json();
       if(j.v && j.v!==APP_V && !document.getElementById('updBar')){
@@ -666,7 +666,7 @@ async function onFloristSelect(sel){
 /* ---------------- NEW HANDOVER FORM ---------------- */
 let rowSeq = 0;
 function resetForm(){
-  const hb=document.getElementById('handContactBox'); if(hb) hb.innerHTML=timePicker('');
+  const hb=document.getElementById('handContactBox'); if(hb){ hb.innerHTML=timePicker(''); hb.dataset.auto=''; }
   document.getElementById('repSelect').value='';
   document.getElementById('orderRows').innerHTML='';
   rowSeq=0; SELECTED.clear();
@@ -749,6 +749,7 @@ async function checkExisting(inp){
     <label class="opt"><input type="radio" name="ac_${row.id}" value="area"> <span><b>عدّل منطقته بس</b> — يبقى مع نفس المندوب، والمنطقة تصير المختارة تحت (والسعر يتعدّل)</span></label>
     <label class="opt"><input type="radio" name="ac_${row.id}" value="redel"> <span><b>توصيل ثاني</b> — المندوب الأول راح ورجع والعميل دفع رسوم توصيل ثاني. المندوب الجديد يرفع الإيصال قبل ما يأكد</span></label>
     ${isPhone?`<label class="opt"><input type="radio" name="ac_${row.id}" value="new"> <span><b>طلب جديد لنفس العميل</b> — طلب ثاني فعلاً بنفس اليوم (يحتاج موافقة الإدارة)</span></label>`:''}
+    <div class="ex-info" style="margin-top:8px;font-size:12.5px;background:#fff;border:1px dashed var(--line);border-radius:10px;padding:8px 10px"></div>
     <input class="ex-why" placeholder="السبب (إلزامي) — مثال: الموقع طلع أبها مو أحد رفيدة" style="margin-top:6px">
     ${list.some(o=>o._approved)?'<div class="muted" style="font-size:12px;margin-top:6px">ملاحظة: التوصيلة المعتمدة — النقل وتعديل المنطقة يروح للإدارة توافق عليه.</div>':''}`;
 }
@@ -760,9 +761,18 @@ function exPrefill(row){
   if(ar && (!ar.value || ar.dataset.auto==='1')){ ar.innerHTML=areaOptions(e.target.areaId,'المنطقة...',e.target.type); ar.value=e.target.areaId||''; ar.dataset.auto='1'; ar.addEventListener('change',()=>{ ar.dataset.auto=''; },{once:true}); }
   const fl=row.querySelector('.o-florist'), f0=floristsOf(e.target)[0];
   if(fl && f0 && (!fl.value || fl.dataset.auto==='1')){ if(![...fl.options].some(x=>x.value===f0)) fl.insertAdjacentHTML('beforeend',`<option>${esc(f0)}</option>`); fl.value=f0; fl.dataset.auto='1'; fl.addEventListener('change',()=>{ fl.dataset.auto=''; },{once:true}); }
+  // وقت التواصل فوق: نعبّيه من الطلب لو فاضي (بـ ص/م عشان ما يتفسّر غلط)
+  const hb=document.getElementById('handContactBox'), ht=hb&&hb.querySelector('.tp-txt'), t=e.target;
+  if(ht && t.contactTime && (!ht.value.trim() || hb.dataset.auto==='1')){ hb.innerHTML=timePicker(t.contactTime); hb.querySelector('.tp-txt').value=to12ar(t.contactTime); hb.dataset.auto='1';
+    hb.querySelector('.tp-txt').addEventListener('input',()=>{ hb.dataset.auto=''; },{once:true});
+    hb.querySelector('.now')?.addEventListener('click',()=>{ hb.dataset.auto=''; },{once:true}); }
+  // ملخص التوصيلة المسجّلة: كل هذا ينتقل زي ما هو
+  const info=row.querySelector('.ex-info');
+  if(info) info.innerHTML=`<b>بيانات الطلب المسجّل (تبقى زي ما هي):</b><br>📅 التاريخ: <b>${esc(t.date||'—')}</b> · 🚚 التسليم: <b>${fmtTime(t.handedAt)}</b>${t.departedAt?` · الخروج: <b>${fmtTime(t.departedAt)}</b>`:''} · 📞 التواصل: <b>${t.contactTime?to12ar(t.contactTime):'—'}</b><br>💐 المنسق: <b>${esc(floristsOf(t).join(' + ')||'—')}</b> · 📍 المنطقة: <b>${esc(t.areaName||'—')}</b>${t.deliveredAt?` · 📦 وصل: <b>${fmtTime(t.deliveredAt)}</b>`:''}`;
 }
 // الرقم تغيّر لطلب جديد: نفضّي اللي عبّيناه تلقائياً (عشان ما ينسجل الطلب الجديد بمنسق/منطقة الطلب القديم)
-function exClearAuto(row){ row.querySelectorAll('.o-area,.o-florist').forEach(x=>{ if(x.dataset.auto==='1'){ x.value=''; x.dataset.auto=''; } }); }
+function exClearAuto(row){ row.querySelectorAll('.o-area,.o-florist').forEach(x=>{ if(x.dataset.auto==='1'){ x.value=''; x.dataset.auto=''; } });
+  const hb=document.getElementById('handContactBox'); if(hb && hb.dataset.auto==='1' && !Object.keys(EXIST).length){ hb.innerHTML=timePicker(''); hb.dataset.auto=''; } }
 function rowExisting(row){
   const list=EXIST[row.id]; if(!list||!list.length) return null;
   const pick=row.querySelector(`input[name="ex_${row.id}"]:checked`), ac=row.querySelector(`input[name="ac_${row.id}"]:checked`);
