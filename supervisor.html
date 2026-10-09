@@ -16,7 +16,7 @@
 <script>
 // تنبيه "فيه نسخة جديدة": لو انرفع تحديث والصفحة مفتوحة من قبل، يطلع شريط يطلب التحديث (عشان ما يشتغل أحد على نسخة قديمة)
 (function(){
-  const APP_V='2026-10-08-4';
+  const APP_V='2026-10-09-1';
   async function chk(){
     try{ const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'}); if(!r.ok) return; const j=await r.json();
       if(j.v && j.v!==APP_V && !document.getElementById('updBar')){
@@ -165,6 +165,11 @@
     <!-- الطلبات والمراجعة -->
     <div id="pane-orders" class="pane active">
       <div class="note">راجع الطلبات اللي أكدها المناديب وحدد <b>تمت المراجعة</b> — بعدها تروح للإدارة للاعتماد النهائي.</div>
+      <div class="card" id="heldCard" style="display:none;border:2px solid #E8B4B4;background:#FFF8F8">
+        <h3>⏸ طلبات أوقفتها الإدارة — تأكد مع المندوب</h3>
+        <div class="muted" style="margin-bottom:10px">الإدارة عندها شك في هذي الطلبات (بكل التواريخ). تواصل مع المندوب وتأكد، وبعدها اضغط «تأكدت» ترجع للإدارة للاعتماد.</div>
+        <div id="heldBox"></div>
+      </div>
       <div class="tiles" id="oTiles"></div>
       <div class="card">
         <div class="filters">
@@ -255,7 +260,7 @@ const TS = firebase.firestore.FieldValue.serverTimestamp;
 
 const TYPES = {doc:'دوكمنتيشن', ward:'ورد إكسبرس', wa:'واتس دوكمنتيشن', shop:'طلبات المحل'};
 let SUP_LIMITED=false;
-let DIFF_ORD={}; const dnum=v=>String(v||'').replace(/[٠-٩]/g,d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/\D/g,'');
+let DIFF_ORD={}, HELD=[]; const dnum=v=>String(v||'').replace(/[٠-٩]/g,d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/\D/g,'');
 let myRole=null, AREAS=[], ORDERS=[], ENTRIES={}, DIFFS=[], DIFFMAP={}, DISPUTES=[], MISSING=[], STALE=[], SEL=new Set(), VIEW=[];
 
 /* ---------- helpers ---------- */
@@ -346,6 +351,12 @@ async function loadAll(silent){
     // مطابقة الفارق مع سجل التسليم كامل (زي لوحة الإدارة): الطلب ممكن يكون من تاريخ قبل الفترة
     const needNos=[...new Set(DIFFS.map(x=>dnum(x.orderNo)).filter(no=>no && !DIFF_ORD[no] && !ORDERS.some(o=>dnum(o.orderNo)===no)))];
     await Promise.all(needNos.map(async no=>{ try{ const r=await db.collection('dispatchOrders').where('orderNo','==',no).get(); DIFF_ORD[no]=r.docs.map(d=>d.data()); }catch(err){ console.warn('diffMatch',err); } }));
+    // الطلبات اللي أوقفتها الإدارة: تطلع دايم مهما كانت الفترة
+    try{
+      const hs=await db.collection('dailyEntries').where('status','==','pending').get();
+      const hes=hs.docs.map(d=>({id:d.id,...d.data()})).filter(x=>x.holdNote);
+      HELD=(await Promise.all(hes.map(async e=>{ const r=await db.collection('dispatchOrders').where('entryId','==',e.id).get(); return r.docs.map(d=>({id:d.id,...d.data(),_e:e})); }))).flat();
+    }catch(err){ console.warn('held',err); HELD=[]; }
     DIFFMAP = {};
     DIFFS.filter(x=>x.status!=='rejected').forEach(x=>{ const k=(x.repUid||'')+'|'+norm(x.orderNo); DIFFMAP[k]=DIFFMAP[k]?{...DIFFMAP[k],amount:DIFFMAP[k].amount+(x.amount||0)}:{amount:x.amount||0,status:x.status,area:x.areaName}; });
     DISPUTES = ds.docs.map(d=>d.data()); MISSING = ms.docs.map(d=>d.data());
@@ -414,7 +425,7 @@ function repCell(o){
   return '<span class="st st-await">⏳ ما أكد</span>';
 }
 function repFiltered(){ const r=document.getElementById('fRep').value; return ORDERS.filter(o=>!r||o.repPhone===r); }
-function renderAll(){ renderOrders(); renderIssues(); renderDiffs(); renderRepCount(); }
+function renderAll(){ renderHeld(); renderOrders(); renderIssues(); renderDiffs(); renderRepCount(); }
 
 /* ---------- orders ---------- */
 function renderOrders(){
@@ -430,7 +441,9 @@ function renderOrders(){
   const tr=c('toReview');
   if(SUP_LIMITED){
     const tl=(k,n,lb,hl)=>`<div class="tile ${hl?'hl':''}" onclick="document.getElementById('fStatus').value='${k}';renderOrders()"><div class="n">${n}</div><div class="lb">${lb}</div></div>`;
-    document.getElementById('oTiles').innerHTML = tl('toReview',tr.length,'تحتاج مراجعتك',tr.length>0)+tl('reviewed',c('reviewed').length,'راجعتها');
+    const nh=tr.filter(o=>ENTRIES[o.entryId]?.holdNote).length;
+    document.getElementById('oTiles').innerHTML = tl('toReview',tr.length,'تحتاج مراجعتك',tr.length>0)+tl('reviewed',c('reviewed').length,'راجعتها')
+      +(nh?`<div class="tile hl" onclick="document.getElementById('fStatus').value='toReview';renderOrders()"><div class="n">⏸ ${nh}</div><div class="lb">أوقفتها الإدارة — تأكد مع المندوب</div></div>`:'');
   } else {
   const tile=(k,n,a,lb,hl)=>`<div class="tile ${hl?'hl':''}" onclick="document.getElementById('fStatus').value='${k}';renderOrders()"><div class="n">${n}</div>${a!==null?`<div class="a">${a} ر.س</div>`:''}<div class="lb">${lb}</div></div>`;
   document.getElementById('oTiles').innerHTML =
@@ -465,7 +478,7 @@ function renderOrders(){
       <td style="font-weight:900;white-space:nowrap">${o.fulfillment==='pickup'?'—':o.noPay?`<s class="dim">${o.rate||0}</s> 0 ر.س`:(r?r+' ر.س':'<span class="st st-await">بدون سعر</span>')}</td>
       <td style="white-space:nowrap">${df?`<b>+${df.amount} ر.س</b><div class="dim">${df.status==='approved'?'معتمد':'بانتظار'}${df.area?' · '+esc(df.area):''}</div>`:'<span class="dim">—</span>'}</td>
       <td class="dim">${tm(o.handedAt)}${o.departedAt?' ← '+tm(o.departedAt):''}${o.contactedAt?`<div>📞 تواصل ${tm(o.contactedAt)}</div>`:''}</td>
-      <td>${(()=>{ const j=orderJourney(o,tm); return `<span class="jr jr-${j.c}">${j.t}</span>${j.sub?`<div style="font-size:11px;color:#6B615A">${esc(j.sub)}</div>`:''}`; })()}</td><td>${STAGE_UI[s]}</td>
+      <td>${(()=>{ const j=orderJourney(o,tm); return `<span class="jr jr-${j.c}">${j.t}</span>${j.sub?`<div style="font-size:11px;color:#6B615A">${esc(j.sub)}</div>`:''}`; })()}</td><td>${s==='toReview'&&ENTRIES[o.entryId]?.holdNote?`<span class="st st-rej">⏸ أوقفته الإدارة</span><div style="font-size:12px;color:#B23A3A;font-weight:700;white-space:normal">${esc(ENTRIES[o.entryId].holdNote)}</div><div class="dim" style="white-space:normal">تواصل مع المندوب وتأكد، بعدها اضغط «تمت المراجعة»</div>`:STAGE_UI[s]}</td>
       <td>${flags}${o.notes?`<div class="dim">${esc(o.notes)}</div>`:''}</td></tr>`;
   }).join('');
   renderBulk();
@@ -489,6 +502,19 @@ function renderBulk(){
     ${canRev?`<button class="btn btn-green" ${sel.length?'':'disabled'} onclick="markReviewed()">✓ تمت المراجعة${sel.length?` (${sel.length})`:''}</button>`:''}
     ${SUP_LIMITED?'':'<button class="btn btn-ghost" onclick="exportCSV()">⬇︎ تصدير Excel</button>'}
     <button class="btn btn-ghost" onclick="loadAll()">↻ تحديث</button>`;
+}
+function renderHeld(){
+  const card=document.getElementById('heldCard'); card.style.display=HELD.length?'':'none'; if(!HELD.length) return;
+  const canRev=myRole==='supervisor'||myRole==='admin';
+  document.getElementById('heldBox').innerHTML=`<div class="scroll"><table style="min-width:760px"><thead><tr><th>التاريخ</th><th>المندوب</th><th>رقم الطلب</th><th>المنطقة</th><th>السعر</th><th>سبب الإيقاف</th><th></th></tr></thead><tbody>
+    ${HELD.map(o=>`<tr><td class="dim">${o.date}</td><td><b>${esc(o.repName)}</b></td><td class="no">${esc(o.orderNo)}</td><td>${esc(o.areaName)}</td><td style="font-weight:900">${rate(o)} ر.س</td>
+      <td style="white-space:normal;color:#B23A3A;font-weight:700">${esc(o._e.holdNote)}</td>
+      <td>${canRev?`<button class="btn btn-green" style="padding:6px 10px;font-size:12px" onclick="heldReviewed('${o._e.id}')">✓ تأكدت — للإدارة</button>`:''}</td></tr>`).join('')}</tbody></table></div>`;
+}
+async function heldReviewed(eid){
+  try{ await db.collection('dailyEntries').doc(eid).update({status:'reviewed', statusUpdatedAt:TS()});
+    toast('تم ✅ — رجع للإدارة للاعتماد'); await loadAll(true); }
+  catch(e){ console.error(e); toast('ما انحفظ — تحقق من الاتصال أو الصلاحيات'); }
 }
 async function markReviewed(){
   const ids=[...new Set([...SEL].map(id=>ORDERS.find(o=>o.id===id)).filter(o=>o&&stage(o)==='toReview').map(o=>o.entryId))];

@@ -16,7 +16,7 @@
 <script>
 // تنبيه "فيه نسخة جديدة": لو انرفع تحديث والصفحة مفتوحة من قبل، يطلع شريط يطلب التحديث (عشان ما يشتغل أحد على نسخة قديمة)
 (function(){
-  const APP_V='2026-10-08-4';
+  const APP_V='2026-10-09-1';
   async function chk(){
     try{ const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'}); if(!r.ok) return; const j=await r.json();
       if(j.v && j.v!==APP_V && !document.getElementById('updBar')){
@@ -355,6 +355,11 @@
           <h3>📍 طلبات نقل / تعديل منطقة — تنتظر موافقتك</h3>
           <p class="page-sub" style="margin-top:-6px">طلبات معتمدة طلب المشرف نقلها لمندوب ثاني أو تعديل منطقتها. الموافقة تعدّل الطلب والسعر وحساب المندوب تلقائياً.</p>
           <div id="areaReqList"></div>
+        </div>
+        <div class="card" id="apprCard" style="display:none;border:2px solid #CFE3D4;background:#F7FBF8">
+          <h3>💰 اعتماد المبالغ — اللي راجعه مهند</h3>
+          <p class="page-sub" style="margin-top:-6px">كل الطلبات والفوارق اللي راجعها مهند (بكل التواريخ)، مجموعة لكل مندوب. اعتمد المبلغ مرة وحدة. لو عندك شك في طلب: حدده من الجدول تحت واضغط <b>⏸ إيقاف — لمهند</b>، ينسحب من الإجمالي ويرجع لمهند يتأكد مع المندوب.</p>
+          <div id="apprBox"></div>
         </div>
         <div class="otiles" id="oTiles"></div>
         <div class="bulkbar" id="oBulk"></div>
@@ -2134,7 +2139,9 @@ function oStage(o){
   return 'awaiting';   // pending أو reviewed
 }
 const O_STAGE_UI = {
-  awaiting:   o=> O_ENTRIES[o.entryId]?.status==='reviewed' ? '<span class="st st-rev">تمت المراجعة · بانتظار الاعتماد</span>' : `<span class="st st-await">${myRole==='admin'?'بانتظار اعتمادك':'بانتظار المراجعة'}</span>`,
+  awaiting:   o=>{ const e=O_ENTRIES[o.entryId]||{}, hn=e.holdNote?`<div class="dim" style="white-space:normal">⏸ ${oEsc(e.holdNote)}</div>`:'';
+    if(e.holdNote && e.status!=='reviewed') return `<span class="st st-rej">⏸ موقوف — عند مهند</span>${hn}`;
+    return (e.status==='reviewed' ? `<span class="st st-rev">${e.holdNote?'رجع من مهند':'تمت المراجعة'} · بانتظار الاعتماد</span>` : `<span class="st st-await">${myRole==='admin'?'بانتظار مراجعة مهند':'بانتظار المراجعة'}</span>`)+hn; },
   approved:   ()=>'<span class="st st-appr">✓ معتمد</span>',
   rejected:   o=>`<span class="st st-rej">مرفوض</span>${O_ENTRIES[o.entryId]?.rejectReason?`<div class="dim">${oEsc(O_ENTRIES[o.entryId].rejectReason)}</div>`:''}`,
   unconfirmed:()=>'<span class="st st-gray">—</span>',
@@ -2190,6 +2197,7 @@ async function loadOrdersTab(){
     dSnap.docs.forEach(d=>{ const x=d.data(); if(x.status==='rejected') return; const k=(x.repUid||'')+'|'+oNorm(x.orderNo);
       O_DIFFS[k] = O_DIFFS[k] ? {...O_DIFFS[k], amount:O_DIFFS[k].amount+(x.amount||0), multi:true} : {amount:x.amount||0, status:x.status, area:x.areaName}; });
   }catch(e){ console.warn('diffs',e); }
+  loadApproval();
   // القيود اليدوية القديمة (مو من سجل المشرف (إبراهيم)) اللي لسا ما انعتمدت — بكل التواريخ
   try{
     const [lp, lr] = await Promise.all([
@@ -2480,6 +2488,7 @@ function oRenderBulk(){
   document.getElementById('oBulk').innerHTML = `
     <span class="sel">${sel.length?`محدد: ${sel.length} طلب · ${amt} ر.س`:`${O_VIEW.length} طلب معروض`}</span>
     <button class="btn-a g" ${nAw?'':'disabled'} onclick="oApprove()">✓ اعتماد${nAw&&nAw!==sel.length?` (${nAw})`:''}</button>
+    <button class="btn-a y" ${nAw?'':'disabled'} onclick="oHold()" title="ينسحب من إجمالي الاعتماد ويرجع لمهند يتأكد مع المندوب">⏸ إيقاف — لمهند</button>
     <button class="btn-a y" ${nRet?'':'disabled'} onclick="oReturnToRep()">↩︎ إرجاع للمندوب</button>
     <button class="btn-a r" ${nAw?'':'disabled'} onclick="oReject()">رفض</button>
     <button class="btn-a r" ${sel.length?'':'disabled'} onclick="oDelete()" title="حذف نهائي — مثلاً طلبات التجربة">🗑 حذف</button>
@@ -2697,6 +2706,82 @@ async function oReject(){
   if(!await uiConfirm(`رفض ${oSelOrders().filter(o=>oStage(o)==='awaiting').length} طلب نهائياً؟ ما بينحسب للمندوب.\nلو فيه غلط يتصحح استخدم "إرجاع للتصحيح" بدل الرفض.`)) return;
   try{ await oSetStatus('rejected', {rejectReason: reason.trim()}); toast('تم الرفض'); await loadOrdersTab(); loadDashboard(); }
   catch(e){ console.error(e); toast('ما انحفظ'); }
+}
+// ===== اعتماد المبالغ: الإدارة تعتمد إجمالي كل مندوب (اللي راجعه مهند) بدل طلب طلب =====
+let APPR={reps:{}};
+async function loadApproval(){
+  if(myRole!=='admin'){ document.getElementById('apprCard').style.display='none'; return; }
+  try{
+    const [er,ep,dr,dp,np]=await Promise.all([
+      db.collection('dailyEntries').where('status','==','reviewed').get(),
+      db.collection('dailyEntries').where('status','==','pending').get(),
+      db.collection('deliveryDiffs').where('status','==','reviewed').get(),
+      db.collection('deliveryDiffs').where('status','==','pending').get(),
+      db.collection('dispatchOrders').where('noPay','==',true).get()
+    ]);
+    // قيد فيه طلب رجع (ما ينحسب) ما يدخل الاعتماد الجماعي — يتعالج من جدول الطلبات أول
+    const blockedE=new Set(np.docs.map(d=>d.data().entryId).filter(Boolean));
+    const reps={};
+    const R=(id,name)=>{ const r=reps[id]=reps[id]||{name:'',eIds:[],dIds:[],n:0,amt:0,df:0,dfN:0,wasHeld:0,blocked:0,blockedAmt:0,pN:0,pAmt:0,held:0}; if(name&&!r.name) r.name=name; return r; };
+    er.docs.forEach(d=>{ const e=d.data(), r=R(e.repUid,e.repName);
+      if(blockedE.has(d.id)){ r.blocked++; r.blockedAmt+=e.totalAmount||0; return; }
+      r.eIds.push(d.id); r.n+=e.totalCount||0; r.amt+=e.totalAmount||0; if(e.holdNote) r.wasHeld++; });
+    dr.docs.forEach(d=>{ const x=d.data(), r=R(x.repUid,x.repName); r.dIds.push(d.id); r.df+=x.amount||0; r.dfN++; });
+    ep.docs.forEach(d=>{ const e=d.data(), r=R(e.repUid,e.repName); r.pN+=e.totalCount||0; r.pAmt+=e.totalAmount||0; if(e.holdNote) r.held+=e.totalCount||0; });
+    dp.docs.forEach(d=>{ const x=d.data(), r=R(x.repUid,x.repName); r.pN++; r.pAmt+=x.amount||0; });
+    APPR={reps};
+    renderApproval();
+  }catch(e){ console.warn('approval',e); }
+}
+function renderApproval(){
+  const card=document.getElementById('apprCard'); const rows=Object.entries(APPR.reps).sort((a,b)=>(b[1].amt+b[1].df)-(a[1].amt+a[1].df));
+  card.style.display = rows.length ? '' : 'none'; if(!rows.length) return;
+  const tot=rows.reduce((t,[,r])=>{ t.n+=r.n; t.amt+=r.amt; t.df+=r.df; t.pN+=r.pN; t.pAmt+=r.pAmt; return t; },{n:0,amt:0,df:0,pN:0,pAmt:0});
+  const canAll=rows.some(([,r])=>r.eIds.length||r.dIds.length);
+  document.getElementById('apprBox').innerHTML = `<div class="otable-wrap"><table class="otable" style="min-width:820px"><thead><tr>
+    <th>المندوب</th><th>طلبات راجعها مهند</th><th>مبلغها</th><th>فوارق راجعها مهند</th><th>الإجمالي للاعتماد</th><th>لسا عند مهند</th><th></th></tr></thead><tbody>
+    ${rows.map(([id,r])=>`<tr><td><b>${oEsc(r.name||id)}</b>
+        ${r.wasHeld?`<div class="dim">منها ${r.wasHeld} كانت موقوفة وراجعها مهند</div>`:''}
+        ${r.blocked?`<div style="color:#B23A3A;font-size:12px;font-weight:700">⚠️ ${r.blocked} قيد فيه طلب رجع (${r.blockedAmt} ر.س) — ما دخل الإجمالي، استبعده من جدول الطلبات</div>`:''}</td>
+      <td>${r.n||'—'}</td><td>${r.amt} ر.س</td><td>${r.df?`${r.df} ر.س (${r.dfN})`:'—'}</td>
+      <td style="font-weight:900;color:var(--green)">${r.amt+r.df} ر.س</td>
+      <td class="dim">${r.pN?`${r.pN} · ${r.pAmt} ر.س`:'—'}${r.held?`<div style="color:#B23A3A">⏸ ${r.held} موقوف</div>`:''}</td>
+      <td>${(r.eIds.length||r.dIds.length)?`<button class="btn-a g" style="padding:6px 12px" onclick="approveRepTotal('${oEsc(id)}')">✓ اعتماد ${r.amt+r.df} ر.س</button>`:''}</td></tr>`).join('')}
+    </tbody><tfoot><tr><td>المجموع</td><td>${tot.n}</td><td>${tot.amt} ر.س</td><td>${tot.df} ر.س</td><td>${tot.amt+tot.df} ر.س</td><td>${tot.pN?`${tot.pN} · ${tot.pAmt} ر.س`:'—'}</td>
+      <td>${canAll?`<button class="btn-a g" style="padding:6px 12px" onclick="approveRepTotal('')">✓ اعتماد الكل ${tot.amt+tot.df} ر.س</button>`:''}</td></tr></tfoot></table></div>`;
+}
+// يعتمد بالضبط القيود والفوارق اللي كانت معروضة (ما يدخل شي راجعه مهند بعد ما فتحت الشاشة)
+async function approveRepTotal(id){
+  if(myRole!=='admin'){ noPermissionToast(); return; }
+  const list=Object.entries(APPR.reps).filter(([k])=>!id||k===id);
+  const eIds=list.flatMap(([,r])=>r.eIds), dIds=list.flatMap(([,r])=>r.dIds), total=list.reduce((s,[,r])=>s+r.amt+r.df,0);
+  if(!eIds.length && !dIds.length) return;
+  const who=id?(APPR.reps[id].name||id):`كل المناديب (${list.length})`;
+  if(!await uiConfirm(`اعتماد ${total} ر.س لـ ${who}؟\n${eIds.length} قيد طلبات + ${dIds.length} فارق — كلها راجعها مهند.\nينضاف لرصيد المندوب مباشرة.`)) return;
+  try{
+    const ops=[...eIds.map(x=>['dailyEntries',x]),...dIds.map(x=>['deliveryDiffs',x])];
+    for(let i=0;i<ops.length;i+=400){
+      const wb=db.batch();
+      ops.slice(i,i+400).forEach(([c,x])=>wb.update(db.collection(c).doc(x), {status:'approved', statusUpdatedAt: firebase.firestore.FieldValue.serverTimestamp()}));
+      await wb.commit();
+    }
+    toast(`تم اعتماد ${total} ر.س ✅`); await loadOrdersTab(); loadDashboard();
+  }catch(e){ console.error(e); toast('ما انحفظ — تحقق من الاتصال'); loadOrdersTab(); }
+}
+// إيقاف طلب فيه شك: ينفصل بقيد لحاله ويرجع "بانتظار المراجعة" مع ملاحظتك — يطلع لمهند يتأكد مع المندوب، وبعدها يرجع لك
+async function oHold(){
+  if(myRole!=='admin'){ noPermissionToast(); return; }
+  const sel=oSelOrders().filter(o=>oStage(o)==='awaiting'); if(!sel.length) return;
+  const reason=await uiPrompt(`إيقاف ${sel.length} طلب — وش الشك؟ (يظهر لمهند عشان يتأكد مع المندوب)`); if(reason===null) return;
+  if(!reason.trim()){ toast('اكتب سبب الإيقاف'); return; }
+  try{
+    const wb=db.batch();
+    const map=oIsolate(wb, sel);
+    const ids=[...new Set(sel.map(o=>map[o.id]).filter(Boolean))];
+    ids.forEach(id=>wb.update(db.collection('dailyEntries').doc(id), {status:'pending', holdNote:reason.trim(), heldAt: firebase.firestore.FieldValue.serverTimestamp(), statusUpdatedAt: firebase.firestore.FieldValue.serverTimestamp()}));
+    await wb.commit();
+    toast('⏸ انوقف ورجع لمهند — انسحب من إجمالي الاعتماد'); await loadOrdersTab();
+  }catch(e){ console.error(e); toast('ما انحفظ — تحقق من الاتصال'); }
 }
 // إرجاع للتصحيح: يلغي القيد ويرجع الطلبات "بانتظار تأكيد المندوب" مع ملاحظتك — فيصلحها المشرف (إبراهيم) أو يأكدها المندوب من جديد
 async function oReturnToRep(){
