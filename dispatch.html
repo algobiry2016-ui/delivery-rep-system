@@ -16,7 +16,7 @@
 <script>
 // تنبيه "فيه نسخة جديدة": لو انرفع تحديث والصفحة مفتوحة من قبل، يطلع شريط يطلب التحديث (عشان ما يشتغل أحد على نسخة قديمة)
 (function(){
-  const APP_V='2026-10-10-2';
+  const APP_V='2026-10-11-1';
   async function chk(){
     try{ const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'}); if(!r.ok) return; const j=await r.json();
       if(j.v && j.v!==APP_V && !document.getElementById('updBar')){
@@ -793,6 +793,14 @@ function rowExisting(row){
     moveMode: mm?mm.value:null, newDate: row.querySelector('.mv-date')?.value||''};
 }
 // تنفيذ النقل / تعديل المنطقة: مباشر إذا الطلب ما انعتمد، وإذا معتمد يروح للإدارة توافق
+// بلاغ "طلب ناقص" من المندوب: لو الطلب انتقل له، البلاغ يتقفل ويتكتب "تم نقله إلى ..." (يختفي من عند إبراهيم ومهند)
+async function resolveMissingFor(wb, orderNo, toRep, fromName){
+  try{
+    const s=await db.collection('missingReports').where('orderNo','==',orderNo).where('status','==','open').get();
+    s.docs.filter(d=>d.data().repPhone===toRep.id).forEach(d=>wb.update(d.ref, {status:'resolved', resolvedAt:TS(), resolvedBy:currentUser.uid, resolvedOrderNo:orderNo,
+      resolveNote:`تم نقله إلى ${toRep.name}${fromName?' (كان مع '+fromName+')':''}`}));
+  }catch(e){ console.warn('missing',e); }
+}
 async function processExOps(ops, rep){
   const msgs=[];
   for(const op of ops){
@@ -841,6 +849,7 @@ async function processExOps(ops, rep){
         if(o.entryId) await rebuildEntry(wb, o.entryId, o.id, null, true);
         const rest=(await db.collection('dispatchOrders').where('batchId','==',o.batchId).get()).docs.filter(x=>x.id!==o.id).length;
         if(rest===0) wb.delete(db.collection('dispatchBatches').doc(o.batchId)); else wb.update(db.collection('dispatchBatches').doc(o.batchId),{orderCount:rest});
+        await resolveMissingFor(wb, o.orderNo, toRep, o.repName);
         wb.set(db.collection('auditLog').doc(), auditRow('moveDirect', o, `من ${o.repName} إلى ${toRep.name}${o.repStatus==='confirmed'?' (كان أكده)':''} · ${isNew?`طلع مع المندوب الجديد (${o.date} ← ${nDate})`:'تصحيح غلط'} · ${o.areaName}${op.areaId!==o.areaId?' ← '+(area?area.name:''):''} · ${op.why}`, {oldRate:o.rate||0, newRate:newRate||0, repPhone:o.repPhone, repName:o.repName}));
         await wb.commit();
         msgs.push(`✅ ${o.orderNo}: انتقل من ${o.repName} إلى ${toRep.name}`);
@@ -1730,11 +1739,25 @@ function listenRecon(){
     DUPS=s.docs.map(d=>({id:d.id,...d.data()})); renderDups();
   }, e=>console.error(e));
   db.collection('missingReports').where('status','==','open').onSnapshot(s=>{
-    MISSING=s.docs.map(d=>({id:d.id,...d.data()})); renderRecon();
+    MISSING=s.docs.map(d=>({id:d.id,...d.data()})); renderRecon(); autoResolveMissing();
   }, e=>console.error(e));
   db.collection('dispatchOrders').where('repStatus','==','pending').onSnapshot(s=>{
     const today=localDate(); STALE=s.docs.map(d=>({id:d.id,...d.data()})).filter(o=>o.date<today); renderRecon();
   }, e=>console.error(e));
+}
+// بلاغ مفتوح والطلب صار أصلاً مسجّل لنفس المندوب (انتقل له أو انسجل له بطريقة ثانية): يتقفل تلقائياً
+const MISS_CHECKED=new Set();
+async function autoResolveMissing(){
+  if(!canWrite) return;
+  for(const r of MISSING){
+    if(!r.orderNo || MISS_CHECKED.has(r.id)) continue; MISS_CHECKED.add(r.id);
+    try{
+      const os=(await db.collection('dispatchOrders').where('orderNo','==',r.orderNo).get()).docs.map(d=>d.data());
+      const mine=os.find(o=>o.repPhone===r.repPhone); if(!mine) continue;
+      await db.collection('missingReports').doc(r.id).update({status:'resolved', resolvedAt:TS(), resolvedBy:currentUser.uid, resolvedOrderNo:r.orderNo,
+        resolveNote: mine.transferredFrom ? `تم نقله إلى ${mine.repName||r.repName} (كان مع ${mine.transferredFrom})` : `الطلب مسجّل لـ ${mine.repName||r.repName}`});
+    }catch(e){ console.warn('autoMissing',e); }
+  }
 }
 let DUPS=[];
 function renderDups(){

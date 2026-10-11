@@ -16,7 +16,7 @@
 <script>
 // تنبيه "فيه نسخة جديدة": لو انرفع تحديث والصفحة مفتوحة من قبل، يطلع شريط يطلب التحديث (عشان ما يشتغل أحد على نسخة قديمة)
 (function(){
-  const APP_V='2026-10-10-2';
+  const APP_V='2026-10-11-1';
   async function chk(){
     try{ const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'}); if(!r.ok) return; const j=await r.json();
       if(j.v && j.v!==APP_V && !document.getElementById('updBar')){
@@ -2604,7 +2604,10 @@ async function areaReqDecide(id, ok){
       let o=O_ORDERS.find(x=>x.id===q.orderId);
       if(!o){ const d=await db.collection('dispatchOrders').doc(q.orderId).get(); if(!d.exists){ toast('الطلب ما عاد موجود'); return; } o={id:d.id,...d.data()}; }
       if(o.entryId && !O_ENTRIES[o.entryId]){ const e=await db.collection('dailyEntries').doc(o.entryId).get(); if(e.exists) O_ENTRIES[e.id]={id:e.id,...e.data()}; }
-      if(q.kind==='move') await applyMove(wb, o, q);
+      if(q.kind==='move'){ await applyMove(wb, o, q);
+        // بلاغ "طلب ناقص" من المندوب الجديد لنفس الطلب: يتقفل
+        try{ const ms=await db.collection('missingReports').where('orderNo','==',o.orderNo).where('status','==','open').get();
+          ms.docs.filter(d=>d.data().repPhone===q.toRepPhone).forEach(d=>wb.update(d.ref,{status:'resolved', resolvedAt:firebase.firestore.FieldValue.serverTimestamp(), resolvedBy:currentUser.uid, resolvedOrderNo:o.orderNo, resolveNote:`تم نقله إلى ${q.toRepName||''} (كان مع ${o.repName||''})`})); }catch(e){ console.warn('missing',e); } }
       else await applyAreaChange(wb, o, q.toAreaId, 'موافقة على طلب المشرف: '+q.reason);
     }
     wb.update(db.collection('areaRequests').doc(id), {status:ok?'approved':'rejected', decisionNote:note||'', decidedAt:firebase.firestore.FieldValue.serverTimestamp(), decidedBy:currentUser.uid});
