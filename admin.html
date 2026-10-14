@@ -16,7 +16,7 @@
 <script>
 // تنبيه "فيه نسخة جديدة": لو انرفع تحديث والصفحة مفتوحة من قبل، يطلع شريط يطلب التحديث (عشان ما يشتغل أحد على نسخة قديمة)
 (function(){
-  const APP_V='2026-10-13-1';
+  const APP_V='2026-10-14-1';
   async function chk(){
     try{ const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'}); if(!r.ok) return; const j=await r.json();
       if(j.v && j.v!==APP_V && !document.getElementById('updBar')){
@@ -1919,6 +1919,28 @@ function renderReport(){
       <td style="color:var(--amber);font-weight:700">${r.pend?r.pend+' ر.س ('+r.pendN+')':'—'}</td><td>${unconf[r.id]||'—'}</td><td>${r.paid?r.paid+' ر.س':'—'}</td></tr>`).join(''),
     payRows.length?`<td>المجموع</td><td>${T.n}</td><td>${T.amt} ر.س</td><td>${T.df} ر.س</td><td>−${T.pen} ر.س</td><td>−${T.gift} ر.س</td><td>${T.net} ر.س</td><td>${T.pend} ر.س</td><td>${Object.values(unconf).reduce((a,b)=>a+b,0)}</td><td>${T.paid} ر.س</td>`:'',1000);
 
+  // ===== ١ب) المستحقات الكاملة: كل توصيلة بالفترة حسب مرحلتها + الفوارق، وكم منها معتمد =====
+  const ENTf=Object.fromEntries(RPT.entries.map(e=>[e.id,e]));
+  const fb={}; const FB=id=>fb[id]=fb[id]||{un:0,unN:0,cf:0,cfN:0,rv:0,rvN:0,ap:0,apN:0,dfAp:0,dfWait:0,dfN:0};
+  deliv.forEach(o=>{ if(o.noPay) return; const r=rateOf(o), b=FB(o.repPhone), st=o.repStatus||'pending';
+    if(st==='disputed') return;   // معترض: ما ينحسب لين يتحل
+    if(st!=='confirmed'){ b.un+=r; b.unN++; return; }
+    const e=ENTf[o.entryId]; const es=e?e.status:'pending';
+    if(es==='rejected') return;
+    if(es==='approved'){ b.ap+=r; b.apN++; } else if(es==='reviewed'){ b.rv+=r; b.rvN++; } else { b.cf+=r; b.cfN++; } });
+  // القيود اليدوية القديمة (قبل نظام التسليم) بالفترة: تنحسب حسب حالتها
+  E.filter(e=>!e.fromDispatch && e.status!=='rejected').forEach(e=>{ const b=FB(e.repUid), a=e.totalAmount||0, n=e.totalCount||0;
+    if(e.status==='approved'){ b.ap+=a; b.apN+=n; } else if(e.status==='reviewed'){ b.rv+=a; b.rvN+=n; } else { b.cf+=a; b.cfN+=n; } });
+  D.forEach(x=>{ if(x.status==='rejected') return; const b=FB(x.repUid); b.dfN++; if(x.status==='approved') b.dfAp+=x.amount||0; else b.dfWait+=x.amount||0; });
+  const fbRows=Object.entries(fb).map(([id,b])=>({id,...b, tot:b.un+b.cf+b.rv+b.ap+b.dfAp+b.dfWait, appr:b.ap+b.dfAp})).map(r=>({...r, notAppr:r.tot-r.appr})).filter(r=>r.tot>0).sort((a,b)=>b.tot-a.tot);
+  const FT=fbRows.reduce((t,r)=>{ ['un','unN','cf','cfN','rv','rvN','ap','apN','dfAp','dfWait','tot','appr','notAppr'].forEach(k=>t[k]=(t[k]||0)+r[k]); return t; },{});
+  const cell=(a,n)=>a?`${a} ر.س${n!==undefined?`<div class="dim">${n} توصيلة</div>`:''}`:'—';
+  const fullTable=tbl(['المندوب','ما أكدها','أكدها — بانتظار مراجعة مهند','راجعها مهند — بانتظار الاعتماد','معتمدة','فوارق التوصيل','المجموع الكلي','✓ منها معتمد','⏳ منها غير معتمد'],
+    fbRows.map(r=>`<tr><td><b>${oEsc(nm(r.id))}</b></td><td style="color:var(--ink-soft)">${cell(r.un,r.unN)}</td><td>${cell(r.cf,r.cfN)}</td><td>${cell(r.rv,r.rvN)}</td><td style="color:var(--green)">${cell(r.ap,r.apN)}</td>
+      <td>${(r.dfAp+r.dfWait)?`${r.dfAp+r.dfWait} ر.س<div class="dim">${r.dfAp?`معتمد ${r.dfAp}`:''}${r.dfAp&&r.dfWait?' · ':''}${r.dfWait?`بانتظار ${r.dfWait}`:''}</div>`:'—'}</td>
+      <td style="font-weight:900">${r.tot} ر.س</td><td style="font-weight:900;color:var(--green)">${r.appr} ر.س</td><td style="font-weight:900;color:var(--amber)">${r.notAppr} ر.س</td></tr>`).join(''),
+    fbRows.length?`<td>المجموع</td><td>${FT.un} ر.س</td><td>${FT.cf} ر.س</td><td>${FT.rv} ر.س</td><td>${FT.ap} ر.س</td><td>${FT.dfAp+FT.dfWait} ر.س</td><td>${FT.tot} ر.س</td><td>${FT.appr} ر.س</td><td>${FT.notAppr} ر.س</td>`:'',1100);
+
   // ===== ٢) القنوات =====
   const tk=Object.keys(R_TYPES);
   const byType=tk.map(t=>{ const l=O.filter(o=>o.type===t), dl=l.filter(o=>o.fulfillment!=='pickup');
@@ -2046,6 +2068,7 @@ function renderReport(){
       <button class="btn-a b" onclick="exportReportOrders()">⬇︎ تصدير كل الطلبات</button></div>
     ${tiles}
     ${stmt}
+    ${card('🧮 المستحقات الكاملة للمناديب', fullTable, 'كل توصيلات الفترة بسعرها حسب مرحلتها + فوارق التوصيل. "المجموع الكلي" = ما أكدها + أكدها + راجعها مهند + معتمدة + الفوارق. والمجموع ينقسم: معتمد / غير معتمد. (ما يدخل: الاعتراضات، المرفوض، والطلبات اللي رجعت وما تنحسب.)')}
     ${card('💰 مستحقات المناديب', '<div id="payTbl">'+payTable+'</div>', 'الصافي المعتمد = التوصيل المعتمد + الفوارق المعتمدة − الجزاءات − الهدايا. "بانتظار الاعتماد" ما ينحسب لين تعتمده. "المدفوع بالفترة" للمقارنة فقط — الرصيد الكامل في "المستحقات والدفعات".')}
     ${card('📊 القنوات', typeTable)}
     ${card('📍 المناطق', areaTable, 'التوصيلات فقط — الاستلام من المتجر ما له منطقة.')}
