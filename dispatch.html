@@ -16,7 +16,7 @@
 <script>
 // تنبيه "فيه نسخة جديدة": لو انرفع تحديث والصفحة مفتوحة من قبل، يطلع شريط يطلب التحديث (عشان ما يشتغل أحد على نسخة قديمة)
 (function(){
-  const APP_V='2026-10-14-1';
+  const APP_V='2026-10-21-1';
   async function chk(){
     try{ const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'}); if(!r.ok) return; const j=await r.json();
       if(j.v && j.v!==APP_V && !document.getElementById('updBar')){
@@ -754,6 +754,7 @@ async function checkExisting(inp){
         <div class="muted" style="font-size:12px;margin-top:4px">وقت التواصل: اكتبه فوق (أو اضغط «الآن»). وقت التسليم والخروج = وقت الحفظ.</div></div>
     </div>
     <label class="opt"><input type="radio" name="ac_${row.id}" value="area"> <span><b>عدّل منطقته بس</b> — يبقى مع نفس المندوب، والمنطقة تصير المختارة تحت (والسعر يتعدّل)</span></label>
+    <label class="opt"><input type="radio" name="ac_${row.id}" value="multi"> <span><b>مستلم ثاني لنفس الطلب</b> — نفس الطلب له مستلم ثاني في منطقة ثانية مع المندوب المختار فوق. التوصيلة الأولى تبقى زي ما هي</span></label>
     <label class="opt"><input type="radio" name="ac_${row.id}" value="redel"> <span><b>توصيل ثاني</b> — المندوب الأول راح ورجع والعميل دفع رسوم توصيل ثاني. المندوب الجديد يرفع الإيصال قبل ما يأكد</span></label>
     ${isPhone?`<label class="opt"><input type="radio" name="ac_${row.id}" value="new"> <span><b>طلب جديد لنفس العميل</b> — طلب ثاني فعلاً بنفس اليوم (يحتاج موافقة الإدارة)</span></label>`:''}
     <div class="ex-info" style="margin-top:8px;font-size:12.5px;background:#fff;border:1px dashed var(--line);border-radius:10px;padding:8px 10px"></div>
@@ -765,7 +766,8 @@ async function checkExisting(inp){
 function exPrefill(row){
   const e=rowExisting(row); if(!e||!e.target) return;
   const ar=row.querySelector('.o-area');
-  if(ar && (!ar.value || ar.dataset.auto==='1')){ ar.innerHTML=areaOptions(e.target.areaId,'المنطقة...',e.target.type); ar.value=e.target.areaId||''; ar.dataset.auto='1'; ar.addEventListener('change',()=>{ ar.dataset.auto=''; },{once:true}); }
+  if(ar && e.action==='multi' && ar.dataset.auto==='1'){ ar.value=''; ar.dataset.auto=''; }   // مستلم ثاني: منطقته غير، يختارها إبراهيم
+  else if(ar && (!ar.value || ar.dataset.auto==='1')){ ar.innerHTML=areaOptions(e.target.areaId,'المنطقة...',e.target.type); ar.value=e.target.areaId||''; ar.dataset.auto='1'; ar.addEventListener('change',()=>{ ar.dataset.auto=''; },{once:true}); }
   const fl=row.querySelector('.o-florist'), f0=floristsOf(e.target)[0];
   if(fl && f0 && (!fl.value || fl.dataset.auto==='1')){ if(![...fl.options].some(x=>x.value===f0)) fl.insertAdjacentHTML('beforeend',`<option>${esc(f0)}</option>`); fl.value=f0; fl.dataset.auto='1'; fl.addEventListener('change',()=>{ fl.dataset.auto=''; },{once:true}); }
   const mv=row.querySelector('.mv-mode'); if(mv) mv.style.display = e.action==='move' ? '' : 'none';
@@ -1114,8 +1116,12 @@ async function saveHandover(){
     // رقم مسجّل قبل واختار إبراهيم إجراء من نفس الشاشة
     const ex = (!pickup && !r.dataset.redeliveryOf && !r.dataset.prepId) ? rowExisting(r) : null;
     if(ex && ex.action==='new') newPhones.add(no);
-    if(ex && ex.action!=='new'){
-      if(!ex.action){ toast(`طلب ${n}: الرقم مسجّل قبل — اختر: ${PHONE_TYPES.includes(type)?'تعديل منطقة أو نقل أو توصيل ثاني أو طلب جديد':'نقل أو تعديل منطقة أو توصيل ثاني'}`); return; }
+    if(ex && ex.action==='multi'){
+      if(!ex.why){ toast(`طلب ${n}: اكتب السبب`); return; }
+      if(!r.querySelector('.o-area').value){ toast(`طلب ${n}: اختر منطقة المستلم الثاني`); return; }
+    }
+    if(ex && ex.action!=='new' && ex.action!=='multi'){
+      if(!ex.action){ toast(`طلب ${n}: الرقم مسجّل قبل — اختر: ${PHONE_TYPES.includes(type)?'تعديل منطقة أو نقل أو مستلم ثاني أو توصيل ثاني أو طلب جديد':'نقل أو تعديل منطقة أو مستلم ثاني أو توصيل ثاني'}`); return; }
       if(!ex.why){ toast(`طلب ${n}: اكتب السبب`); return; }
       const exArea = r.querySelector('.o-area').value || (ex.action==='move' ? (ex.target.areaId||'') : '');
       if((ex.action==='move'||ex.action==='area') && !exArea){ toast(`طلب ${n}: اختر المنطقة`); return; }
@@ -1139,7 +1145,7 @@ async function saveHandover(){
     }
     { const ar=AREAS.find(a=>a.id===r.querySelector('.o-area').value); if(!pickup && ar && ar.waOnly && !PHONE_TYPES.includes(r.dataset.type||'doc')){ toast(`طلب ${n}: منطقة ${ar.name} خاصة بالواتس والمحل`); return; } }
     const isRedel = !!r.dataset.redeliveryOf;
-    const multi = false;
+    const multi = !!(ex && ex.action==='multi');   // مستلم ثاني لنفس الطلب (مع مندوب ثاني)
     const cTime = handCT;
     const exChk = (!pickup && !r.dataset.redeliveryOf && !r.dataset.prepId) ? rowExisting(r) : null;
     if(!pickup && !cTime && !(exChk && exChk.action==='area')){ toast('اكتب وقت تواصل المندوب مع المستلمين فوق (إلزامي)'); return; }
@@ -1166,7 +1172,7 @@ async function saveHandover(){
       rate: (!pickup && isPriced(area)) ? rateFor(area,type,rep) : null,   // السعر وقت التسليم — ما يتغير لو تغيّرت الأسعار بعدين
       notes:r.querySelector('.o-notes').value.trim(),
       redeliveryOf: r.dataset.redeliveryOf || null,
-      exReason: r.dataset.exReason || null,
+      exReason: multi ? ex.why : (r.dataset.exReason || null),
       contactTime: cTime || null,
       multiDelivery: multi,
       manual: FLORIST_FLOW && !prep, prepId: prep?prep.id:null,
@@ -1700,10 +1706,25 @@ function orderActions(o,b){
   h += `<button class="mini" onclick="fixFlorists('${o.id}')">💐 المنسق</button> `;
   h += `<button class="mini" onclick="fixType('${o.id}')">🏷 النوع</button> `;
   h += `<button class="mini" onclick="changeOrderDate('${o.id}')">📅 التاريخ</button> `;
+  if(o.redeliveryOf) h += `<button class="mini" onclick="redelToMulti('${o.id}')" title="انسجل توصيل ثاني بالغلط وهو مستلم ثاني لنفس الطلب">➕ حوّله لمستلم ثاني</button> `;
   if(st!=='confirmed') h+=`<button class="danger" onclick="deleteOrder('${o.id}','${b.id}')">حذف</button>`;
   const pend = AREQ.find(q=>q.orderId===o.id && q.status==='open');
   if(pend) h += ' <span class="rs rs-pending">📍 عند الإدارة</span>';
   return h;
+}
+
+// تصحيح: "توصيل ثاني" انسجل بالغلط وهو مستلم ثاني لنفس الطلب (مع مندوب ثاني)
+// التوصيلة الأولى ترجع طبيعية (مو راجعة)، والثانية تصير توصيل إضافي وما تحتاج إيصال
+async function redelToMulti(id){
+  const o=DAY_ORDERS[id]; if(!o||!o.redeliveryOf) return;
+  if(!await uiConfirm(`الطلب ${o.orderNo}: تحويل "توصيل ثاني" إلى "مستلم ثاني لنفس الطلب"؟\n\n• التوصيلة الأولى ترجع طبيعية (ما تنحسب راجعة)\n• توصيلة ${o.repName||''} تصير توصيل إضافي وما تحتاج إيصال تحويل`)) return;
+  try{
+    const wb=db.batch();
+    wb.update(db.collection('dispatchOrders').doc(o.id), {redeliveryOf:null, multiDelivery:true, needsRepProof:false, exReason:null});
+    wb.update(db.collection('dispatchOrders').doc(o.redeliveryOf), {returned:false, returnedAt:null, returnReason:null, secondFeePaid:null, redeliveryId:null});
+    wb.set(db.collection('auditLog').doc(), auditRow('multi', o, `تصحيح: توصيل ثاني ← مستلم ثاني لنفس الطلب · ${o.repName||''} · ${o.areaName||''}`));
+    await wb.commit(); toast('تم ✅ — صار مستلم ثاني لنفس الطلب'); loadDay();
+  }catch(e){ console.error(e); toast('ما انحفظ — '+(e.code||e.message)); }
 }
 
 /* ---------------- المطابقة مع المناديب ---------------- */
